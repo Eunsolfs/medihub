@@ -5,10 +5,17 @@
 
 > 需要 root 或 sudo。全程约 3–6 分钟（取决于服务器带宽，构建占大头）。
 
-## 一条命令
+## 一条命令（真正的一行）
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Eunsolfs/medihub/main/scripts/install-1panel.sh | sudo bash -s -- --url https://medihub.example.com --seed
+```
+
+不想用管道，也可以先下载再执行（脚本内容可先看一眼）：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Eunsolfs/medihub/main/scripts/install-1panel.sh -o install-medihub.sh
+less install-medihub.sh   # 看完再跑
 sudo bash install-medihub.sh --url https://medihub.example.com --seed
 ```
 
