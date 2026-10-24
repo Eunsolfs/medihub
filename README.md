@@ -2,7 +2,17 @@
 
 科室内部的多媒体与病历资料管理平台。把患者的伤口/术中/术后照片、病历资料、科室培训与讲课材料集中存起来，按「患者 → 某次入院 → 时间线」组织，并为科研、宣传、病例汇报提供可筛选、可打包导出的数据底座。
 
-> 演示数据与账号：执行 `pnpm seed` 后会写入「整形外科」科室、3 位演示患者与 8 张演示图片。
+> 演示数据与账号：执行 `pnpm seed` 后会写入「整形外科」科室、3 位演示患者（含 20 张分期照片）、
+> 两个资料库目录（含一份 docx 培训文档与一份 pptx 病例讨论）、一个已发布的公开教学帖
+> （`/p/flap-crisis-early-recognition`，含 B 站视频与配图）和一个草稿帖。
+>
+> | 账号 | 密码 | 角色 |
+> | --- | --- | --- |
+> | `root@medihub.local` | `Medihub@2026` | 超级管理员 |
+> | `admin@medihub.local` | `Medihub@2026` | 科室管理员 |
+> | `doctor@medihub.local` | `Medihub@2026` | 科室成员 |
+>
+> 演示素材是程序生成的占位图，不是真实临床影像。
 
 ## 功能
 
@@ -130,6 +140,17 @@ pnpm db:generate         # 修改 schema 后生成迁移
 pnpm db:migrate          # 应用迁移
 pnpm seed                # 演示数据
 ```
+
+## 工程约束
+
+- **Lint 取舍**：仓库保留 Ultracite 的类型安全规则，但对写业务代码时纯风格冲突的规则做了
+  显式收敛（`vite.config.ts` 的 `lint.rules` / `lint.overrides` 里逐条写了理由，例如
+  Drizzle 的部分更新惯用法、Markdown 必须用 `dangerouslySetInnerHTML`、自定义拖拽控件）。
+  新增规则前请先看那里的注释，不要把被关掉的规则当成遗漏。
+- **测试**：`packages/api/tests/integration` 走真实 SQLite + 真实会话；`apps/web/tests/e2e`
+  在 3200/3201 端口起一套独立环境。端到端用例是产品行为的规格，改断言前先改需求。
+- **截图脚本**：`node apps/web/scripts/screenshot.mjs`（需先 `pnpm dev`），产出全站
+  桌面/移动截图到 `.design/shots/`，用于设计回归。
 
 ## 部署
 
