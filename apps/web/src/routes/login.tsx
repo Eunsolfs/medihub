@@ -1,10 +1,19 @@
-import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  Link,
+  redirect,
+  useRouter,
+} from "@tanstack/react-router";
 import {
   FolderHeartIcon,
   GraduationCapIcon,
   HeartPulseIcon,
   ShieldCheckIcon,
 } from "lucide-react";
+import { useEffect, useState } from "react";
+
+import { buttonVariants } from "@medihub/ui/components/button";
+import { cn } from "@medihub/ui/lib/utils";
 
 import { AuthForm } from "#src/components/auth-form.tsx";
 import { APP_VERSION_LABEL } from "#src/lib/app-version.ts";
@@ -97,6 +106,37 @@ const BrandPanel = () => (
 const LoginPage = () => {
   const router = useRouter();
   const search = Route.useSearch();
+  const [installed, setInstalled] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadStatus = async () => {
+      try {
+        const response = await fetch("/api/install/status");
+
+        // SAFETY: /api/install/status 由本仓库服务端提供，返回 { installed: boolean }；
+        // 非 2xx 时按「已安装」处理，避免状态接口故障挡住正常登录。
+        const data = response.ok
+          ? ((await response.json()) as { installed?: boolean })
+          : null;
+
+        if (active) {
+          setInstalled(data?.installed !== false);
+        }
+      } catch {
+        if (active) {
+          setInstalled(true);
+        }
+      }
+    };
+
+    void loadStatus();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handleSuccess = async () => {
     await router.invalidate();
@@ -121,7 +161,23 @@ const LoginPage = () => {
         </div>
 
         <main className="mx-auto grid w-full max-w-[420px] flex-1 content-start gap-8 px-5 pt-10 pb-8 lg:flex-none lg:content-center lg:px-0 lg:py-0">
-          <AuthForm onSuccess={handleSuccess} />
+          {installed === false ? (
+            <div className="border-border bg-card grid gap-4 rounded-xl border p-6">
+              <div className="grid gap-1.5">
+                <h1 className="text-xl font-semibold tracking-tight">
+                  系统还没有初始化
+                </h1>
+                <p className="text-muted-foreground text-sm leading-6">
+                  这是第一次启动。先完成初始化配置（创建超级管理员），再回到这里登录。
+                </p>
+              </div>
+              <Link className={cn(buttonVariants())} to="/install">
+                前往安装向导
+              </Link>
+            </div>
+          ) : (
+            <AuthForm onSuccess={handleSuccess} />
+          )}
           <p className="text-muted-foreground flex items-center justify-center gap-2 text-center text-xs">
             <span>内部系统 · 请勿共享账号</span>
             <span aria-hidden="true">·</span>

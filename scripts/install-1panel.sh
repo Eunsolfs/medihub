@@ -435,10 +435,11 @@ print_summary() {
  下一步：
  1. 在 1Panel「网站」里新建反向代理，目标 http://127.0.0.1:$APP_PORT，并申请 HTTPS。
  2. 浏览器打开：$url
- 3. OnlyOffice：编辑 $DIR/apps/server/.env 填入
+ 3. 首次初始化：打开 $url/install 创建超级管理员（若安装时用了 --seed 可跳过，直接登录）。
+ 4. OnlyOffice：编辑 $DIR/apps/server/.env 填入
     ONLYOFFICE_URL / ONLYOFFICE_JWT_SECRET，然后
     systemctl restart $SERVICE_NAME（或用系统管理页的「重新检测」确认）
- 4. 日常升级：root 登录 → 系统管理 → 版本与升级；
+ 5. 日常升级：root 登录 → 系统管理 → 版本与升级；
     或命令行：sudo bash install-1panel.sh --update
 
  防火墙：若使用 1Panel 防火墙/安全组，只需放行 80/443；$APP_PORT 不必对公网开放。
@@ -509,3 +510,4 @@ main() {
 }
 
 main "$@"
+

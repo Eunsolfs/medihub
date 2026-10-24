@@ -16,6 +16,9 @@ OnlyOffice 参数可以稍后在 `.env` 里补。完整参数、常见问题与�
 [docs/INSTALL-1PANEL.md](docs/INSTALL-1PANEL.md)；想逐项控制部署过程见
 [docs/DEPLOY-1PANEL.md](docs/DEPLOY-1PANEL.md)。
 
+> **不带 `--seed` 也可以**：装完后打开 `https://你的域名/install`，在网页里填超级管理员
+> （可选 OnlyOffice 参数），完成后自动跳转登录页。登录页在未初始化时也会显示「前往安装向导」。
+
 > 演示数据与账号：执行 `pnpm seed` 后会写入「整形外科」与「烧伤科」两个科室、4 位演示患者
 > （含分期照片与 Markdown 病历摘要）、两个资料库目录（含一份 docx 培训文档与一份 pptx 病例讨论）、
 > 一个已发布的公开教学帖（`/p/flap-crisis-early-recognition`，含 B 站视频与配图）和一个草稿帖。
