@@ -1,0 +1,144 @@
+# 医档通 MediHub
+
+科室内部的多媒体与病历资料管理平台。把患者的伤口/术中/术后照片、病历资料、科室培训与讲课材料集中存起来，按「患者 → 某次入院 → 时间线」组织，并为科研、宣传、病例汇报提供可筛选、可打包导出的数据底座。
+
+> 演示数据与账号：执行 `pnpm seed` 后会写入「整形外科」科室、3 位演示患者与 8 张演示图片。
+
+## 功能
+
+| 模块       | 能力                                                                                                                                      |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| 患者档案   | 患者基本信息（姓名/性别/出生日期/病案号/电话/身份证/诊断摘要/状态/标签），搜索、筛选、分页                                                |
+| 就诊记录   | 每次入院/门诊/手术/随访一条记录（住院号、入院-出院时间、诊断、主诉、治疗、主治、科室、备注）                                              |
+| 临床时间线 | 按拍摄日期分组的素材时间线，术前/术中/术后/随访/影像/病理分期，拖拽排序、批量移动、元数据编辑                                             |
+| 资料库     | 科室文件夹（可嵌套）+ 素材，用于培训 PPT、文档、图片、压缩包等                                                                            |
+| 教学分享   | Markdown 撰写，插入本系统视频 / B 站视频 / 外链；可见范围：任何人 / 仅登录用户 / 仅科室内部 / 仅自己；发布后 `/p/<slug>` 网址或二维码分享 |
+| 学习会议   | 讲课/会议/培训/病例讨论归档，可挂载会议素材                                                                                               |
+| 导出中心   | 按患者 / 就诊 / 会议 / 帖子 / 手动选择素材打包 ZIP（含 `README.md`、`manifest.json`、`data.csv` 与原始文件）                              |
+| 权限与用户 | 四级角色 + 科室隔离 + 审计日志                                                                                                            |
+| 在线预览   | 图片（缩放/旋转）、视频（Range 流式播放）、PDF、docx、xlsx、Markdown/文本；Office 可经 LibreOffice 转 PDF 或经 OnlyOffice 在线编辑        |
+| 存储后端   | 服务器本地磁盘 / NAS 挂载目录 / S3 兼容对象存储（MinIO、OSS、Ceph 等），可配置多个目标并指定默认                                          |
+
+## 角色
+
+| 角色                            | 范围                                                                   |
+| ------------------------------- | ---------------------------------------------------------------------- |
+| `root` 超级管理员               | 所有科室、用户、存储与审计                                             |
+| `dept_admin` 科室管理员         | 本科室全部数据、成员管理、本科室存储目标                               |
+| `member` 科室成员               | 本科室数据读写；删除仅限自己创建的记录（管理员不限）                   |
+| `individual` 无所属组织的自然人 | 注册时自动创建「个人空间」，管理自己的患者与资料；无法读取任何科室数据 |
+
+跨科室访问一律返回 `NOT_FOUND`，不泄露记录是否存在。
+
+## 技术栈
+
+- **Vite+**（`vp` 统一工具链：Vite、Vitest、Oxlint、Oxfmt、Vite Task）
+- **React 19** + TanStack Router（文件路由）+ TanStack Query
+- **Hono** + **oRPC**（端到端类型安全的 RPC）+ OpenAPI 文档（`/api`）
+- **Drizzle ORM** + SQLite（WAL 模式，单科室部署零运维；换 Postgres 只需改 dialect 与连接）
+- **Better Auth**（邮箱密码登录、会话 Cookie）
+- **Tailwind CSS 4** + shadcn（Base UI 变体）
+- 存储抽象 `@medihub/storage`：local / nas / s3 三个驱动，配置 AES-256-GCM 加密入库
+
+## 目录
+
+```
+apps/web          React SPA：路由页面、组件、E2E 测试
+apps/server      Hono 服务：/api/auth（会话）、/rpc（oRPC）、/api/files（上传下载）、/api/office（Office 预览编辑）、/api/exports（导出下载），生产环境同时托管 SPA
+packages/api     oRPC 路由、权限中间件、领域服务
+packages/db      Drizzle schema、迁移、测试数据库
+packages/auth    Better Auth 配置与个人空间钩子
+packages/storage 存储驱动、配置加解密、类型推断
+packages/ui      shadcn 组件与设计令牌
+packages/config  共享 TS 配置
+.design          设计规范与截图留档
+```
+
+## 本地启动
+
+前置：Node 24（`engines` 已固定）、pnpm 12。
+
+```bash
+pnpm install
+cp apps/server/.env.example apps/server/.env   # 至少改 BETTER_AUTH_SECRET
+pnpm db:migrate
+pnpm seed                                      # 可选：演示科室与数据
+pnpm dev                                       # web :5173 / api :3000
+```
+
+打开 <http://localhost:5173>，用 `root@medihub.local / Medihub@2026` 登录。
+
+开发时 Vite 把 `/api`、`/rpc` 代理到 3000，浏览器只看到一个源，会话 Cookie 是第一方 Cookie。
+
+## 环境变量（`apps/server/.env`）
+
+| 变量                                       | 说明                                                                     |
+| ------------------------------------------ | ------------------------------------------------------------------------ |
+| `BETTER_AUTH_SECRET`                       | 必填，≥32 字符；同时用于存储配置加密。生产环境必须替换                   |
+| `BETTER_AUTH_URL`                          | 浏览器访问地址，如 `https://medihub.example.com`                         |
+| `DATABASE_URL`                             | SQLite 文件，相对 `apps/server` 解析                                     |
+| `PORT`                                     | API 端口，默认 3000                                                      |
+| `STORAGE_ROOT`                             | 本地存储根目录，默认 `./storage`                                         |
+| `UPLOAD_MAX_BYTES`                         | 单文件上限，默认 256MB                                                   |
+| `SOFFICE_PATH`                             | 可选，LibreOffice 可执行文件；配置后 docx/xlsx/pptx 可转 PDF 在线预览    |
+| `ONLYOFFICE_URL` / `ONLYOFFICE_JWT_SECRET` | 可选，OnlyOffice Document Server；配置后可在浏览器里真正编辑 Office 文档 |
+| `BETTER_AUTH_TRUSTED_ORIGINS`              | 可选，逗号分隔，额外允许的来源（局域网 IP、反向代理域名）                |
+| `SEED_ROOT_EMAIL` / `SEED_ROOT_PASSWORD`   | 可选，`pnpm seed` 时创建的超级管理员                                     |
+
+## 存储
+
+存储目标在「系统管理 → 存储」里配置，三种驱动：
+
+- `local`：`{ "rootPath": "./storage/default" }`
+- `nas`：`{ "rootPath": "Z:\\科室资料" }`（NAS 挂载到本机的路径）
+- `s3`：`{ "endpoint", "region", "bucket", "accessKeyId", "secretAccessKey", "forcePathStyle" }`
+
+配置以 AES-256-GCM 密文入库，接口返回的只有掩码摘要。素材行只保存 `storageTargetId + storageKey`，换存储不影响历史数据。
+
+## Office 在线预览与编辑
+
+- **预览**：docx 用 `docx-preview`、xlsx 用 SheetJS、PDF/pptx 优先走 `/api/office/:id/pdf`（需要 `SOFFICE_PATH`）。
+- **编辑**：配置 OnlyOffice 后，预览界面出现「在线编辑」，文档通过带签名的临时链接交给 Document Server，保存回调把新文件写回存储（新 `storageKey` + 更新 `checksum`）。参考启动方式：
+
+```bash
+docker run -d --name onlyoffice -p 8080:80 \
+  -e JWT_ENABLED=true -e JWT_SECRET=<与ONLYOFFICE_JWT_SECRET一致> \
+  onlyoffice/documentserver
+```
+
+## 导出
+
+`/exports` 选择类型与目标 → 后台打包到存储 → 生成记录 → 下载 `/api/exports/:id/download`。ZIP 结构：
+
+```
+README.md          导出说明（时间、操作人、来源、字段）
+manifest.json      结构化数据
+data.csv           表格数据（UTF-8 BOM，Excel 直接打开）
+files/...          原始文件（文件名重名时自动加序号）
+```
+
+## 常用命令
+
+```bash
+pnpm dev                 # 同时启动 web 与 api
+pnpm build               # 构建全部
+pnpm check               # fmt + lint + 类型检查
+pnpm test                # 单元 + 集成测试
+pnpm test:e2e            # Playwright 端到端
+pnpm run ready           # 完整校验链
+pnpm db:generate         # 修改 schema 后生成迁移
+pnpm db:migrate          # 应用迁移
+pnpm seed                # 演示数据
+```
+
+## 部署
+
+1. `pnpm install && pnpm build`
+2. `pnpm db:migrate && pnpm --filter @medihub/server start`
+3. 服务端监听 `PORT`（默认 3000），生产构建里它同时托管 SPA，浏览器只访问一个端口。
+4. 反向代理时把 `BETTER_AUTH_URL` 设为对外域名，并在 `BETTER_AUTH_TRUSTED_ORIGINS` 里加上该域名；Better Auth 按客户端 IP 限流，代理需透传 `X-Forwarded-For`。
+5. 定期备份 `DATABASE_URL` 指向的 `.db` 文件（含 `-wal`）与 `STORAGE_ROOT`。
+
+## 设计规范
+
+界面遵循 `.design/DESIGN.md`：医疗场景的克制配色、信息密度优先、桌面侧栏 + 移动底部导航双形态、深浅色完整支持。改动 UI 前先读该文件，复用其中的令牌与组件，不要引入第二套设计语言。

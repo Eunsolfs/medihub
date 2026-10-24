@@ -1,0 +1,1964 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>医档通 MediHub · 设计令牌预览</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --background: oklch(0.985 0.003 85);
+        --foreground: oklch(0.235 0.016 250);
+        --card: oklch(1 0 0);
+        --popover: oklch(1 0 0);
+        --primary: oklch(0.49 0.104 219);
+        --primary-foreground: oklch(0.988 0.006 219);
+        --secondary: oklch(0.965 0.005 85);
+        --secondary-foreground: oklch(0.29 0.018 250);
+        --muted: oklch(0.965 0.005 85);
+        --muted-foreground: oklch(0.5 0.014 250);
+        --accent: oklch(0.955 0.019 219);
+        --accent-foreground: oklch(0.35 0.075 221);
+        --destructive: oklch(0.525 0.18 27);
+        --success: oklch(0.485 0.11 158);
+        --warning: oklch(0.49 0.105 68);
+        --info: oklch(0.485 0.09 245);
+        --border: oklch(0.912 0.006 85);
+        --input: oklch(0.878 0.008 85);
+        --ring: oklch(0.49 0.104 219);
+        --chart-1: oklch(0.58 0.095 200);
+        --chart-2: oklch(0.52 0.105 232);
+        --chart-3: oklch(0.5 0.11 262);
+        --chart-4: oklch(0.68 0.13 78);
+        --chart-5: oklch(0.56 0.12 155);
+        --sidebar: oklch(0.972 0.004 85);
+        --radius: 0.625rem;
+        --font-sans:
+          "Geist Variable", "PingFang SC", "Microsoft YaHei", ui-sans-serif,
+          system-ui, sans-serif;
+      }
+
+      .dark {
+        color-scheme: dark;
+        --background: oklch(0.178 0.011 252);
+        --foreground: oklch(0.955 0.004 85);
+        --card: oklch(0.213 0.012 252);
+        --popover: oklch(0.225 0.013 252);
+        --primary: oklch(0.735 0.092 214);
+        --primary-foreground: oklch(0.19 0.03 222);
+        --secondary: oklch(0.265 0.012 252);
+        --secondary-foreground: oklch(0.95 0.004 85);
+        --muted: oklch(0.26 0.012 252);
+        --muted-foreground: oklch(0.72 0.012 252);
+        --accent: oklch(0.3 0.038 218);
+        --accent-foreground: oklch(0.9 0.03 215);
+        --destructive: oklch(0.68 0.16 25);
+        --success: oklch(0.76 0.115 158);
+        --warning: oklch(0.8 0.115 80);
+        --info: oklch(0.76 0.085 235);
+        --border: oklch(1 0 0 / 10%);
+        --input: oklch(1 0 0 / 16%);
+        --ring: oklch(0.735 0.092 214);
+        --chart-1: oklch(0.78 0.085 200);
+        --chart-2: oklch(0.73 0.09 232);
+        --chart-3: oklch(0.72 0.095 262);
+        --chart-4: oklch(0.82 0.11 82);
+        --chart-5: oklch(0.78 0.1 155);
+        --sidebar: oklch(0.196 0.011 252);
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--background);
+        color: var(--foreground);
+        font-family: var(--font-sans);
+        font-size: 14px;
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+        font-feature-settings:
+          "ss01" on,
+          "cv11" on;
+      }
+
+      ::selection {
+        background: color-mix(in oklch, var(--primary) 20%, transparent);
+      }
+
+      .docs-bar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        height: 52px;
+        padding: 0 20px;
+        border-bottom: 1px solid var(--border);
+        background: color-mix(in oklch, var(--background) 85%, transparent);
+        backdrop-filter: blur(12px);
+      }
+
+      .brand-mark {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: 30px;
+        height: 30px;
+        border-radius: 10px;
+        background: var(--primary);
+        color: var(--primary-foreground);
+        font-weight: 700;
+        font-size: 15px;
+      }
+
+      .docs-title {
+        display: grid;
+        line-height: 1.15;
+      }
+
+      .brand-mark::before,
+      .brand-mark::after {
+        content: "";
+        position: absolute;
+        background: currentColor;
+        border-radius: 1px;
+      }
+
+      .brand-mark::before {
+        width: 12px;
+        height: 3px;
+      }
+
+      .brand-mark::after {
+        width: 3px;
+        height: 12px;
+      }
+
+      .docs-title b {
+        font-size: 14px;
+        letter-spacing: -0.01em;
+      }
+
+      .docs-title span {
+        font-size: 10px;
+        letter-spacing: 0.18em;
+        color: var(--muted-foreground);
+      }
+
+      .spacer {
+        flex: 1;
+      }
+
+      .theme-btn {
+        height: 32px;
+        padding: 0 12px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: var(--background);
+        color: var(--foreground);
+        font: inherit;
+        font-size: 12px;
+        cursor: pointer;
+      }
+
+      .theme-btn:hover {
+        background: var(--muted);
+      }
+
+      main {
+        width: 100%;
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 24px 16px 56px;
+        display: grid;
+        gap: 32px;
+      }
+
+      @media (min-width: 768px) {
+        main {
+          padding: 32px 24px 64px;
+          gap: 40px;
+        }
+      }
+
+      @media (min-width: 1024px) {
+        main {
+          padding: 40px 32px 72px;
+        }
+      }
+
+      .page-head {
+        display: grid;
+        gap: 10px;
+        padding-bottom: 4px;
+      }
+
+      .eyebrow {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.16em;
+        color: var(--primary);
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 30px;
+        line-height: 1.2;
+        letter-spacing: -0.025em;
+        font-weight: 600;
+      }
+
+      .lede {
+        margin: 0;
+        max-width: 62ch;
+        color: var(--muted-foreground);
+        font-size: 14px;
+      }
+
+      .section {
+        display: grid;
+        gap: 16px;
+      }
+
+      .section-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 16px;
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 8px;
+      }
+
+      .section-head h2 {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+
+      .section-head p {
+        margin: 0;
+        font-size: 13px;
+        color: var(--muted-foreground);
+      }
+
+      .swatches {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+        gap: 10px;
+      }
+
+      .swatch {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+        background: var(--card);
+      }
+
+      .swatch i {
+        display: block;
+        height: 56px;
+      }
+
+      .swatch div {
+        display: grid;
+        gap: 1px;
+        padding: 8px 10px;
+      }
+
+      .swatch b {
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .swatch code {
+        font-size: 10px;
+        color: var(--muted-foreground);
+        font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+      }
+
+      .grid-2 {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: 1fr;
+        align-items: start;
+      }
+
+      @media (min-width: 900px) {
+        .grid-2 {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+
+      .panel {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 16px;
+        display: grid;
+        gap: 12px;
+        align-content: start;
+      }
+
+      .panel h3 {
+        margin: 0;
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .type-row {
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+        border-bottom: 1px dashed var(--border);
+        padding-bottom: 8px;
+      }
+
+      .type-row:last-child {
+        border-bottom: 0;
+        padding-bottom: 0;
+      }
+
+      .type-row span {
+        width: 92px;
+        flex: none;
+        font-size: 11px;
+        color: var(--muted-foreground);
+        font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+      }
+
+      .h-sample {
+        font-size: 24px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+
+      .body-sample {
+        font-size: 14px;
+      }
+
+      .caption-sample {
+        font-size: 13px;
+        color: var(--muted-foreground);
+      }
+
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        height: 32px;
+        padding: 0 10px;
+        border-radius: var(--radius);
+        border: 1px solid transparent;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition:
+          background 120ms ease,
+          color 120ms ease;
+        white-space: nowrap;
+      }
+
+      .btn-primary {
+        background: var(--primary);
+        color: var(--primary-foreground);
+      }
+
+      .btn-primary:hover {
+        background: color-mix(in oklch, var(--primary) 84%, transparent);
+      }
+
+      .btn-secondary {
+        background: var(--secondary);
+        color: var(--secondary-foreground);
+        border-color: var(--border);
+      }
+
+      .btn-outline {
+        background: var(--background);
+        color: var(--foreground);
+        border-color: var(--border);
+      }
+
+      .btn-outline:hover {
+        background: var(--muted);
+      }
+
+      .btn-ghost {
+        background: transparent;
+        color: var(--muted-foreground);
+      }
+
+      .btn-ghost:hover {
+        background: var(--muted);
+        color: var(--foreground);
+      }
+
+      .btn-danger {
+        background: color-mix(in oklch, var(--destructive) 12%, transparent);
+        color: var(--destructive);
+      }
+
+      .btn-sm {
+        height: 28px;
+        font-size: 12px;
+        padding: 0 8px;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        height: 20px;
+        padding: 0 8px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 500;
+        white-space: nowrap;
+      }
+
+      .t-primary {
+        background: color-mix(in oklch, var(--primary) 12%, transparent);
+        color: var(--primary);
+      }
+
+      .t-info {
+        background: color-mix(in oklch, var(--info) 12%, transparent);
+        color: var(--info);
+      }
+
+      .t-success {
+        background: color-mix(in oklch, var(--success) 12%, transparent);
+        color: var(--success);
+      }
+
+      .t-warning {
+        background: color-mix(in oklch, var(--warning) 12%, transparent);
+        color: var(--warning);
+      }
+
+      .t-danger {
+        background: color-mix(in oklch, var(--destructive) 12%, transparent);
+        color: var(--destructive);
+      }
+
+      .t-neutral {
+        background: var(--muted);
+        color: var(--muted-foreground);
+      }
+
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        height: 20px;
+        padding: 0 6px;
+        border-radius: 6px;
+        background: var(--secondary);
+        color: var(--secondary-foreground);
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
+      .field {
+        display: grid;
+        gap: 6px;
+      }
+
+      .field label {
+        font-size: 12px;
+        font-weight: 500;
+      }
+
+      .field input,
+      .field select,
+      .field textarea {
+        width: 100%;
+        min-height: 32px;
+        padding: 6px 10px;
+        border: 1px solid var(--input);
+        border-radius: var(--radius);
+        background: transparent;
+        color: var(--foreground);
+        font: inherit;
+        font-size: 13px;
+      }
+
+      .field input::placeholder,
+      .field textarea::placeholder {
+        color: var(--muted-foreground);
+      }
+
+      .field input:focus,
+      .field select:focus,
+      .field textarea:focus {
+        outline: none;
+        border-color: var(--ring);
+        box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 20%, transparent);
+      }
+
+      .table-card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        overflow: hidden;
+      }
+
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        justify-content: space-between;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .toolbar .grow {
+        flex: 1;
+        min-width: 180px;
+        display: flex;
+        gap: 8px;
+      }
+
+      input.search {
+        flex: 1;
+        min-width: 0;
+        min-height: 32px;
+        padding: 0 10px;
+        border-radius: var(--radius);
+        border: 1px solid var(--input);
+        background: transparent;
+        color: var(--foreground);
+        font: inherit;
+        font-size: 13px;
+      }
+
+      input.search::placeholder {
+        color: var(--muted-foreground);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+
+      thead th {
+        height: 40px;
+        padding: 0 16px;
+        text-align: left;
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--muted-foreground);
+        background: color-mix(in oklch, var(--muted) 60%, transparent);
+        border-bottom: 1px solid var(--border);
+        white-space: nowrap;
+      }
+
+      tbody td {
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border);
+        vertical-align: middle;
+        white-space: nowrap;
+      }
+
+      tbody tr:last-child td {
+        border-bottom: 0;
+      }
+
+      tbody tr:hover {
+        background: color-mix(in oklch, var(--muted) 40%, transparent);
+      }
+
+      .cell-title {
+        font-weight: 500;
+      }
+
+      .cell-sub {
+        font-size: 11px;
+        color: var(--muted-foreground);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .num {
+        font-variant-numeric: tabular-nums;
+        color: var(--muted-foreground);
+      }
+
+      .pager {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 10px 16px;
+        border-top: 1px solid var(--border);
+        font-size: 12px;
+        color: var(--muted-foreground);
+      }
+
+      .cards-mobile {
+        display: grid;
+        gap: 10px;
+      }
+
+      .patient-card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 14px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .patient-card .top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .patient-card dl {
+        display: grid;
+        gap: 4px;
+        margin: 0;
+      }
+
+      .patient-card dl div {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .patient-card dt {
+        font-size: 11px;
+        color: var(--muted-foreground);
+      }
+
+      .patient-card dd {
+        margin: 0;
+        font-size: 13px;
+        text-align: right;
+      }
+
+      .timeline {
+        display: grid;
+        gap: 0;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .timeline li {
+        position: relative;
+        display: grid;
+        grid-template-columns: 20px 1fr;
+        gap: 12px;
+        padding-bottom: 20px;
+      }
+
+      .timeline li:last-child {
+        padding-bottom: 0;
+      }
+
+      .timeline li::before {
+        content: "";
+        position: absolute;
+        left: 9px;
+        top: 14px;
+        bottom: 0;
+        width: 1px;
+        background: var(--border);
+      }
+
+      .timeline li:last-child::before {
+        display: none;
+      }
+
+      .dot {
+        width: 14px;
+        height: 14px;
+        margin-top: 2px;
+        border-radius: 999px;
+        border: 3px solid var(--card);
+        box-shadow: 0 0 0 1px var(--border);
+        background: var(--primary);
+      }
+
+      .dot.muted {
+        background: var(--border);
+      }
+
+      .timeline h4 {
+        margin: 0;
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .timeline .meta {
+        font-size: 11px;
+        color: var(--muted-foreground);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .thumbs {
+        display: flex;
+        gap: 6px;
+        margin-top: 8px;
+      }
+
+      .thumbs i {
+        width: 44px;
+        height: 44px;
+        border-radius: 8px;
+        background: linear-gradient(
+          135deg,
+          color-mix(in oklch, var(--primary) 22%, var(--muted)),
+          var(--muted)
+        );
+        border: 1px solid var(--border);
+      }
+
+      .stat-grid {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      @media (min-width: 768px) {
+        .stat-grid {
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+      }
+
+      .stat {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 14px;
+        display: grid;
+        gap: 6px;
+      }
+
+      .stat .k {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 12px;
+        color: var(--muted-foreground);
+      }
+
+      .stat .v {
+        font-size: 24px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        font-variant-numeric: tabular-nums;
+        line-height: 1.2;
+      }
+
+      .stat .h {
+        font-size: 11px;
+        color: var(--muted-foreground);
+      }
+
+      .ico {
+        display: grid;
+        place-items: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        background: var(--accent);
+        color: var(--accent-foreground);
+        font-size: 13px;
+      }
+
+      .empty {
+        display: grid;
+        justify-items: center;
+        gap: 6px;
+        padding: 32px 16px;
+        border: 1px dashed var(--border);
+        border-radius: 14px;
+        text-align: center;
+      }
+
+      .empty .ring {
+        display: grid;
+        place-items: center;
+        width: 40px;
+        height: 40px;
+        border-radius: 999px;
+        background: var(--muted);
+        color: var(--muted-foreground);
+      }
+
+      .empty b {
+        font-size: 13px;
+      }
+
+      .empty span {
+        font-size: 12px;
+        color: var(--muted-foreground);
+        max-width: 34ch;
+      }
+
+      .phones {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 24px;
+      }
+
+      .phone {
+        width: 375px;
+        max-width: 100%;
+        height: 640px;
+        border-radius: 28px;
+        border: 1px solid var(--border);
+        background: var(--background);
+        overflow: hidden;
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        box-shadow: 0 24px 48px -32px oklch(0.2 0.02 250 / 28%);
+      }
+
+      .phone-top {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 52px;
+        padding: 0 12px;
+        border-bottom: 1px solid var(--border);
+        background: color-mix(in oklch, var(--background) 90%, transparent);
+      }
+
+      .phone-body {
+        overflow: hidden;
+        padding: 14px 12px;
+        display: grid;
+        gap: 10px;
+        align-content: start;
+      }
+
+      .phone-tabs {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        border-top: 1px solid var(--border);
+        background: var(--surface, var(--background));
+        padding-bottom: 6px;
+      }
+
+      .phone-tabs a {
+        display: grid;
+        justify-items: center;
+        gap: 3px;
+        min-height: 56px;
+        align-content: center;
+        font-size: 10px;
+        color: var(--muted-foreground);
+        text-decoration: none;
+      }
+
+      .phone-tabs a.on {
+        color: var(--primary);
+        font-weight: 600;
+      }
+
+      .phone-tabs em {
+        font-style: normal;
+        font-size: 16px;
+        line-height: 1;
+      }
+
+      .sheet {
+        position: absolute;
+        inset: auto 0 0 0;
+        border-radius: 18px 18px 0 0;
+        border: 1px solid var(--border);
+        border-bottom: 0;
+        background: var(--popover);
+        padding: 12px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .sheet-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-height: 44px;
+        padding: 0 10px;
+        border-radius: 10px;
+        font-size: 13px;
+      }
+
+      .sheet-row:hover {
+        background: var(--muted);
+      }
+
+      .phone-wrap {
+        position: relative;
+      }
+
+      .scale {
+        display: grid;
+        gap: 8px;
+      }
+
+      .scale-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 11px;
+        color: var(--muted-foreground);
+      }
+
+      .scale-bar {
+        height: 10px;
+        border-radius: 999px;
+        background: color-mix(in oklch, var(--primary) 24%, transparent);
+      }
+
+      .radius-demo {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .radius-demo div {
+        width: 72px;
+        height: 56px;
+        display: grid;
+        place-items: center;
+        background: var(--card);
+        border: 1px solid var(--border);
+        font-size: 11px;
+        color: var(--muted-foreground);
+      }
+
+      .do-dont {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: 1fr;
+      }
+
+      @media (min-width: 768px) {
+        .do-dont {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+
+      .dd {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px 14px;
+        background: var(--card);
+        display: grid;
+        gap: 6px;
+      }
+
+      .dd b {
+        font-size: 12px;
+      }
+
+      .dd.bad b {
+        color: var(--destructive);
+      }
+
+      .dd.good b {
+        color: var(--success);
+      }
+
+      .dd p {
+        margin: 0;
+        font-size: 13px;
+        color: var(--muted-foreground);
+      }
+
+      footer {
+        border-top: 1px solid var(--border);
+        padding-top: 16px;
+        font-size: 13px;
+        color: var(--muted-foreground);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 16px;
+        justify-content: space-between;
+      }
+
+      .desktop-only {
+        display: none;
+      }
+
+      .mobile-only {
+        display: grid;
+      }
+
+      @media (min-width: 768px) {
+        .desktop-only {
+          display: block;
+        }
+
+        .mobile-only {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="docs-bar">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="docs-title">
+        <b>医档通 MediHub · 设计预览</b>
+        <span>设计令牌与组件示例</span>
+      </span>
+      <span class="spacer"></span>
+      <button class="theme-btn" id="theme" type="button">切换深色</button>
+    </div>
+
+    <main>
+      <header class="page-head">
+        <h1>冷静、可信、信息优先的临床资料后台</h1>
+        <p class="lede">
+          青蓝主色传达医疗的可靠与冷静，暖灰表面降低长时阅读疲劳；层级用 1px
+          分隔线与描边表达，
+          不使用重阴影与装饰性动效。所有颜色、字号、圆角与间距都来自
+          <code>.design/DESIGN.md</code>
+          记录的同一套令牌。
+        </p>
+      </header>
+
+      <section class="section">
+        <div class="section-head">
+          <h2>色板</h2>
+          <p>语义化令牌 · 浅色 / 深色成对映射</p>
+        </div>
+        <div class="swatches">
+          <div class="swatch">
+            <i style="background: var(--primary)"></i>
+            <div><b>主色 primary</b><code>oklch(0.49 0.104 219)</code></div>
+          </div>
+          <div class="swatch">
+            <i style="background: var(--accent)"></i>
+            <div><b>浅强调 accent</b><code>oklch(0.955 0.019 219)</code></div>
+          </div>
+          <div class="swatch">
+            <i style="background: var(--success)"></i>
+            <div><b>成功 success</b><code>oklch(0.525 0.115 158)</code></div>
+          </div>
+          <div class="swatch">
+            <i style="background: var(--warning)"></i>
+            <div><b>警示 warning</b><code>oklch(0.54 0.115 68)</code></div>
+          </div>
+          <div class="swatch">
+            <i style="background: var(--info)"></i>
+            <div><b>信息 info</b><code>oklch(0.52 0.095 245)</code></div>
+          </div>
+          <div class="swatch">
+            <i style="background: var(--destructive)"></i>
+            <div><b>危险 destructive</b><code>oklch(0.545 0.185 27)</code></div>
+          </div>
+          <div class="swatch">
+            <i
+              style="
+                background: var(--background);
+                border-bottom: 1px solid var(--border);
+              "
+            ></i>
+            <div><b>背景 background</b><code>oklch(0.985 0.003 85)</code></div>
+          </div>
+          <div class="swatch">
+            <i
+              style="
+                background: var(--card);
+                border-bottom: 1px solid var(--border);
+              "
+            ></i>
+            <div><b>卡片 card</b><code>oklch(1 0 0)</code></div>
+          </div>
+          <div class="swatch">
+            <i style="background: var(--muted)"></i>
+            <div><b>静默 muted</b><code>oklch(0.965 0.005 85)</code></div>
+          </div>
+          <div class="swatch">
+            <i style="background: var(--border)"></i>
+            <div><b>描边 border</b><code>oklch(0.912 0.006 85)</code></div>
+          </div>
+        </div>
+        <div class="swatches">
+          <div class="swatch">
+            <i style="background: var(--chart-1)"></i>
+            <div><b>图表 1 青</b><code>oklch(0.58 0.095 200)</code></div>
+          </div>
+          <div class="swatch">
+            <i style="background: var(--chart-2)"></i>
+            <div><b>图表 2 蓝</b><code>oklch(0.52 0.105 232)</code></div>
+          </div>
+          <div class="swatch">
+            <i style="background: var(--chart-3)"></i>
+            <div><b>图表 3 靛</b><code>oklch(0.5 0.11 262)</code></div>
+          </div>
+          <div class="swatch">
+            <i style="background: var(--chart-4)"></i>
+            <div><b>图表 4 琥珀</b><code>oklch(0.68 0.13 78)</code></div>
+          </div>
+          <div class="swatch">
+            <i style="background: var(--chart-5)"></i>
+            <div><b>图表 5 绿</b><code>oklch(0.56 0.12 155)</code></div>
+          </div>
+          <div class="swatch">
+            <i style="background: var(--sidebar)"></i>
+            <div><b>侧栏 sidebar</b><code>oklch(0.972 0.004 85)</code></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <h2>字体与数字</h2>
+          <p>Geist Variable · 中文回退 PingFang SC / Microsoft YaHei</p>
+        </div>
+        <div class="grid-2">
+          <div class="panel">
+            <h3>字号层级</h3>
+            <div class="type-row">
+              <span>28 / 600</span>
+              <div class="h-sample">患者档案</div>
+            </div>
+            <div class="type-row">
+              <span>20 / 600</span>
+              <div
+                style="
+                  font-size: 20px;
+                  font-weight: 600;
+                  letter-spacing: -0.015em;
+                "
+              >
+                入院记录与影像
+              </div>
+            </div>
+            <div class="type-row">
+              <span>16 / 600</span>
+              <div style="font-size: 16px; font-weight: 600">分区块标题</div>
+            </div>
+            <div class="type-row">
+              <span>14 / 400</span>
+              <div class="body-sample">
+                正文：患者于 2024 年 3 月因创面修复入院，术后第 7 天拆线。
+              </div>
+            </div>
+            <div class="type-row">
+              <span>13 / 500</span>
+              <div style="font-size: 13px; font-weight: 500">
+                表格主信息 / 按钮
+              </div>
+            </div>
+            <div class="type-row">
+              <span>12 / 400</span>
+              <div class="caption-sample">
+                次要说明：可见范围、更新时间、计数
+              </div>
+            </div>
+            <div class="type-row">
+              <span>11 / 600</span>
+              <div
+                style="
+                  font-size: 11px;
+                  letter-spacing: 0.1em;
+                  color: var(--muted-foreground);
+                "
+              >
+                LABEL 分组标签
+              </div>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>数字与层级</h3>
+            <div class="row" style="gap: 24px">
+              <div>
+                <div class="cell-sub">统计数字 tabular-nums</div>
+                <div
+                  style="
+                    font-size: 28px;
+                    font-weight: 600;
+                    font-variant-numeric: tabular-nums;
+                  "
+                >
+                  1,284
+                </div>
+              </div>
+              <div>
+                <div class="cell-sub">日期</div>
+                <div
+                  style="font-size: 15px; font-variant-numeric: tabular-nums"
+                >
+                  2024/03/18
+                </div>
+              </div>
+              <div>
+                <div class="cell-sub">编号</div>
+                <div
+                  style="font-size: 15px; font-variant-numeric: tabular-nums"
+                >
+                  MH-2024-0412
+                </div>
+              </div>
+            </div>
+            <p class="caption-sample" style="margin: 0">
+              所有数字列、时间、编号使用等宽数字（tabular-nums），避免翻页时列宽跳动。
+            </p>
+            <div class="scale">
+              <div class="scale-row">
+                <span style="width: 56px">4</span
+                ><i class="scale-bar" style="width: 4px"></i
+                ><span>图标内间隙</span>
+              </div>
+              <div class="scale-row">
+                <span style="width: 56px">8</span
+                ><i class="scale-bar" style="width: 8px"></i
+                ><span>徽章、标签内间距</span>
+              </div>
+              <div class="scale-row">
+                <span style="width: 56px">12</span
+                ><i class="scale-bar" style="width: 12px"></i
+                ><span>卡片行内间距</span>
+              </div>
+              <div class="scale-row">
+                <span style="width: 56px">16</span
+                ><i class="scale-bar" style="width: 16px"></i
+                ><span>卡片内边距 / 区块间距</span>
+              </div>
+              <div class="scale-row">
+                <span style="width: 56px">24</span
+                ><i class="scale-bar" style="width: 24px"></i
+                ><span>页面区块间距</span>
+              </div>
+              <div class="scale-row">
+                <span style="width: 56px">32</span
+                ><i class="scale-bar" style="width: 32px"></i
+                ><span>页面纵向分节</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <h2>圆角与容器</h2>
+          <p>基准 10px：按钮 10 / 卡片 14 / 弹层 18</p>
+        </div>
+        <div class="radius-demo">
+          <div style="border-radius: 6px">sm 6</div>
+          <div style="border-radius: 8px">md 8</div>
+          <div style="border-radius: 10px">lg 10</div>
+          <div style="border-radius: 14px">xl 14</div>
+          <div style="border-radius: 18px">2xl 18</div>
+          <div style="border-radius: 999px">pill</div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <h2>按钮与徽章</h2>
+          <p>移动端所有可点元素最小 44×44</p>
+        </div>
+        <div class="grid-2">
+          <div class="panel">
+            <h3>按钮</h3>
+            <div class="row">
+              <button class="btn btn-primary" type="button">
+                新建患者档案
+              </button>
+              <button class="btn btn-secondary" type="button">批量导出</button>
+              <button class="btn btn-outline" type="button">筛选</button>
+              <button class="btn btn-ghost" type="button">取消</button>
+              <button class="btn btn-danger" type="button">删除资料</button>
+            </div>
+            <div class="row">
+              <button class="btn btn-primary btn-sm" type="button">
+                小号 28
+              </button>
+              <button class="btn btn-outline btn-sm" type="button">
+                上一页
+              </button>
+              <button class="btn btn-outline btn-sm" type="button">
+                下一页
+              </button>
+              <button
+                class="btn btn-outline"
+                type="button"
+                disabled
+                style="opacity: 0.5; cursor: not-allowed"
+              >
+                已停用
+              </button>
+            </div>
+            <p class="caption-sample" style="margin: 0">
+              主操作每屏一个；破坏性操作使用 destructive 变体并二次确认。
+            </p>
+          </div>
+          <div class="panel">
+            <h3>角色 / 可见范围 / 诊疗阶段</h3>
+            <div class="row">
+              <span class="badge t-primary">超级管理员</span>
+              <span class="badge t-info">科室管理员</span>
+              <span class="badge t-neutral">科室成员</span>
+              <span class="badge t-neutral">个人用户</span>
+            </div>
+            <div class="row">
+              <span class="badge t-success">任何人</span>
+              <span class="badge t-primary">仅登录用户</span>
+              <span class="badge t-info">仅科室内部</span>
+              <span class="badge t-neutral">仅自己</span>
+            </div>
+            <div class="row">
+              <span class="badge t-warning">术前</span>
+              <span class="badge t-info">术中</span>
+              <span class="badge t-success">术后</span>
+              <span class="badge t-neutral">随访</span>
+              <span class="badge t-primary">影像</span>
+              <span class="badge t-danger">病理</span>
+              <span class="badge t-neutral">其它</span>
+            </div>
+            <div class="row">
+              <span class="tag">创面修复</span>
+              <span class="tag">瘢痕</span>
+              <span class="tag">皮瓣</span>
+              <span class="cell-sub">+2</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <h2>表单</h2>
+          <p>标签在控件上方 · 错误信息具体可操作</p>
+        </div>
+        <div class="grid-2">
+          <div class="panel">
+            <div class="field">
+              <label for="name">患者姓名 / 编号</label>
+              <input id="name" placeholder="如 张三 或 MH-2024-0412" />
+            </div>
+            <div class="field">
+              <label for="stage">诊疗阶段</label>
+              <select id="stage">
+                <option>全部阶段</option>
+                <option>术前</option>
+                <option>术中</option>
+                <option>术后</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="note">备注</label>
+              <textarea
+                id="note"
+                rows="2"
+                placeholder="记录拍摄部位与体位要求"
+              ></textarea>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>空状态 / 加载态</h3>
+            <div class="empty">
+              <span class="ring" aria-hidden="true">▤</span>
+              <b>该患者暂无影像资料</b>
+              <span
+                >上传第一张伤口照片后，系统会按入院时间自动生成时间线。</span
+              >
+              <button class="btn btn-outline btn-sm" type="button">
+                上传资料
+              </button>
+            </div>
+            <div style="display: grid; gap: 8px">
+              <div
+                style="
+                  height: 12px;
+                  width: 60%;
+                  border-radius: 6px;
+                  background: var(--muted);
+                "
+              ></div>
+              <div
+                style="
+                  height: 12px;
+                  width: 100%;
+                  border-radius: 6px;
+                  background: var(--muted);
+                "
+              ></div>
+              <div
+                style="
+                  height: 12px;
+                  width: 80%;
+                  border-radius: 6px;
+                  background: var(--muted);
+                "
+              ></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <h2>数据列表</h2>
+          <p>桌面表格 · 窄屏自动降级为卡片，无横向滚动</p>
+        </div>
+
+        <div class="table-card desktop-only">
+          <div class="toolbar">
+            <div class="grow">
+              <input class="search" placeholder="搜索患者姓名、住院号或诊断" />
+              <button class="btn btn-outline btn-sm" type="button">阶段</button>
+              <button class="btn btn-outline btn-sm" type="button">
+                时间范围
+              </button>
+            </div>
+            <button class="btn btn-primary btn-sm" type="button">
+              新建档案
+            </button>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>患者</th>
+                <th>最近入院</th>
+                <th>诊疗阶段</th>
+                <th>影像</th>
+                <th>标签</th>
+                <th style="text-align: right">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <div class="cell-title">张文娟</div>
+                  <div class="cell-sub">MH-2024-0412 · 女 / 46 岁</div>
+                </td>
+                <td><span class="num">2024/03/18</span></td>
+                <td><span class="badge t-success">术后</span></td>
+                <td><span class="num">128</span> 张</td>
+                <td>
+                  <span class="tag">创面修复</span>
+                  <span class="tag">皮瓣</span>
+                </td>
+                <td style="text-align: right">
+                  <button class="btn btn-ghost btn-sm" type="button">
+                    查看
+                  </button>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="cell-title">李国庆</div>
+                  <div class="cell-sub">MH-2024-0398 · 男 / 58 岁</div>
+                </td>
+                <td><span class="num">2024/03/12</span></td>
+                <td><span class="badge t-warning">术前</span></td>
+                <td><span class="num">34</span> 张</td>
+                <td><span class="tag">瘢痕</span></td>
+                <td style="text-align: right">
+                  <button class="btn btn-ghost btn-sm" type="button">
+                    查看
+                  </button>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="cell-title">王蕊</div>
+                  <div class="cell-sub">MH-2024-0361 · 女 / 31 岁</div>
+                </td>
+                <td><span class="num">2024/02/27</span></td>
+                <td><span class="badge t-primary">影像</span></td>
+                <td><span class="num">76</span> 张</td>
+                <td>
+                  <span class="tag">烧伤</span> <span class="tag">随访</span>
+                  <span class="cell-sub">+1</span>
+                </td>
+                <td style="text-align: right">
+                  <button class="btn btn-ghost btn-sm" type="button">
+                    查看
+                  </button>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="cell-title">陈亦凡</div>
+                  <div class="cell-sub">MH-2024-0344 · 男 / 24 岁</div>
+                </td>
+                <td><span class="num">2024/02/19</span></td>
+                <td><span class="badge t-danger">病理</span></td>
+                <td><span class="num">52</span> 张</td>
+                <td><span class="tag">肿瘤切除</span></td>
+                <td style="text-align: right">
+                  <button class="btn btn-ghost btn-sm" type="button">
+                    查看
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="pager">
+            <span
+              >共 <b class="num" style="color: var(--foreground)">248</b> 条 ·
+              第 1/19 页</span
+            >
+            <div class="row">
+              <button
+                class="btn btn-outline btn-sm"
+                type="button"
+                disabled
+                style="opacity: 0.5"
+              >
+                上一页
+              </button>
+              <button class="btn btn-outline btn-sm" type="button">
+                下一页
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="mobile-only cards-mobile">
+          <div class="patient-card">
+            <div class="top">
+              <div>
+                <div class="cell-title">张文娟</div>
+                <div class="cell-sub">MH-2024-0412 · 女 / 46 岁</div>
+              </div>
+              <span class="badge t-success">术后</span>
+            </div>
+            <dl>
+              <div>
+                <dt>最近入院</dt>
+                <dd class="num" style="color: var(--foreground)">2024/03/18</dd>
+              </div>
+              <div>
+                <dt>影像</dt>
+                <dd>128 张</dd>
+              </div>
+              <div>
+                <dt>标签</dt>
+                <dd>
+                  <span class="tag">创面修复</span>
+                  <span class="tag">皮瓣</span>
+                </dd>
+              </div>
+            </dl>
+          </div>
+          <div class="patient-card">
+            <div class="top">
+              <div>
+                <div class="cell-title">李国庆</div>
+                <div class="cell-sub">MH-2024-0398 · 男 / 58 岁</div>
+              </div>
+              <span class="badge t-warning">术前</span>
+            </div>
+            <dl>
+              <div>
+                <dt>最近入院</dt>
+                <dd class="num" style="color: var(--foreground)">2024/03/12</dd>
+              </div>
+              <div>
+                <dt>影像</dt>
+                <dd>34 张</dd>
+              </div>
+              <div>
+                <dt>标签</dt>
+                <dd><span class="tag">瘢痕</span></dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <h2>时间线</h2>
+          <p>入院 / 手术 / 影像按时间倒序 · 阶段徽章与缩略图同列</p>
+        </div>
+        <div class="grid-2">
+          <div class="panel">
+            <h3>入院与影像时间线</h3>
+            <ol class="timeline">
+              <li>
+                <span class="dot" aria-hidden="true"></span>
+                <div>
+                  <h4>
+                    第 2 次入院 · 皮瓣修复术后复查
+                    <span class="badge t-success" style="margin-left: 6px"
+                      >术后</span
+                    >
+                  </h4>
+                  <div class="meta">
+                    2024/03/18 09:20 · 主治：刘医生 · 12 张
+                  </div>
+                  <div class="thumbs"><i></i><i></i><i></i><i></i></div>
+                </div>
+              </li>
+              <li>
+                <span class="dot" aria-hidden="true"></span>
+                <div>
+                  <h4>
+                    术中记录 · 皮瓣转移
+                    <span class="badge t-info" style="margin-left: 6px"
+                      >术中</span
+                    >
+                  </h4>
+                  <div class="meta">2024/03/08 14:05 · 手术室 3 · 26 张</div>
+                  <div class="thumbs"><i></i><i></i><i></i></div>
+                </div>
+              </li>
+              <li>
+                <span class="dot muted" aria-hidden="true"></span>
+                <div>
+                  <h4>
+                    首次入院 · 创面评估
+                    <span class="badge t-warning" style="margin-left: 6px"
+                      >术前</span
+                    >
+                  </h4>
+                  <div class="meta">2024/02/27 10:40 · 门诊换药室 · 8 张</div>
+                </div>
+              </li>
+            </ol>
+          </div>
+          <div class="panel">
+            <h3>科室统计</h3>
+            <div class="stat-grid">
+              <div class="stat">
+                <div class="k">
+                  在诊患者 <span class="ico" aria-hidden="true">◷</span>
+                </div>
+                <div class="v">128</div>
+                <div class="h">较上周 +6</div>
+              </div>
+              <div class="stat">
+                <div class="k">
+                  本月入库 <span class="ico" aria-hidden="true">▤</span>
+                </div>
+                <div class="v">1,284</div>
+                <div class="h">照片与文档</div>
+              </div>
+              <div class="stat">
+                <div class="k">
+                  待导出 <span class="ico" aria-hidden="true">↓</span>
+                </div>
+                <div class="v">3</div>
+                <div class="h">1 个处理中</div>
+              </div>
+              <div class="stat">
+                <div class="k">
+                  存储占用 <span class="ico" aria-hidden="true">◫</span>
+                </div>
+                <div class="v">62%</div>
+                <div class="h">建议清理重复影像</div>
+              </div>
+            </div>
+            <div class="empty" style="margin-top: 4px">
+              <span class="ring" aria-hidden="true">＋</span>
+              <b>暂无学习会议安排</b>
+              <span>创建会议后可上传课件并生成回放，科室内共享。</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <h2>移动端布局</h2>
+          <p>375px · 顶栏 + 底部标签栏 + 「更多」面板 · 点击目标 ≥ 44px</p>
+        </div>
+        <div class="phones">
+          <div class="phone-wrap">
+            <div class="phone">
+              <div class="phone-top">
+                <span
+                  class="brand-mark"
+                  style="
+                    width: 26px;
+                    height: 26px;
+                    border-radius: 8px;
+                    font-size: 13px;
+                  "
+                  aria-hidden="true"
+                ></span>
+                <div class="docs-title">
+                  <b style="font-size: 13px">医档通</b
+                  ><span style="font-size: 9px">MEDIHUB</span>
+                </div>
+                <span class="spacer"></span>
+                <span
+                  class="ico"
+                  aria-hidden="true"
+                  style="width: 32px; height: 32px"
+                  >⌕</span
+                >
+              </div>
+              <div class="phone-body">
+                <div
+                  style="
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    gap: 8px;
+                  "
+                >
+                  <div>
+                    <div
+                      style="
+                        font-size: 19px;
+                        font-weight: 600;
+                        letter-spacing: -0.02em;
+                      "
+                    >
+                      患者档案
+                    </div>
+                    <div class="cell-sub">共 248 位患者</div>
+                  </div>
+                  <span class="btn btn-primary btn-sm" style="height: 32px"
+                    >＋ 新建</span
+                  >
+                </div>
+                <input
+                  class="search"
+                  style="min-height: 44px"
+                  placeholder="搜索姓名、住院号或诊断"
+                />
+                <div class="row">
+                  <span class="badge t-primary">全部</span>
+                  <span class="badge t-neutral">在诊</span>
+                  <span class="badge t-neutral">随访中</span>
+                  <span class="badge t-neutral">已归档</span>
+                </div>
+                <div class="patient-card">
+                  <div class="top">
+                    <div>
+                      <div class="cell-title">张文娟</div>
+                      <div class="cell-sub">MH-2024-0412 · 女 / 46 岁</div>
+                    </div>
+                    <span class="badge t-success">术后</span>
+                  </div>
+                  <dl>
+                    <div>
+                      <dt>最近入院</dt>
+                      <dd class="num" style="color: var(--foreground)">
+                        2024/03/18
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>影像</dt>
+                      <dd>128 张</dd>
+                    </div>
+                  </dl>
+                </div>
+                <div class="patient-card">
+                  <div class="top">
+                    <div>
+                      <div class="cell-title">李国庆</div>
+                      <div class="cell-sub">MH-2024-0398 · 男 / 58 岁</div>
+                    </div>
+                    <span class="badge t-warning">术前</span>
+                  </div>
+                  <dl>
+                    <div>
+                      <dt>最近入院</dt>
+                      <dd class="num" style="color: var(--foreground)">
+                        2024/03/12
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>影像</dt>
+                      <dd>34 张</dd>
+                    </div>
+                  </dl>
+                </div>
+              </div>
+              <div class="phone-tabs">
+                <a class="on" href="#"><em>▦</em>工作台</a>
+                <a href="#"><em>◫</em>患者</a>
+                <a href="#"><em>▤</em>资料库</a>
+                <a href="#"><em>▷</em>分享</a>
+                <a href="#"><em>⋯</em>更多</a>
+              </div>
+            </div>
+          </div>
+
+          <div class="phone-wrap">
+            <div class="phone" style="position: relative">
+              <div class="phone-top">
+                <span
+                  class="brand-mark"
+                  style="
+                    width: 26px;
+                    height: 26px;
+                    border-radius: 8px;
+                    font-size: 13px;
+                  "
+                  aria-hidden="true"
+                ></span>
+                <div class="docs-title">
+                  <b style="font-size: 13px">医档通</b
+                  ><span style="font-size: 9px">MEDIHUB</span>
+                </div>
+              </div>
+              <div class="phone-body">
+                <div style="font-size: 19px; font-weight: 600">患者档案</div>
+                <div class="patient-card">
+                  <div class="top">
+                    <div class="cell-title">张文娟</div>
+                    <span class="badge t-success">术后</span>
+                  </div>
+                </div>
+                <div class="patient-card">
+                  <div class="top">
+                    <div class="cell-title">李国庆</div>
+                    <span class="badge t-warning">术前</span>
+                  </div>
+                </div>
+              </div>
+              <div
+                class="sheet"
+                style="position: absolute; left: 0; right: 0; bottom: 0"
+              >
+                <div
+                  style="
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                  "
+                >
+                  <b style="font-size: 14px">全部功能</b>
+                  <span class="cell-sub">关闭</span>
+                </div>
+                <div class="sheet-row">◷ 学习会议</div>
+                <div class="sheet-row">↓ 导出中心</div>
+                <div class="sheet-row">
+                  ⚙ 系统管理
+                  <span class="badge t-info" style="margin-left: auto"
+                    >管理员</span
+                  >
+                </div>
+                <div
+                  class="sheet-row"
+                  style="
+                    border-top: 1px solid var(--border);
+                    border-radius: 0;
+                    margin-top: 4px;
+                    padding-top: 8px;
+                  "
+                >
+                  <span
+                    style="
+                      width: 28px;
+                      height: 28px;
+                      border-radius: 999px;
+                      background: var(--accent);
+                      display: grid;
+                      place-items: center;
+                    "
+                    >刘</span
+                  >
+                  <span style="display: grid; line-height: 1.2"
+                    ><b style="font-size: 12px">刘明</b
+                    ><span class="cell-sub">科室管理员</span></span
+                  >
+                  <span
+                    style="
+                      margin-left: auto;
+                      font-size: 12px;
+                      color: var(--muted-foreground);
+                    "
+                    >退出</span
+                  >
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <h2>反模式</h2>
+          <p>与 <code>DESIGN.md</code> 的规则一一对应</p>
+        </div>
+        <div class="do-dont">
+          <div class="dd bad">
+            <b>✕ 不要</b>
+            <p>
+              紫色 SaaS
+              渐变、重投影、彩色发光按钮；医疗系统的可信度来自克制与一致。
+            </p>
+            <p>同一页面出现 3 套以上字号或自定义硬编码十六进制色值。</p>
+            <p>
+              桌面表格直接塞进 375px 屏幕导致横向滚动，或把表格压成 8px 字。
+            </p>
+          </div>
+          <div class="dd good">
+            <b>✓ 要</b>
+            <p>
+              主色只用于主操作、选中态与关键数据；其余用中性灰与 1px 描边分层。
+            </p>
+            <p>颜色不是唯一指示：阶段/可见范围始终带中文标签，不只靠色块。</p>
+            <p>
+              窄屏改用卡片列表呈现同一批字段，操作按钮保持 44px 以上触控高度。
+            </p>
+          </div>
+          <div class="dd bad">
+            <b>✕ 不要</b>
+            <p>
+              为装饰加入循环动画、视差、粒子；医生是高频使用者，动效只服务于状态变化。
+            </p>
+            <p>在浏览器里隐藏焦点环，或用 hover 作为唯一交互反馈。</p>
+          </div>
+          <div class="dd good">
+            <b>✓ 要</b>
+            <p>
+              150–200ms 的透明度/位移动效表达弹层进出；尊重
+              prefers-reduced-motion。
+            </p>
+            <p>
+              深色模式完整可用：正文对比度 ≥ 4.5:1，分隔线在两种主题下都可见。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <footer>
+        <span
+          >医档通 MediHub · 设计体系 v1 · 令牌来源
+          packages/ui/src/styles/globals.css</span
+        >
+        <span>桌面 ≥1024 · 平板 768–1023 · 移动 &lt;768</span>
+      </footer>
+    </main>
+
+    <script>
+      const button = document.getElementById("theme");
+      const root = document.documentElement;
+      button.addEventListener("click", () => {
+        const dark = root.classList.toggle("dark");
+        button.textContent = dark ? "切换浅色" : "切换深色";
+      });
+    </script>
+  </body>
+</html>

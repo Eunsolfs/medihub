@@ -1,0 +1,27 @@
+{
+  "name": "@medihub/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#src/*": "./src/*"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@medihub/auth": "workspace:*",
+    "@medihub/db": "workspace:*",
+    "@medihub/storage": "workspace:*",
+    "@orpc/server": "catalog:",
+    "archiver": "catalog:",
+    "drizzle-orm": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@medihub/config": "workspace:*",
+    "@types/archiver": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}

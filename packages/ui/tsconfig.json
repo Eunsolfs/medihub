@@ -1,0 +1,11 @@
+{
+  "extends": "@medihub/config/typescript/react.json",
+  "include": ["src"],
+  "compilerOptions": {
+    "paths": {
+      "@medihub/ui/components": ["./src/components"],
+      "@medihub/ui/lib/utils": ["./src/lib/utils.ts"],
+      "@medihub/ui/hooks": ["./src/hooks"]
+    }
+  }
+}

@@ -1,0 +1,47 @@
+import type { RouterClient } from "@orpc/server";
+
+import { admissionsRouter } from "#src/routers/admissions.ts";
+import { assetsRouter } from "#src/routers/assets.ts";
+import { auditRouter } from "#src/routers/audit.ts";
+import { collectionsRouter } from "#src/routers/collections.ts";
+import { exportsRouter } from "#src/routers/exports.ts";
+import { health } from "#src/routers/health.ts";
+import { learningRouter } from "#src/routers/learning.ts";
+import { meRouter } from "#src/routers/me.ts";
+import { orgsRouter } from "#src/routers/orgs.ts";
+import { patientsRouter } from "#src/routers/patients.ts";
+import { postsRouter } from "#src/routers/posts.ts";
+import { statsRouter } from "#src/routers/stats.ts";
+import { storageRouter } from "#src/routers/storage.ts";
+import { usersRouter } from "#src/routers/users.ts";
+
+export { isAdminRole, toViewer } from "#src/access.ts";
+
+export type { Role, Viewer } from "#src/access.ts";
+
+export type {
+  Context,
+  Context as ApiContext,
+  StorageAccess,
+} from "#src/context.ts";
+
+export const appRouter = {
+  admissions: admissionsRouter,
+  assets: assetsRouter,
+  audit: auditRouter,
+  collections: collectionsRouter,
+  exports: exportsRouter,
+  health,
+  learning: learningRouter,
+  me: meRouter,
+  orgs: orgsRouter,
+  patients: patientsRouter,
+  posts: postsRouter,
+  stats: statsRouter,
+  storage: storageRouter,
+  users: usersRouter,
+};
+
+export type AppRouter = typeof appRouter;
+
+export type AppRouterClient = RouterClient<AppRouter>;

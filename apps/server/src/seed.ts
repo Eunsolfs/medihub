@@ -1,0 +1,521 @@
+import { createHash } from "node:crypto";
+import { readdir, readFile } from "node:fs/promises";
+import path from "node:path";
+
+import { and, eq } from "drizzle-orm";
+
+import { hashPassword } from "@medihub/auth";
+import { migrateDatabase } from "@medihub/db/migrate";
+import { account, user } from "@medihub/db/schema/auth";
+import {
+  asset,
+  collection,
+  post as contentPost,
+  postMedia,
+} from "@medihub/db/schema/content";
+import { learningSession } from "@medihub/db/schema/learning";
+import { organization } from "@medihub/db/schema/organization";
+import { admission, patient } from "@medihub/db/schema/patients";
+import { storageTarget } from "@medihub/db/schema/system";
+import { buildStorageKey } from "@medihub/storage";
+
+import { db, storage, storageRoot } from "#src/context.ts";
+import { env } from "#src/env.ts";
+
+const here = import.meta.dirname;
+const seedAssetsDir = path.resolve(here, "../seed-assets");
+
+const ROOT_EMAIL = env.SEED_ROOT_EMAIL ?? "root@medihub.local";
+const ROOT_PASSWORD = env.SEED_ROOT_PASSWORD ?? "Medihub@2026";
+const STAFF_PASSWORD = "Medihub@2026";
+
+const now = new Date();
+const daysAgo = (days: number) => new Date(now.getTime() - days * 86_400_000);
+
+const createAccount = async (input: {
+  email: string;
+  name: string;
+  password: string;
+  role: "root" | "dept_admin" | "member" | "individual";
+  organizationId: string | null;
+  title?: string;
+}) => {
+  const [existing] = await db
+    .select({ id: user.id })
+    .from(user)
+    .where(eq(user.email, input.email));
+
+  if (existing) {
+    return existing.id;
+  }
+
+  const id = crypto.randomUUID();
+
+  await db.insert(user).values({
+    email: input.email,
+    emailVerified: true,
+    id,
+    name: input.name,
+    organizationId: input.organizationId,
+    role: input.role,
+    title: input.title ?? null,
+  });
+
+  await db.insert(account).values({
+    accountId: id,
+    id: crypto.randomUUID(),
+    password: await hashPassword(input.password),
+    providerId: "credential",
+    userId: id,
+  });
+
+  return id;
+};
+
+const main = async () => {
+  migrateDatabase(db);
+
+  const [existingOrg] = await db
+    .select()
+    .from(organization)
+    .where(eq(organization.code, "plastic-surgery"));
+
+  const [insertedOrg] = existingOrg
+    ? [existingOrg]
+    : await db
+        .insert(organization)
+        .values({
+          code: "plastic-surgery",
+          description: "演示科室：整形外科 / 创面修复中心",
+          kind: "department",
+          name: "整形外科",
+        })
+        .returning();
+
+  const organizationId = insertedOrg?.id;
+
+  if (!organizationId) {
+    throw new Error("创建科室失败");
+  }
+
+  await createAccount({
+    email: ROOT_EMAIL,
+    name: "系统管理员",
+    organizationId,
+    password: ROOT_PASSWORD,
+    role: "root",
+    title: "信息科",
+  });
+
+  const adminId = await createAccount({
+    email: "admin@medihub.local",
+    name: "李主任",
+    organizationId,
+    password: STAFF_PASSWORD,
+    role: "dept_admin",
+    title: "科室主任",
+  });
+
+  const memberId = await createAccount({
+    email: "doctor@medihub.local",
+    name: "王医生",
+    organizationId,
+    password: STAFF_PASSWORD,
+    role: "member",
+    title: "主治医师",
+  });
+
+  const [existingTarget] = await db
+    .select()
+    .from(storageTarget)
+    .where(eq(storageTarget.isDefault, true));
+
+  if (!existingTarget) {
+    await db.insert(storageTarget).values({
+      config: storage.encrypt({ rootPath: path.join(storageRoot, "default") }),
+      driver: "local",
+      isDefault: true,
+      name: "服务器本地磁盘（演示）",
+      organizationId: null,
+    });
+  }
+
+  const [target] = await db
+    .select()
+    .from(storageTarget)
+    .where(eq(storageTarget.isDefault, true));
+
+  if (!target) {
+    throw new Error("创建默认存储目标失败");
+  }
+
+  const driver = storage.driverFor(target);
+  const seedFiles = await readdir(seedAssetsDir).catch(() => [] as string[]);
+
+  const [existingPatient] = await db
+    .select({ id: patient.id })
+    .from(patient)
+    .where(eq(patient.organizationId, organizationId));
+
+  if (existingPatient) {
+    console.log("演示数据已存在，跳过患者与素材的写入。");
+    console.log(`root: ${ROOT_EMAIL} / ${ROOT_PASSWORD}`);
+    console.log(`科室管理员: admin@medihub.local / ${STAFF_PASSWORD}`);
+    console.log(`科室成员: doctor@medihub.local / ${STAFF_PASSWORD}`);
+
+    return;
+  }
+
+  const patients = [
+    {
+      admissions: [
+        {
+          admittedAt: daysAgo(120),
+          diagnosis: "右前臂瘢痕挛缩",
+          kind: "surgery" as const,
+          stages: ["preop", "intraop", "postop"],
+          treatment: "瘢痕切除 + 全厚皮片移植",
+        },
+        {
+          admittedAt: daysAgo(12),
+          diagnosis: "右前臂皮片成活良好，瘢痕复发倾向",
+          kind: "follow_up" as const,
+          stages: ["follow_up"],
+          treatment: "随访观察 + 压力治疗",
+        },
+      ],
+      gender: "male" as const,
+      name: "张建国",
+      phone: "138****2041",
+      summary: "右前臂烧伤后瘢痕挛缩",
+      tags: ["瘢痕", "皮片移植"],
+    },
+    {
+      admissions: [
+        {
+          admittedAt: daysAgo(64),
+          diagnosis: "鼻部基底细胞癌",
+          kind: "surgery" as const,
+          stages: ["imaging", "preop", "intraop", "postop"],
+          treatment: "扩大切除 + 局部皮瓣修复",
+        },
+      ],
+      gender: "female" as const,
+      name: "李秀兰",
+      phone: "139****7782",
+      summary: "鼻部基底细胞癌术后",
+      tags: ["肿瘤", "皮瓣"],
+    },
+    {
+      admissions: [
+        {
+          admittedAt: daysAgo(30),
+          diagnosis: "糖尿病足溃疡（Wagner 2 级）",
+          kind: "inpatient" as const,
+          stages: ["preop", "postop"],
+          treatment: "清创 + 负压引流 + 植皮",
+        },
+      ],
+      gender: "male" as const,
+      name: "陈国强",
+      phone: "137****3310",
+      summary: "糖尿病足溃疡",
+      tags: ["创面", "糖尿病足"],
+    },
+  ];
+
+  const stageDates: Record<string, number> = {
+    follow_up: 2,
+    imaging: 1,
+    intraop: 1,
+    postop: 3,
+    preop: 0,
+  };
+
+  for (const [patientIndex, seed] of patients.entries()) {
+    const [createdPatient] = await db
+      .insert(patient)
+      .values({
+        createdBy: adminId,
+        gender: seed.gender,
+        medicalRecordNo: `MRN-2026-${String(patientIndex + 1).padStart(4, "0")}`,
+        name: seed.name,
+        organizationId,
+        phone: seed.phone,
+        status: "active",
+        summary: seed.summary,
+        tags: seed.tags,
+      })
+      .returning();
+
+    if (!createdPatient) {
+      continue;
+    }
+
+    for (const [admissionIndex, entry] of seed.admissions.entries()) {
+      const [createdAdmission] = await db
+        .insert(admission)
+        .values({
+          admittedAt: entry.admittedAt,
+          admissionNo: `ZY2026${String(patientIndex * 10 + admissionIndex + 1).padStart(4, "0")}`,
+          attendingDoctor: "李主任",
+          createdBy: adminId,
+          department: "整形外科",
+          diagnosis: entry.diagnosis,
+          dischargedAt: new Date(entry.admittedAt.getTime() + 7 * 86_400_000),
+          kind: entry.kind,
+          organizationId,
+          patientId: createdPatient.id,
+          tags: [],
+          treatment: entry.treatment,
+        })
+        .returning();
+
+      if (!createdAdmission) {
+        continue;
+      }
+
+      let fileIndex = 0;
+
+      for (const stage of entry.stages) {
+        for (let copy = 0; copy < 2; copy += 1) {
+          const fileName = seedFiles[fileIndex % seedFiles.length];
+          fileIndex += 1;
+
+          if (!fileName) {
+            continue;
+          }
+
+          const buffer = await readFile(path.join(seedAssetsDir, fileName));
+
+          const storageKey = buildStorageKey(
+            organizationId,
+            "image/png",
+            fileName
+          );
+
+          await driver.put(storageKey, buffer);
+
+          await db.insert(asset).values({
+            admissionId: createdAdmission.id,
+            byteSize: buffer.byteLength,
+            capturedAt: new Date(
+              entry.admittedAt.getTime() + (stageDates[stage] ?? 0) * 86_400_000
+            ),
+            checksum: createHash("sha256").update(buffer).digest("hex"),
+            description: `${stage === "preop" ? "术前" : stage === "intraop" ? "术中" : stage === "postop" ? "术后" : "随访"}记录`,
+            kind: "image",
+            mimeType: "image/png",
+            organizationId,
+            originalName: `${stage}-${patientIndex + 1}-${copy + 1}.png`,
+            ownerId: memberId,
+            patientId: createdPatient.id,
+            stage: stage as "preop",
+            storageKey,
+            storageTargetId: target.id,
+            tags: [...seed.tags, stage],
+            timelineOrder: fileIndex,
+            visibility: "org",
+          });
+        }
+      }
+    }
+  }
+
+  const [sessionRow] = await db
+    .insert(learningSession)
+    .values({
+      createdBy: adminId,
+      description:
+        "围绕皮瓣选择、供区处理与术后随访的病例讨论，含术中视频与术后照片。",
+      heldAt: daysAgo(9),
+      kind: "case_review",
+      location: "科室示教室",
+      organizationId,
+      speaker: "李主任",
+      tags: ["病例讨论", "皮瓣"],
+      title: "2026 年 10 月科室病例讨论：鼻部缺损修复",
+    })
+    .returning();
+
+  const [training] = await db
+    .insert(collection)
+    .values({
+      createdBy: adminId,
+      description: "科室培训课件、指南与讲课材料",
+      name: "培训课件",
+      organizationId,
+    })
+    .returning();
+
+  const [cases] = await db
+    .insert(collection)
+    .values({
+      createdBy: adminId,
+      description: "病例汇报与科研用图的汇总",
+      name: "病例资料",
+      organizationId,
+    })
+    .returning();
+
+  /** 把 seed-assets 里的文档放进资料库，用于演示在线预览。 */
+  const attachDocument = async (
+    file: string,
+    mimeType: string,
+    collectionId: string,
+    sessionId?: string
+  ) => {
+    const buffer = await readFile(path.join(seedAssetsDir, file));
+    const storageKey = buildStorageKey(organizationId, mimeType, file);
+
+    await driver.put(storageKey, buffer);
+
+    const [row] = await db
+      .insert(asset)
+      .values({
+        byteSize: buffer.byteLength,
+        checksum: createHash("sha256").update(buffer).digest("hex"),
+        collectionId,
+        description: "演示文档，可在浏览器内直接预览",
+        kind: "document",
+        mimeType,
+        organizationId,
+        originalName: file,
+        ownerId: adminId,
+        sessionId: sessionId ?? null,
+        storageKey,
+        storageTargetId: target.id,
+        tags: ["培训"],
+        visibility: "org",
+      })
+      .returning();
+
+    return row;
+  };
+
+  if (training?.id) {
+    await attachDocument(
+      "科室培训-皮瓣修复要点.docx",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      training.id
+    );
+  }
+
+  if (cases?.id) {
+    await attachDocument(
+      "2026-10-科室学习-病例讨论.pptx",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      cases.id,
+      sessionRow?.id
+    );
+  }
+
+  const [coverAsset] = await db
+    .select({ id: asset.id })
+    .from(asset)
+    .where(
+      and(eq(asset.organizationId, organizationId), eq(asset.kind, "image"))
+    )
+    .limit(1);
+
+  const [post] = await db
+    .insert(contentPost)
+    .values({
+      authorId: adminId,
+      content: [
+        "# 皮瓣危象的早期识别与处理",
+        "",
+        "> 本科室内部教学材料，用于住院医师规范化培训。",
+        "",
+        "## 一、什么是皮瓣危象",
+        "",
+        "皮瓣危象指皮瓣血运障碍导致的缺血或淤血状态，**术后 24 小时内**是高峰。",
+        "",
+        "## 二、床旁四步观察法",
+        "",
+        "1. **颜色**：苍白提示动脉缺血，暗紫提示静脉回流障碍。",
+        "2. **温度**：与健侧对比，低于 2℃ 以上需警惕。",
+        "3. **充盈**：毛细血管反应时间 > 3 秒为异常。",
+        "4. **针刺**：出血鲜红、迅速为佳；暗红缓慢提示淤血。",
+        "",
+        "## 三、处理流程",
+        "",
+        "| 判断 | 首选处理 | 备注 |",
+        "| --- | --- | --- |",
+        "| 动脉危象 | 解除压迫、保暖、罂粟碱 | 30 分钟无改善立即探查 |",
+        "| 静脉危象 | 拆除部分缝线、水蛭疗法 | 警惕血肿压迫 |",
+        "",
+        "## 四、参考视频",
+        "",
+        "见文末附件中的 B 站教学视频。",
+        "",
+        "---",
+        "",
+        "*本文为演示数据，不构成诊疗建议。*",
+      ].join("\n"),
+      coverAssetId: coverAsset?.id ?? null,
+      excerpt:
+        "术后 24 小时是关键窗口：颜色、温度、充盈、针刺四步法，以及动脉/静脉危象的处理优先级。",
+      organizationId,
+      slug: "flap-crisis-early-recognition",
+      status: "published",
+      tags: ["皮瓣", "教学", "围手术期"],
+      title: "皮瓣危象的早期识别与处理",
+      publishedAt: daysAgo(6),
+      visibility: "public",
+    })
+    .returning();
+
+  if (post?.id) {
+    await db.insert(postMedia).values([
+      {
+        kind: "video" as const,
+        postId: post.id,
+        provider: "bilibili" as const,
+        sortOrder: 0,
+        title: "皮瓣血液循环观察示范（B 站）",
+        url: "https://www.bilibili.com/video/BV1xx411c7mD",
+      },
+      ...(coverAsset?.id
+        ? [
+            {
+              assetId: coverAsset.id,
+              kind: "image" as const,
+              postId: post.id,
+              provider: "asset" as const,
+              sortOrder: 1,
+              title: "典型病例：术后 7 天皮瓣成活",
+            },
+          ]
+        : []),
+    ]);
+  }
+
+  const [draft] = await db
+    .insert(contentPost)
+    .values({
+      authorId: memberId,
+      content:
+        "# 糖尿病足溃疡的清创时机\n\n待补充：Wagner 分级与清创窗口的对应关系。\n",
+      excerpt: "草稿：整理 Wagner 分级与清创时机的对应关系。",
+      organizationId,
+      slug: "diabetic-foot-debridement",
+      status: "draft",
+      tags: ["创面", "糖尿病足"],
+      title: "糖尿病足溃疡的清创时机（草稿）",
+      visibility: "org",
+    })
+    .returning();
+
+  console.log("演示数据写入完成。");
+  console.log(`root: ${ROOT_EMAIL} / ${ROOT_PASSWORD}`);
+  console.log(`科室管理员: admin@medihub.local / ${STAFF_PASSWORD}`);
+  console.log(`科室成员: doctor@medihub.local / ${STAFF_PASSWORD}`);
+  console.log(`公开教学帖: /p/${post?.slug ?? "-"}（已发布，任何人可读）`);
+  console.log(`草稿帖: ${draft?.title ?? "-"}`);
+  console.log(`资料库: ${training?.name ?? "-"} / ${cases?.name ?? "-"}`);
+};
+
+await main();
+
+db.$client.close();

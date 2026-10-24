@@ -1,0 +1,4 @@
+{
+  "extends": "@medihub/config/typescript/node.json",
+  "include": ["src", "tests"]
+}

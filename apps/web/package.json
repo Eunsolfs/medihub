@@ -1,0 +1,54 @@
+{
+  "name": "@medihub/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#src/*": "./src/*"
+  },
+  "scripts": {
+    "dev": "vp dev",
+    "build": "vp build",
+    "preview": "vp preview",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@medihub/ui": "workspace:*",
+    "@orpc/client": "catalog:",
+    "@orpc/tanstack-query": "catalog:",
+    "@tanstack/react-query": "catalog:",
+    "@tanstack/react-query-devtools": "catalog:",
+    "@tanstack/react-router": "catalog:",
+    "@tanstack/react-router-devtools": "catalog:",
+    "better-auth": "catalog:",
+    "docx-preview": "catalog:",
+    "dompurify": "catalog:",
+    "lucide-react": "catalog:",
+    "marked": "catalog:",
+    "next-themes": "catalog:",
+    "qrcode.react": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "sonner": "catalog:",
+    "xlsx": "catalog:"
+  },
+  "devDependencies": {
+    "@medihub/api": "workspace:*",
+    "@medihub/auth": "workspace:*",
+    "@medihub/config": "workspace:*",
+    "@medihub/db": "workspace:*",
+    "@playwright/test": "catalog:",
+    "@tailwindcss/vite": "catalog:",
+    "@tanstack/router-plugin": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "es-toolkit": "catalog:",
+    "oxc-transform-react": "catalog:",
+    "typescript": "catalog:",
+    "undici": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}
