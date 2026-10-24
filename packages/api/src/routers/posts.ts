@@ -13,7 +13,11 @@ import {
   postVisibility,
 } from "@medihub/db/schema/content";
 
-import { organizationIdOf } from "#src/access.ts";
+import {
+  canEditOwned,
+  canSeeAllContent,
+  organizationIdOf,
+} from "#src/access.ts";
 import { organizationProcedure, publicProcedure } from "#src/procedures.ts";
 
 const slugify = (title: string) => {
@@ -89,8 +93,15 @@ export const postsRouter = {
         filters.push(eq(post.visibility, input.visibility));
       }
 
-      if (input.mine && context.viewer) {
-        filters.push(eq(post.authorId, context.viewer.id));
+      const { viewer } = context;
+
+      if (!viewer) {
+        throw new ORPCError("UNAUTHORIZED");
+      }
+
+      // 「谁的帖子归谁」：普通成员只看自己写的，管理员看全科室。
+      if (input.mine || !canSeeAllContent(viewer)) {
+        filters.push(eq(post.authorId, viewer.id));
       }
 
       if (input.q) {
@@ -175,7 +186,13 @@ export const postsRouter = {
           and(eq(post.id, input.id), eq(post.organizationId, organizationId))
         );
 
-      if (!row) {
+      const { viewer } = context;
+
+      if (!viewer) {
+        throw new ORPCError("UNAUTHORIZED");
+      }
+
+      if (!row || !canEditOwned(viewer, row.authorId)) {
         throw new ORPCError("NOT_FOUND", { message: "帖子不存在" });
       }
 
@@ -265,8 +282,8 @@ export const postsRouter = {
         throw new ORPCError("NOT_FOUND", { message: "帖子不存在" });
       }
 
-      if (existing.authorId !== viewer.id && viewer.role === "member") {
-        throw new ORPCError("FORBIDDEN", { message: "只能编辑自己撰写的帖子" });
+      if (!canEditOwned(viewer, existing.authorId)) {
+        throw new ORPCError("NOT_FOUND", { message: "帖子不存在" });
       }
 
       const [updated] = await context.db
@@ -354,8 +371,8 @@ export const postsRouter = {
         throw new ORPCError("NOT_FOUND", { message: "帖子不存在" });
       }
 
-      if (existing.authorId !== viewer.id && viewer.role === "member") {
-        throw new ORPCError("FORBIDDEN", { message: "只能删除自己撰写的帖子" });
+      if (!canEditOwned(viewer, existing.authorId)) {
+        throw new ORPCError("NOT_FOUND", { message: "帖子不存在" });
       }
 
       await context.db.delete(post).where(eq(post.id, input.id));

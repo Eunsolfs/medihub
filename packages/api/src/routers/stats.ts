@@ -4,7 +4,11 @@ import { asset, post } from "@medihub/db/schema/content";
 import { learningSession } from "@medihub/db/schema/learning";
 import { admission, patient } from "@medihub/db/schema/patients";
 
-import { canSeeAllPatients, organizationIdOf } from "#src/access.ts";
+import {
+  canSeeAllContent,
+  canSeeAllPatients,
+  organizationIdOf,
+} from "#src/access.ts";
 import { organizationProcedure } from "#src/procedures.ts";
 
 export const statsRouter = {
@@ -55,11 +59,23 @@ export const statsRouter = {
         context.db
           .select({ total: count() })
           .from(post)
-          .where(eq(post.organizationId, organizationId)),
+          .where(
+            and(
+              eq(post.organizationId, organizationId),
+              canSeeAllContent(viewer) ? undefined : eq(post.authorId, viewerId)
+            )
+          ),
         context.db
           .select({ total: count() })
           .from(learningSession)
-          .where(eq(learningSession.organizationId, organizationId)),
+          .where(
+            and(
+              eq(learningSession.organizationId, organizationId),
+              canSeeAllContent(viewer)
+                ? undefined
+                : eq(learningSession.createdBy, viewerId)
+            )
+          ),
       ]);
 
     const [usage] = await context.db

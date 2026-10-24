@@ -11,6 +11,7 @@ import {
   post,
   postMedia,
 } from "@medihub/db/schema/content";
+import { learningSession } from "@medihub/db/schema/learning";
 import { organization } from "@medihub/db/schema/organization";
 import { patient } from "@medihub/db/schema/patients";
 import { storageTarget } from "@medihub/db/schema/system";
@@ -215,6 +216,18 @@ const canReadAsset = async (
     const isAdmin = viewer.role === "dept_admin";
 
     if (!isAdmin && owner?.createdBy !== viewer.id) {
+      return false;
+    }
+  }
+
+  // 学习会议资料同理：成员只能读自己创建的会议下的文件。
+  if (row.sessionId && viewer.role !== "dept_admin") {
+    const [sessionOwner] = await db
+      .select({ createdBy: learningSession.createdBy })
+      .from(learningSession)
+      .where(eq(learningSession.id, row.sessionId));
+
+    if (sessionOwner?.createdBy !== viewer.id) {
       return false;
     }
   }

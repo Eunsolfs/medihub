@@ -1,5 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  Link,
+  useNavigate,
+  useRouteContext,
+} from "@tanstack/react-router";
 import {
   CalendarDaysIcon,
   MapPinIcon,
@@ -29,6 +34,10 @@ import {
   SelectValue,
 } from "@medihub/ui/components/select";
 
+import {
+  getSessionRole,
+  isAdminRole,
+} from "#src/components/app-shell/roles.ts";
 import { ConfirmDialog } from "#src/components/app-shell/ui/confirm-dialog.tsx";
 import { EmptyState } from "#src/components/app-shell/ui/empty-state.tsx";
 import { PageHeader } from "#src/components/app-shell/ui/page-header.tsx";
@@ -55,6 +64,8 @@ type KindFilter = LearningKind | typeof ALL_KINDS;
 
 const SessionsPage = () => {
   const queryClient = useQueryClient();
+  const { session } = useRouteContext({ from: "/_authenticated" });
+  const canSeeAll = isAdminRole(getSessionRole(session));
   const navigate = useNavigate();
   const [q, setQ] = useState("");
   const [keyword, setKeyword] = useState("");
@@ -114,7 +125,11 @@ const SessionsPage = () => {
             新建会议
           </Button>
         }
-        description="科室讲课、学习会议、培训与病例讨论的资料归档，会后统一上传课件与影像。"
+        description={
+          canSeeAll
+            ? "科室讲课、学习会议、培训与病例讨论的资料归档，会后统一上传课件与影像。"
+            : "只显示你创建的学习会议；科室管理员可查看全科室的会议。"
+        }
         meta={<span>共 {total} 场</span>}
         title="学习会议"
       />

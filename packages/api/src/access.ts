@@ -109,6 +109,18 @@ export const canAccessPatient = (
 /** 患者档案列表的过滤条件：非管理员只能看到自己建档的患者。 */
 export const canSeeAllPatients = (viewer: Viewer) => isAdminRole(viewer.role);
 
+/**
+ * 科室内的「有主内容」（帖子、学习会议、患者档案）统一口径：
+ * 管理员看全部，普通成员只看自己创建的那些。
+ */
+export const canSeeAllContent = (viewer: Viewer) => isAdminRole(viewer.role);
+
+/** 有主内容的编辑权：创建者本人或管理员。 */
+export const canEditOwned = (
+  viewer: Viewer,
+  ownerId: string | null | undefined
+) => isAdminRole(viewer.role) || ownerId === viewer.id;
+
 /** `organizationProcedure` 之后的上下文一定有组织，这里把类型收窄成非空。 */
 export const organizationIdOf = (context: { organizationId?: string }) => {
   if (!context.organizationId) {

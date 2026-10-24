@@ -9,7 +9,11 @@ import {
   learningSessionKind,
 } from "@medihub/db/schema/learning";
 
-import { canDelete, organizationIdOf } from "#src/access.ts";
+import {
+  canEditOwned,
+  canSeeAllContent,
+  organizationIdOf,
+} from "#src/access.ts";
 import { organizationProcedure } from "#src/procedures.ts";
 
 const sessionInput = z.object({
@@ -34,10 +38,20 @@ export const learningRouter = {
     )
     .handler(async ({ context, input }) => {
       const organizationId = organizationIdOf(context);
+      const { viewer } = context;
+
+      if (!viewer) {
+        throw new ORPCError("UNAUTHORIZED");
+      }
 
       const filters: SQL[] = [
         eq(learningSession.organizationId, organizationId),
       ];
+
+      // 「谁创建的会议归谁」：普通成员只看自己的，管理员看全科室。
+      if (!canSeeAllContent(viewer)) {
+        filters.push(eq(learningSession.createdBy, viewer.id));
+      }
 
       if (input.kind) {
         filters.push(eq(learningSession.kind, input.kind));
@@ -108,7 +122,13 @@ export const learningRouter = {
           )
         );
 
-      if (!row) {
+      const { viewer } = context;
+
+      if (!viewer) {
+        throw new ORPCError("UNAUTHORIZED");
+      }
+
+      if (!row || !canEditOwned(viewer, row.createdBy)) {
         throw new ORPCError("NOT_FOUND", { message: "学习会议不存在" });
       }
 
@@ -146,7 +166,26 @@ export const learningRouter = {
     .input(sessionInput.partial().extend({ id: z.string().min(1) }))
     .handler(async ({ context, input }) => {
       const organizationId = organizationIdOf(context);
+      const { viewer } = context;
       const { id, ...values } = input;
+
+      if (!viewer) {
+        throw new ORPCError("UNAUTHORIZED");
+      }
+
+      const [existing] = await context.db
+        .select({ createdBy: learningSession.createdBy })
+        .from(learningSession)
+        .where(
+          and(
+            eq(learningSession.id, id),
+            eq(learningSession.organizationId, organizationId)
+          )
+        );
+
+      if (!existing || !canEditOwned(viewer, existing.createdBy)) {
+        throw new ORPCError("NOT_FOUND", { message: "学习会议不存在" });
+      }
 
       const [updated] = await context.db
         .update(learningSession)
@@ -204,10 +243,8 @@ export const learningRouter = {
         throw new ORPCError("NOT_FOUND", { message: "学习会议不存在" });
       }
 
-      if (!canDelete(viewer, existing.createdBy)) {
-        throw new ORPCError("FORBIDDEN", {
-          message: "只有管理员或创建者可以删除学习会议",
-        });
+      if (!canEditOwned(viewer, existing.createdBy)) {
+        throw new ORPCError("NOT_FOUND", { message: "学习会议不存在" });
       }
 
       await context.db

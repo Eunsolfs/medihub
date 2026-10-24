@@ -274,6 +274,97 @@ describe("匿名访问", () => {
   });
 });
 
+describe("帖子与学习会议的归属", () => {
+  it("同科室成员只能看到并编辑自己撰写的帖子", async () => {
+    const authorAccount = await signUpAccount();
+    const otherAccount = await signUpAccount();
+    const authorProfile = await authorAccount.client.me.profile();
+    const otherProfile = await otherAccount.client.me.profile();
+
+    if (!(authorProfile?.viewer.organizationId && otherProfile)) {
+      throw new Error("缺少组织");
+    }
+
+    await testDb
+      .update(user)
+      .set({
+        organizationId: authorProfile.viewer.organizationId,
+        role: "member",
+      })
+      .where(eq(user.id, otherProfile.viewer.id));
+
+    const created = await authorAccount.client.posts.create({
+      content: "# 归属测试",
+      title: "同事写的文章",
+      visibility: "org",
+    });
+
+    const other = await clientForEmail(otherAccount.email);
+    const otherList = await other.posts.list({ page: 1, pageSize: 20 });
+    expect(otherList.total).toBe(0);
+    await expect(other.posts.get({ id: created.id })).rejects.toThrow();
+    await expect(
+      other.posts.update({ id: created.id, title: "改标题" })
+    ).rejects.toThrow();
+
+    // 管理员（科室管理员）可以看到并编辑。
+    await testDb
+      .update(user)
+      .set({ role: "dept_admin" })
+      .where(eq(user.id, otherProfile.viewer.id));
+
+    const otherAdmin = await clientForEmail(otherAccount.email);
+    const adminList = await otherAdmin.posts.list({ page: 1, pageSize: 20 });
+    expect(adminList.total).toBe(1);
+    await expect(
+      otherAdmin.posts.update({ id: created.id, title: "管理员改的标题" })
+    ).resolves.toBeTruthy();
+  });
+
+  it("同科室成员只能看到自己创建的学习会议", async () => {
+    const authorAccount = await signUpAccount();
+    const otherAccount = await signUpAccount();
+    const authorProfile = await authorAccount.client.me.profile();
+    const otherProfile = await otherAccount.client.me.profile();
+
+    if (!(authorProfile?.viewer.organizationId && otherProfile)) {
+      throw new Error("缺少组织");
+    }
+
+    await testDb
+      .update(user)
+      .set({
+        organizationId: authorProfile.viewer.organizationId,
+        role: "member",
+      })
+      .where(eq(user.id, otherProfile.viewer.id));
+
+    const created = await authorAccount.client.learning.create({
+      heldAt: new Date("2026-10-01"),
+      title: "同事创建的会议",
+    });
+
+    const other = await clientForEmail(otherAccount.email);
+    const otherList = await other.learning.list({ page: 1, pageSize: 20 });
+    expect(otherList.total).toBe(0);
+    await expect(other.learning.get({ id: created.id })).rejects.toThrow();
+
+    await testDb
+      .update(user)
+      .set({ role: "dept_admin" })
+      .where(eq(user.id, otherProfile.viewer.id));
+
+    const otherAdmin = await clientForEmail(otherAccount.email);
+
+    const adminList = await otherAdmin.learning.list({
+      page: 1,
+      pageSize: 20,
+    });
+
+    expect(adminList.total).toBe(1);
+  });
+});
+
 describe("数据库约束", () => {
   it("就诊出院时间早于入院时间会被拒绝", async () => {
     const doctor = await signUp();

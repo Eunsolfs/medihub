@@ -509,6 +509,20 @@ const main = async () => {
     })
     .returning();
 
+  // 王医生自己创建的会议：普通成员登录后只看到这一条，用于演示归属规则。
+  await db.insert(learningSession).values({
+    createdBy: memberId,
+    description:
+      "王医生主讲的创面换药与拍照规范培训，含操作视频与常见错误示例。",
+    heldAt: daysAgo(3),
+    kind: "training",
+    location: "换药室",
+    organizationId,
+    speaker: "王医生",
+    tags: ["培训", "换药"],
+    title: "换药与创面拍照规范（科室培训）",
+  });
+
   const [training] = await db
     .insert(collection)
     .values({
