@@ -1,8 +1,20 @@
 # 医档通 MediHub
 
-> 当前版本：**v1.0.0**（变更记录见 [CHANGELOG.md](CHANGELOG.md)）
+> 当前版本：**v1.1.0**（变更记录见 [CHANGELOG.md](CHANGELOG.md)）
 
 科室内部的多媒体与病历资料管理平台。把患者的伤口/术中/术后照片、病历资料、科室培训与讲课材料集中存起来，按「患者 → 某次入院 → 时间线」组织，并为科研、宣传、病例汇报提供可筛选、可打包导出的数据底座。
+
+## 在 1Panel 服务器上一键安装（推荐）
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Eunsolfs/medihub/main/scripts/install-1panel.sh -o install-medihub.sh
+sudo bash install-medihub.sh --url https://你的域名 --seed
+```
+
+脚本会自动装 Node.js 24 / pnpm / systemd 服务、生成 `.env`（含随机密钥）、构建并启动，
+OnlyOffice 参数可以稍后在 `.env` 里补。完整参数、常见问题与卸载见
+[docs/INSTALL-1PANEL.md](docs/INSTALL-1PANEL.md)；想逐项控制部署过程见
+[docs/DEPLOY-1PANEL.md](docs/DEPLOY-1PANEL.md)。
 
 > 演示数据与账号：执行 `pnpm seed` 后会写入「整形外科」与「烧伤科」两个科室、4 位演示患者
 > （含分期照片与 Markdown 病历摘要）、两个资料库目录（含一份 docx 培训文档与一份 pptx 病例讨论）、
