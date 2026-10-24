@@ -38,6 +38,7 @@ import { Separator } from "@medihub/ui/components/separator";
 import { PageHeader } from "#src/components/app-shell/ui/page-header.tsx";
 import { RoleBadge } from "#src/components/app-shell/ui/status-badges.tsx";
 import { api } from "#src/lib/api.ts";
+import { APP_VERSION_LABEL } from "#src/lib/app-version.ts";
 import { authClient } from "#src/lib/auth.ts";
 import { initials, roleLabel } from "#src/lib/format.ts";
 
@@ -408,6 +409,8 @@ const MePage = () => {
             <span>{roleLabel(viewer.role)}</span>
             <span>·</span>
             <span>{organization?.name ?? "未归属科室"}</span>
+            <span>·</span>
+            <span className="font-mono">{APP_VERSION_LABEL}</span>
           </>
         }
         title="我的"

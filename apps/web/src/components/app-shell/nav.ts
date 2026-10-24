@@ -145,10 +145,14 @@ export interface ActiveNavMatch {
   item: NavItem;
 }
 
-export const findActiveNav = (pathname: string): ActiveNavMatch | undefined => {
+export const findActiveNav = (
+  pathname: string,
+  role?: string
+): ActiveNavMatch | undefined => {
   for (const group of NAV_GROUPS) {
-    const item = group.items.find((navItem) =>
-      isNavActive(pathname, navItem.href)
+    const item = group.items.find(
+      (navItem) =>
+        isVisibleItem(navItem, role) && isNavActive(pathname, navItem.href)
     );
 
     if (item) {

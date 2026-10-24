@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 
 import { AuthForm } from "#src/components/auth-form.tsx";
+import { APP_VERSION_LABEL } from "#src/lib/app-version.ts";
 
 const sameOriginPath = /^\/(?!\/)/u;
 
@@ -121,8 +122,10 @@ const LoginPage = () => {
 
         <main className="mx-auto grid w-full max-w-[420px] flex-1 content-start gap-8 px-5 pt-10 pb-8 lg:flex-none lg:content-center lg:px-0 lg:py-0">
           <AuthForm onSuccess={handleSuccess} />
-          <p className="text-muted-foreground text-center text-xs lg:hidden">
-            内部系统 · 请勿共享账号
+          <p className="text-muted-foreground flex items-center justify-center gap-2 text-center text-xs">
+            <span>内部系统 · 请勿共享账号</span>
+            <span aria-hidden="true">·</span>
+            <span className="font-mono">{APP_VERSION_LABEL}</span>
           </p>
         </main>
       </div>

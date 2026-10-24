@@ -3,6 +3,10 @@ import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv } from "vite-plus";
 
+import rootPackageJson from "../../package.json";
+
+const appVersion: string = rootPackageJson.version;
+
 export default defineConfig(({ mode }) => {
   const { SERVER_URL = "http://localhost:3000" } = loadEnv(
     mode,
@@ -11,6 +15,7 @@ export default defineConfig(({ mode }) => {
   );
 
   return {
+    define: { __APP_VERSION__: JSON.stringify(appVersion) },
     plugins: [
       tanstackRouter({ target: "react", autoCodeSplitting: true }),
       react({ compiler: true }),

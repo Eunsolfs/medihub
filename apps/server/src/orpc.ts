@@ -9,6 +9,7 @@ import { appRouter } from "@medihub/api";
 import type { Context } from "@medihub/api";
 
 import { auth, db, storage } from "#src/context.ts";
+import { appVersion } from "#src/version.ts";
 
 const logServerError = (cause: unknown) => {
   if (!(cause instanceof ORPCError) || cause.status >= 500) {
@@ -29,7 +30,13 @@ const mount =
       c.req.header("x-org-scope")?.trim() || undefined;
 
     const { matched, response } = await handler.handle(c.req.raw, {
-      context: { db, session, scopeOrganizationId, storage },
+      context: {
+        db,
+        session,
+        scopeOrganizationId,
+        storage,
+        version: appVersion,
+      },
       prefix,
     });
 

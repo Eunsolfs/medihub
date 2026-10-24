@@ -1,8 +1,9 @@
-import { useRouterState } from "@tanstack/react-router";
+import { useRouteContext, useRouterState } from "@tanstack/react-router";
 import { ChevronRightIcon, SearchIcon } from "lucide-react";
 
 import { findActiveNav } from "#src/components/app-shell/nav.ts";
 import { OrgScopeSelect } from "#src/components/app-shell/org-scope-select.tsx";
+import { getSessionRole } from "#src/components/app-shell/roles.ts";
 import { ThemeMenu } from "#src/components/app-shell/theme-menu.tsx";
 import { UserMenu } from "#src/components/app-shell/user-menu.tsx";
 
@@ -11,7 +12,8 @@ const Breadcrumbs = () => {
     select: (state) => state.location.pathname,
   });
 
-  const match = findActiveNav(pathname);
+  const { session } = useRouteContext({ from: "/_authenticated" });
+  const match = findActiveNav(pathname, getSessionRole(session));
 
   return (
     <nav

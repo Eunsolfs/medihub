@@ -7,5 +7,8 @@ export const health = publicProcedure
   .handler(({ context }) => {
     context.db.run(sql`select 1`);
 
-    return { status: "ok" as const };
+    return {
+      status: "ok" as const,
+      version: context.version ?? "unknown",
+    };
   });

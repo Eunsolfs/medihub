@@ -26,4 +26,6 @@ export interface Context {
   organizationId?: string;
   /** 请求头里 root 指定的科室 id，只有 root 会用它。 */
   scopeOrganizationId?: string;
+  /** 应用版本号（由服务端从 package.json 读取），用于 /health 与运维核对。 */
+  version?: string;
 }
