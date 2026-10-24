@@ -121,6 +121,64 @@ export const canEditOwned = (
   ownerId: string | null | undefined
 ) => isAdminRole(viewer.role) || ownerId === viewer.id;
 
+export type PostShareVisibility = "private" | "org" | "logged_in" | "public";
+
+/** 帖子的公开阅读为什么被拦下：未登录 / 非本科室 / 仅作者。 */
+export type PostGateReason = "login" | "organization" | "owner";
+
+export interface PostShareRecord {
+  authorId: string;
+  organizationId: string;
+  visibility: PostShareVisibility;
+}
+
+/**
+ * 教学帖的阅读范围（作者在编辑器里选择的可见范围）：
+ *
+ * - `public`    任何人拿到链接都能读（无需登录）；
+ * - `logged_in` 任何登录用户都能读（跨科室也可以）；
+ * - `org`       仅该科室成员读，且必须登录；其它科室的管理员同样不行；
+ * - `private`   仅作者本人（`root` 与该科室管理员也可读，与「内容归属」一致）。
+ *
+ * 阅读权与编辑权是两件事：能读不等于能改，编辑权始终只归作者与管理员。
+ */
+export const postViewGate = (
+  record: PostShareRecord,
+  viewer: Viewer | null
+): { allowed: boolean; reason?: PostGateReason } => {
+  if (record.visibility === "public") {
+    return { allowed: true };
+  }
+
+  if (!viewer) {
+    return { allowed: false, reason: "login" };
+  }
+
+  if (record.visibility === "logged_in") {
+    return { allowed: true };
+  }
+
+  const sameOrganization = viewer.organizationId === record.organizationId;
+
+  if (record.visibility === "private") {
+    if (record.authorId === viewer.id || viewer.role === "root") {
+      return { allowed: true };
+    }
+
+    if (viewer.role === "dept_admin" && sameOrganization) {
+      return { allowed: true };
+    }
+
+    return { allowed: false, reason: "owner" };
+  }
+
+  if (viewer.role === "root" || sameOrganization) {
+    return { allowed: true };
+  }
+
+  return { allowed: false, reason: "organization" };
+};
+
 /** `organizationProcedure` 之后的上下文一定有组织，这里把类型收窄成非空。 */
 export const organizationIdOf = (context: { organizationId?: string }) => {
   if (!context.organizationId) {

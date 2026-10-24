@@ -15,9 +15,15 @@ import { statsRouter } from "#src/routers/stats.ts";
 import { storageRouter } from "#src/routers/storage.ts";
 import { usersRouter } from "#src/routers/users.ts";
 
-export { isAdminRole, toViewer } from "#src/access.ts";
+export { isAdminRole, postViewGate, toViewer } from "#src/access.ts";
 
-export type { Role, Viewer } from "#src/access.ts";
+export type {
+  PostGateReason,
+  PostShareRecord,
+  PostShareVisibility,
+  Role,
+  Viewer,
+} from "#src/access.ts";
 
 export type {
   Context,

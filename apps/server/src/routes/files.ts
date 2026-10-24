@@ -4,6 +4,7 @@ import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import { Hono } from "hono";
 import type { Context } from "hono";
 
+import { postViewGate } from "@medihub/api";
 import type { Viewer } from "@medihub/api";
 import {
   asset,
@@ -127,27 +128,17 @@ const driverOf = (row: StorageTargetLike) => storage.driverFor(row);
 
 type PostRow = typeof post.$inferSelect;
 
-const postAllowsViewer = (parent: PostRow, viewer: Viewer | null) => {
-  if (parent.status !== "published") {
-    return false;
-  }
-
-  if (parent.visibility === "public") {
-    return true;
-  }
-
-  if (!viewer) {
-    return false;
-  }
-
-  if (parent.visibility === "private") {
-    return parent.authorId === viewer.id;
-  }
-
-  return (
-    viewer.role === "root" || viewer.organizationId === parent.organizationId
-  );
-};
+/** 帖子素材的可见性完全跟随帖子的可见范围（与 posts.bySlug 同一套判定）。 */
+const postAllowsViewer = (parent: PostRow, viewer: Viewer | null) =>
+  parent.status === "published" &&
+  postViewGate(
+    {
+      authorId: parent.authorId,
+      organizationId: parent.organizationId,
+      visibility: parent.visibility,
+    },
+    viewer
+  ).allowed;
 
 /**
  * 素材能否被当前访问者读取。

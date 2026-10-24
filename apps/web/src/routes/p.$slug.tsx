@@ -1,4 +1,4 @@
-import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
+import { useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
 import {
@@ -27,7 +27,6 @@ import {
   assetFileUrl,
   copyText,
   publicPostUrl,
-  sessionOrganizationIdOf,
 } from "#src/components/posts/post-utils.ts";
 import type {
   PostMediaRow,
@@ -148,7 +147,7 @@ const LoginGate = ({ slug }: { slug: string }) => (
   />
 );
 
-const DeniedGate = () => (
+const DeniedGate = ({ reason }: { reason: "organization" | "owner" }) => (
   <GateCard
     action={
       <Link
@@ -158,56 +157,14 @@ const DeniedGate = () => (
         返回工作台
       </Link>
     }
-    description="这篇文章的可见范围是「仅科室内部」，当前账号不在该科室里。"
-    title="没有访问权限"
+    description={
+      reason === "organization"
+        ? "这篇文章的可见范围是「仅科室内部」：需要登录该科室的账号才能阅读。"
+        : "这篇内容的可见范围是「仅自己」，只有作者本人与管理员可以阅读。"
+    }
+    title={reason === "organization" ? "没有访问权限" : "仅作者本人可见"}
   />
 );
-
-const PrivateGate = ({
-  children,
-  slug,
-}: {
-  children: ReactNode;
-  slug: string;
-}) => {
-  const mineQuery = useQuery(
-    api.posts.list.queryOptions({
-      input: { mine: true, page: 1, pageSize: 100 },
-      staleTime: 30_000,
-    })
-  );
-
-  if (mineQuery.isPending) {
-    return (
-      <GateCard
-        description="正在确认这篇仅自己可见的文章是否属于当前账号。"
-        title="正在确认访问权限…"
-      />
-    );
-  }
-
-  const owned =
-    mineQuery.data?.items.some((item) => item.slug === slug) ?? false;
-
-  if (!owned) {
-    return (
-      <GateCard
-        action={
-          <Link
-            className={cn(buttonVariants({ size: "sm", variant: "outline" }))}
-            to="/dashboard"
-          >
-            返回工作台
-          </Link>
-        }
-        description="这篇内容的可见范围是「仅自己」，只有作者本人登录后可以阅读。"
-        title="仅作者本人可见"
-      />
-    );
-  }
-
-  return <>{children}</>;
-};
 
 /**
  * 素材文件走 `/api/files/:id` 的权限校验：挂在文章上（postId）的素材匿名可读，
@@ -508,38 +465,16 @@ const PublicPostError = ({ error }: ErrorComponentProps) => (
 
 const PublicPostPage = () => {
   const { slug } = Route.useParams();
-  const { session } = Route.useRouteContext();
   const { data } = useSuspenseQuery(bySlugQueryOptions(slug));
-  const { post } = data;
-  const loggedIn = session !== null;
-  const organizationId = sessionOrganizationIdOf(session);
 
-  if (
-    post.visibility === "public" ||
-    (post.visibility === "logged_in" && loggedIn)
-  ) {
+  // 可见范围由服务端判定：被拦下时只会拿到标题等摘要，不会下发正文与附件。
+  if (data.gated) {
     return (
       <PublicShell>
-        <ArticleView media={data.media} post={post} slug={slug} />
-      </PublicShell>
-    );
-  }
-
-  if (!loggedIn) {
-    return (
-      <PublicShell>
-        <LoginGate slug={slug} />
-      </PublicShell>
-    );
-  }
-
-  if (post.visibility === "org") {
-    return (
-      <PublicShell>
-        {organizationId === post.organizationId ? (
-          <ArticleView media={data.media} post={post} slug={slug} />
+        {data.reason === "login" ? (
+          <LoginGate slug={slug} />
         ) : (
-          <DeniedGate />
+          <DeniedGate reason={data.reason} />
         )}
       </PublicShell>
     );
@@ -547,9 +482,7 @@ const PublicPostPage = () => {
 
   return (
     <PublicShell>
-      <PrivateGate slug={slug}>
-        <ArticleView media={data.media} post={post} slug={slug} />
-      </PrivateGate>
+      <ArticleView media={data.media} post={data.post} slug={slug} />
     </PublicShell>
   );
 };
@@ -558,32 +491,34 @@ export const Route = createFileRoute("/p/$slug")({
   // TanStack Query 6 已废弃 ensureQueryData；`query` 是等价的替代写法。
   loader: async ({ context, params }) =>
     await context.queryClient.query(bySlugQueryOptions(params.slug)),
-  head: ({ loaderData }) => ({
-    meta: [
-      {
-        title: loaderData
-          ? `${loaderData.post.title} · 医档通 MediHub`
-          : "文章不存在 · 医档通 MediHub",
-      },
-      {
-        content:
-          loaderData?.post.excerpt ??
-          "医档通 MediHub 的科室教学文章与手术视频分享。",
-        name: "description",
-      },
-      {
-        content: loaderData?.post.title ?? "医档通 MediHub",
-        property: "og:title",
-      },
-      {
-        content:
-          loaderData?.post.excerpt ??
-          "医档通 MediHub 的科室教学文章与手术视频分享。",
-        property: "og:description",
-      },
-      { content: "article", property: "og:type" },
-    ],
-  }),
+  head: ({ loaderData }) => {
+    const title = loaderData
+      ? loaderData.gated
+        ? loaderData.summary.title
+        : loaderData.post.title
+      : null;
+
+    // 被门禁拦下时不要泄露摘要与正文，只出标题与站点信息。
+    const description =
+      loaderData && !loaderData.gated
+        ? (loaderData.post.excerpt ??
+          "医档通 MediHub 的科室教学文章与手术视频分享。")
+        : "医档通 MediHub 的科室教学文章与手术视频分享。";
+
+    return {
+      meta: [
+        {
+          title: title
+            ? `${title} · 医档通 MediHub`
+            : "文章不存在 · 医档通 MediHub",
+        },
+        { content: description, name: "description" },
+        { content: title ?? "医档通 MediHub", property: "og:title" },
+        { content: description, property: "og:description" },
+        { content: "article", property: "og:type" },
+      ],
+    };
+  },
   component: PublicPostPage,
   errorComponent: PublicPostError,
   pendingComponent: LoadingView,

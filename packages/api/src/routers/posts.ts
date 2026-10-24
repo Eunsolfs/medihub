@@ -17,6 +17,8 @@ import {
   canEditOwned,
   canSeeAllContent,
   organizationIdOf,
+  postViewGate,
+  toViewer,
 } from "#src/access.ts";
 import { organizationProcedure, publicProcedure } from "#src/procedures.ts";
 
@@ -381,14 +383,16 @@ export const postsRouter = {
     }),
 
   /**
-   * 公开访问（二维码 / 网址）。只返回已发布且可见范围为 public 的帖子；
-   * logged_in 由页面在拿到会话后再判断。
+   * 公开访问（二维码 / 网址）。可见范围在这里判定：
+   * 放行时返回全文与附件，不放行时只回摘要信息与原因，
+   * 内容不会因为「页面没渲染」而通过网络泄露出去。
    */
   bySlug: publicProcedure
     .input(z.object({ slug: z.string().min(1).max(120) }))
     .handler(async ({ context, input }) => {
       const [row] = await context.db
         .select({
+          authorId: post.authorId,
           authorName: user.name,
           content: post.content,
           coverAssetId: post.coverAssetId,
@@ -411,6 +415,24 @@ export const postsRouter = {
         throw new ORPCError("NOT_FOUND", { message: "帖子不存在或未发布" });
       }
 
+      const viewer = context.session ? toViewer(context.session.user) : null;
+      const gate = postViewGate(row, viewer);
+
+      if (!gate.allowed) {
+        return {
+          gated: true as const,
+          reason: gate.reason ?? "login",
+          summary: {
+            authorName: row.authorName,
+            publishedAt: row.publishedAt,
+            slug: row.slug,
+            tags: row.tags,
+            title: row.title,
+            visibility: row.visibility,
+          },
+        };
+      }
+
       const media = await context.db
         .select()
         .from(postMedia)
@@ -423,6 +445,7 @@ export const postsRouter = {
         .where(eq(post.id, row.id));
 
       return {
+        gated: false as const,
         media,
         post: { ...row, viewCount: row.viewCount + 1 },
       };

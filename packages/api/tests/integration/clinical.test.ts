@@ -269,8 +269,80 @@ describe("匿名访问", () => {
 
     const anonymous = createClient(null);
     const found = await anonymous.posts.bySlug({ slug: created.slug });
+
+    expect(found.gated).toBe(false);
+
+    if (found.gated) {
+      throw new Error("公开帖不应被门禁拦下");
+    }
+
     expect(found.post.title).toBe("公开教学帖");
     expect(found.post.viewCount).toBe(1);
+  });
+
+  it("可见范围严格生效：仅科室内部需要同科室登录，仅登录用户跨科室也可读", async () => {
+    const authorAccount = await signUpAccount();
+    const outsiderAccount = await signUpAccount();
+    const outsider = outsiderAccount.client;
+
+    const orgPost = await authorAccount.client.posts.create({
+      content: "# 科室内部内容",
+      title: "仅科室内部",
+      visibility: "org",
+    });
+
+    const loginPost = await authorAccount.client.posts.create({
+      content: "# 任意登录用户可见",
+      title: "任意登录用户",
+      visibility: "logged_in",
+    });
+
+    const privatePost = await authorAccount.client.posts.create({
+      content: "# 仅作者",
+      title: "仅作者可见",
+      visibility: "private",
+    });
+
+    for (const item of [orgPost, loginPost, privatePost]) {
+      await authorAccount.client.posts.publish({
+        id: item.id,
+        published: true,
+      });
+    }
+
+    const anonymous = createClient(null);
+
+    // 未登录：三种范围都被拦下，且拿不到正文。
+    const anonymousOrg = await anonymous.posts.bySlug({ slug: orgPost.slug });
+    expect(anonymousOrg.gated).toBe(true);
+    expect(anonymousOrg.reason).toBe("login");
+
+    const anonymousLogin = await anonymous.posts.bySlug({
+      slug: loginPost.slug,
+    });
+
+    expect(anonymousLogin.gated).toBe(true);
+
+    // 另一个科室的登录用户：只会看到「任意登录用户」的那篇。
+    const outsiderLogin = await outsider.posts.bySlug({ slug: loginPost.slug });
+    expect(outsiderLogin.gated).toBe(false);
+
+    const outsiderOrg = await outsider.posts.bySlug({ slug: orgPost.slug });
+    expect(outsiderOrg.gated).toBe(true);
+    expect(outsiderOrg.reason).toBe("organization");
+
+    const outsiderPrivate = await outsider.posts.bySlug({
+      slug: privatePost.slug,
+    });
+
+    expect(outsiderPrivate.gated).toBe(true);
+    expect(outsiderPrivate.reason).toBe("owner");
+
+    // 作者本人三种都能读。
+    for (const item of [orgPost, loginPost, privatePost]) {
+      const own = await authorAccount.client.posts.bySlug({ slug: item.slug });
+      expect(own.gated).toBe(false);
+    }
   });
 });
 

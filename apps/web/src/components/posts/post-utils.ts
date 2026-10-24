@@ -22,10 +22,11 @@ export type PostRow = NonNullable<
   Awaited<ReturnType<ApiUtils["posts"]["create"]["call"]>>
 >;
 
-/** 公开页 bySlug 的返回：不含 authorId、createdAt、updatedAt。 */
-export type PublicPostRecord = Awaited<
-  ReturnType<ApiUtils["posts"]["bySlug"]["call"]>
->["post"];
+/** bySlug 的返回是「放行」与「门禁」的联合类型；这里取放行分支的记录。 */
+type BySlugResult = Awaited<ReturnType<ApiUtils["posts"]["bySlug"]["call"]>>;
+
+/** 公开页正文记录：不含 authorId、createdAt、updatedAt。 */
+export type PublicPostRecord = Extract<BySlugResult, { gated: false }>["post"];
 
 export type PostStatus = "draft" | "published";
 
@@ -207,14 +208,6 @@ export const sessionRoleOf = (session: SessionLike): string | undefined => {
   const user = session?.user as { role?: unknown } | undefined;
 
   return typeof user?.role === "string" ? user.role : undefined;
-};
-
-export const sessionOrganizationIdOf = (
-  session: SessionLike
-): string | null => {
-  const user = session?.user as { organizationId?: unknown } | undefined;
-
-  return typeof user?.organizationId === "string" ? user.organizationId : null;
 };
 
 export const postMediaToDraft = (row: PostMediaRow): MediaDraft => ({
