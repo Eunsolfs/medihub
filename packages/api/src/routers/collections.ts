@@ -4,7 +4,11 @@ import { z } from "zod";
 
 import { asset, assetVisibility, collection } from "@medihub/db/schema/content";
 
-import { canEditOwned, organizationIdOf } from "#src/access.ts";
+import {
+  canEditOwned,
+  organizationIdOf,
+  requirePublishRights,
+} from "#src/access.ts";
 import { organizationProcedure } from "#src/procedures.ts";
 
 const collectionInput = z.object({
@@ -41,6 +45,13 @@ export const collectionsRouter = {
     .input(collectionInput)
     .handler(async ({ context, input }) => {
       const organizationId = organizationIdOf(context);
+      const { viewer } = context;
+
+      if (!viewer) {
+        throw new ORPCError("UNAUTHORIZED");
+      }
+
+      requirePublishRights(viewer);
 
       const [created] = await context.db
         .insert(collection)

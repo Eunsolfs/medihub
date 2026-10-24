@@ -19,6 +19,7 @@ import { Skeleton } from "@medihub/ui/components/skeleton";
 import { isAdminRole } from "#src/components/app-shell/roles.ts";
 import { ConfirmDialog } from "#src/components/app-shell/ui/confirm-dialog.tsx";
 import { EmptyState } from "#src/components/app-shell/ui/empty-state.tsx";
+import { OrglessNotice } from "#src/components/app-shell/ui/orgless-notice.tsx";
 import { PageHeader } from "#src/components/app-shell/ui/page-header.tsx";
 import { PaginationBar } from "#src/components/app-shell/ui/pagination-bar.tsx";
 import { PostCard } from "#src/components/posts/post-card.tsx";
@@ -38,6 +39,7 @@ import type {
 } from "#src/components/posts/post-utils.ts";
 import { SharePostDialog } from "#src/components/posts/share-dialog.tsx";
 import { api } from "#src/lib/api.ts";
+import { useCanPublish } from "#src/lib/permissions.ts";
 
 const PAGE_SIZE = 9;
 
@@ -270,6 +272,7 @@ const PostsPage = () => {
   const [page, setPage] = useState(1);
   const deferredQuery = useDeferredValue(filters.q.trim());
   const canManageAll = isAdminRole(sessionRoleOf(session));
+  const canPublish = useCanPublish();
 
   const handleFilterChange = (patch: Partial<PostFiltersState>) => {
     setFilters((previous) => ({ ...previous, ...patch }));
@@ -280,18 +283,26 @@ const PostsPage = () => {
     <div className="grid gap-6">
       <PageHeader
         actions={
-          <Button
-            onClick={() => {
-              void navigate({ to: "/posts/new" });
-            }}
-          >
-            <PlusIcon />
-            新建文章
-          </Button>
+          canPublish ? (
+            <Button
+              onClick={() => {
+                void navigate({ to: "/posts/new" });
+              }}
+            >
+              <PlusIcon />
+              新建文章
+            </Button>
+          ) : null
         }
-        description="这里能看到本科室同事与管理员分享的内容；只有作者与管理员可以编辑。"
+        description={
+          canPublish
+            ? "这里能看到本科室同事与管理员分享的内容；只有作者与管理员可以编辑。"
+            : "当前账号没有归属科室，只能浏览「任何人」或「全系统登录用户」可见的文章。"
+        }
         title="教学与分享"
       />
+
+      {canPublish ? null : <OrglessNotice />}
 
       <PostFilters onChange={handleFilterChange} value={filters} />
 

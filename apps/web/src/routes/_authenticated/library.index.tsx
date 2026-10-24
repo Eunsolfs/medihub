@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
+import { OrglessNotice } from "#src/components/app-shell/ui/orgless-notice.tsx";
 import { PageHeader } from "#src/components/app-shell/ui/page-header.tsx";
 import {
   DEFAULT_LIBRARY_SOURCE,
@@ -7,6 +8,7 @@ import {
 } from "#src/components/library/library-source.ts";
 import type { LibrarySource } from "#src/components/library/library-source.ts";
 import { LibraryView } from "#src/components/library/library-view.tsx";
+import { useCanPublish } from "#src/lib/permissions.ts";
 
 interface LibrarySearch {
   source?: LibrarySource;
@@ -20,6 +22,7 @@ const validateSearch = (search: { source?: unknown }): LibrarySearch =>
 const LibraryPage = () => {
   const navigate = useNavigate();
   const { source } = Route.useSearch();
+  const canPublish = useCanPublish();
   const activeSource = source ?? DEFAULT_LIBRARY_SOURCE;
 
   return (
@@ -28,6 +31,8 @@ const LibraryPage = () => {
         description="患者影像、会议资料、科室培训文件与教学附件各自归位；顶部按来源切换。"
         title="科室资料库"
       />
+      {canPublish ? null : <OrglessNotice />}
+
       <LibraryView
         onSourceChange={(next) => {
           void navigate({

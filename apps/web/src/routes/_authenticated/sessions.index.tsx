@@ -1,5 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  Link,
+  useNavigate,
+  useRouteContext,
+} from "@tanstack/react-router";
 import {
   CalendarDaysIcon,
   DownloadIcon,
@@ -30,8 +35,13 @@ import {
   SelectValue,
 } from "@medihub/ui/components/select";
 
+import {
+  getSessionRole,
+  isAdminRole,
+} from "#src/components/app-shell/roles.ts";
 import { ConfirmDialog } from "#src/components/app-shell/ui/confirm-dialog.tsx";
 import { EmptyState } from "#src/components/app-shell/ui/empty-state.tsx";
+import { OrglessNotice } from "#src/components/app-shell/ui/orgless-notice.tsx";
 import { PageHeader } from "#src/components/app-shell/ui/page-header.tsx";
 import { PaginationBar } from "#src/components/app-shell/ui/pagination-bar.tsx";
 import { LoadingRows } from "#src/components/app-shell/ui/skeletons.tsx";
@@ -48,6 +58,7 @@ import type { LearningKind } from "#src/components/sessions/session-kind.ts";
 import { sessionVisibilityLabel } from "#src/components/sessions/visibility.ts";
 import { api } from "#src/lib/api.ts";
 import { formatDateTime } from "#src/lib/format.ts";
+import { useCanPublish } from "#src/lib/permissions.ts";
 
 const PAGE_SIZE = 12;
 const ALL_KINDS = "all";
@@ -57,6 +68,12 @@ type KindFilter = LearningKind | typeof ALL_KINDS;
 const SessionsPage = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+
+  const canSeeAll = isAdminRole(
+    getSessionRole(useRouteContext({ from: "/_authenticated" }).session)
+  );
+
+  const canPublish = useCanPublish();
   const [q, setQ] = useState("");
   const [keyword, setKeyword] = useState("");
   const [kind, setKind] = useState<KindFilter>(ALL_KINDS);
@@ -127,15 +144,25 @@ const SessionsPage = () => {
     <div className="grid gap-5">
       <PageHeader
         actions={
-          <Button onClick={openCreate}>
-            <PlusIcon />
-            新建会议
-          </Button>
+          canPublish ? (
+            <Button onClick={openCreate}>
+              <PlusIcon />
+              新建会议
+            </Button>
+          ) : null
         }
-        description="本科室的学习会议与资料；只有创建者与管理员可以编辑。"
+        description={
+          canSeeAll
+            ? "科室讲课、学习会议、培训与病例讨论的资料归档，会后统一上传课件与影像。"
+            : canPublish
+              ? "本科室的学习会议与资料；只有创建者与管理员可以编辑。"
+              : "当前账号没有归属科室，只能浏览「所有登录用户」或「任何人」可见的会议。"
+        }
         meta={<span>共 {total} 场</span>}
         title="学习会议"
       />
+
+      {canPublish ? null : <OrglessNotice />}
 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <form

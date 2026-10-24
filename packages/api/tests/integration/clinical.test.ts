@@ -7,6 +7,7 @@ import { patient } from "@medihub/db/schema/patients";
 
 import {
   clientForEmail,
+  signUpDepartment,
   createClient,
   signUp,
   signUpAccount,
@@ -257,7 +258,8 @@ describe("匿名访问", () => {
   });
 
   it("公开帖子接口不需要登录", async () => {
-    const author = await signUp();
+    const department = await signUpDepartment();
+    const author = department.client;
 
     const created = await author.posts.create({
       content: "# 标题",
@@ -361,7 +363,7 @@ describe("匿名访问", () => {
 
 describe("帖子与学习会议的归属", () => {
   it("同科室成员能看到同事的帖子但不能编辑", async () => {
-    const authorAccount = await signUpAccount();
+    const authorAccount = await signUpDepartment("member");
     const otherAccount = await signUpAccount();
     const authorProfile = await authorAccount.client.me.profile();
     const otherProfile = await otherAccount.client.me.profile();
@@ -410,7 +412,8 @@ describe("帖子与学习会议的归属", () => {
   });
 
   it("公开帖可以设置访问密码，密码错误拿不到正文", async () => {
-    const author = await signUp();
+    const department = await signUpDepartment();
+    const author = department.client;
 
     const created = await author.posts.create({
       accessPassword: "intern-2026",
@@ -451,7 +454,8 @@ describe("帖子与学习会议的归属", () => {
   });
 
   it("成员不能设置指定对象或全系统可见范围", async () => {
-    const author = await signUp();
+    const department = await signUpDepartment("member");
+    const author = department.client;
     const profile = await author.me.profile();
 
     if (!profile?.viewer.organizationId) {
@@ -477,7 +481,7 @@ describe("帖子与学习会议的归属", () => {
   });
 
   it("同科室成员能看到同事创建的学习会议但不能编辑", async () => {
-    const authorAccount = await signUpAccount();
+    const authorAccount = await signUpDepartment("member");
     const otherAccount = await signUpAccount();
     const authorProfile = await authorAccount.client.me.profile();
     const otherProfile = await otherAccount.client.me.profile();
@@ -528,6 +532,38 @@ describe("帖子与学习会议的归属", () => {
     await expect(
       otherAdmin.learning.update({ id: created.id, title: "管理员改的会议" })
     ).resolves.toBeTruthy();
+  });
+});
+
+describe("无科室账号", () => {
+  it("只能浏览公开内容，不能发帖或开会", async () => {
+    const visitor = await signUp();
+
+    await expect(
+      visitor.posts.create({ content: "# x", title: "无科室发帖" })
+    ).rejects.toThrow();
+    await expect(
+      visitor.learning.create({ heldAt: new Date(), title: "无科室会议" })
+    ).rejects.toThrow();
+
+    const author = await signUpDepartment("dept_admin");
+
+    const published = await author.client.posts.create({
+      content: "# 公开课",
+      title: "任何人都能看的公开课",
+      visibility: "public",
+    });
+
+    await author.client.posts.publish({
+      id: published.id,
+      published: true,
+    });
+
+    const feed = await visitor.posts.list({ page: 1, pageSize: 20 });
+    expect(feed.items.some((item) => item.id === published.id)).toBe(true);
+
+    const sessions = await visitor.learning.list({ page: 1, pageSize: 20 });
+    expect(sessions.total).toBe(0);
   });
 });
 

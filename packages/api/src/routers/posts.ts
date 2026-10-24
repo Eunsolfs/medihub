@@ -15,8 +15,10 @@ import {
 
 import {
   canEditOwned,
+  canPublishContent,
   canSeeAllContent,
   organizationIdOf,
+  requirePublishRights,
   postViewGate,
   toViewer,
 } from "#src/access.ts";
@@ -99,7 +101,21 @@ export const postsRouter = {
     )
     .handler(async ({ context, input }) => {
       const organizationId = organizationIdOf(context);
-      const filters: SQL[] = [eq(post.organizationId, organizationId)];
+      const filters: SQL[] = [];
+      const { viewer } = context;
+
+      if (!viewer) {
+        throw new ORPCError("UNAUTHORIZED");
+      }
+
+      // 无科室账号只能浏览「任何人」与「全系统登录用户」范围的帖子。
+      const orgless = !canPublishContent(viewer);
+
+      if (orgless) {
+        filters.push(inArray(post.visibility, ["public", "logged_in"]));
+      } else {
+        filters.push(eq(post.organizationId, organizationId));
+      }
 
       if (input.status) {
         filters.push(eq(post.status, input.status));
@@ -109,17 +125,11 @@ export const postsRouter = {
         filters.push(eq(post.visibility, input.visibility));
       }
 
-      const { viewer } = context;
-
-      if (!viewer) {
-        throw new ORPCError("UNAUTHORIZED");
-      }
-
       // 列表默认展示「本科室可读范围内的全部文章」（只读），管理员看全部；
       // `mine` 只看自己。
       if (input.mine) {
         filters.push(eq(post.authorId, viewer.id));
-      } else if (!canSeeAllContent(viewer)) {
+      } else if (!orgless && !canSeeAllContent(viewer)) {
         const audienceMatch = audienceMatches(
           context.db,
           "post",
@@ -199,6 +209,19 @@ export const postsRouter = {
     .input(z.object({ id: z.string().min(1) }))
     .handler(async ({ context, input }) => {
       const organizationId = organizationIdOf(context);
+      const { viewer } = context;
+
+      if (!viewer) {
+        throw new ORPCError("UNAUTHORIZED");
+      }
+
+      // 无科室账号跨科室阅读公开内容时不受本科室过滤限制。
+      const readableWhere = canPublishContent(viewer)
+        ? and(eq(post.id, input.id), eq(post.organizationId, organizationId))
+        : and(
+            eq(post.id, input.id),
+            inArray(post.visibility, ["public", "logged_in"])
+          );
 
       const [row] = await context.db
         .select({
@@ -222,15 +245,7 @@ export const postsRouter = {
         })
         .from(post)
         .leftJoin(user, eq(post.authorId, user.id))
-        .where(
-          and(eq(post.id, input.id), eq(post.organizationId, organizationId))
-        );
-
-      const { viewer } = context;
-
-      if (!viewer) {
-        throw new ORPCError("UNAUTHORIZED");
-      }
+        .where(readableWhere);
 
       if (!row) {
         throw new ORPCError("NOT_FOUND", { message: "帖子不存在" });
@@ -269,6 +284,8 @@ export const postsRouter = {
       if (!viewer) {
         throw new ORPCError("UNAUTHORIZED");
       }
+
+      requirePublishRights(viewer);
 
       const slug = await uniqueSlug(context, input.title);
 
@@ -344,6 +361,8 @@ export const postsRouter = {
       if (!viewer) {
         throw new ORPCError("UNAUTHORIZED");
       }
+
+      requirePublishRights(viewer);
 
       const [existing] = await context.db
         .select({ authorId: post.authorId })
@@ -431,6 +450,13 @@ export const postsRouter = {
     .input(z.object({ id: z.string().min(1), published: z.boolean() }))
     .handler(async ({ context, input }) => {
       const organizationId = organizationIdOf(context);
+      const { viewer } = context;
+
+      if (!viewer) {
+        throw new ORPCError("UNAUTHORIZED");
+      }
+
+      requirePublishRights(viewer);
 
       const [updated] = await context.db
         .update(post)

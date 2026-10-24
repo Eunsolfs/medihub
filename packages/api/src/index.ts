@@ -15,7 +15,13 @@ import { statsRouter } from "#src/routers/stats.ts";
 import { storageRouter } from "#src/routers/storage.ts";
 import { usersRouter } from "#src/routers/users.ts";
 
-export { isAdminRole, postViewGate, toViewer } from "#src/access.ts";
+export {
+  canPublishContent,
+  isAdminRole,
+  postViewGate,
+  requirePublishRights,
+  toViewer,
+} from "#src/access.ts";
 
 export { loadAudience } from "#src/audience.ts";
 

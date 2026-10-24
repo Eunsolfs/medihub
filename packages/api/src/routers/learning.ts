@@ -11,9 +11,11 @@ import {
 
 import {
   canEditOwned,
+  canPublishContent,
   canSeeAllContent,
   organizationIdOf,
   postViewGate,
+  requirePublishRights,
 } from "#src/access.ts";
 import {
   assertShareScope,
@@ -56,12 +58,20 @@ export const learningRouter = {
         throw new ORPCError("UNAUTHORIZED");
       }
 
-      const filters: SQL[] = [
-        eq(learningSession.organizationId, organizationId),
-      ];
+      const filters: SQL[] = [];
+      const orgless = !canPublishContent(viewer);
+
+      if (orgless) {
+        // 无科室账号只能看「全系统登录用户 / 任何人」范围的会议。
+        filters.push(
+          inArray(learningSession.visibility, ["public", "logged_in"])
+        );
+      } else {
+        filters.push(eq(learningSession.organizationId, organizationId));
+      }
 
       // 会议内容对本科室登录用户可见（只读）；编辑权另算。
-      if (!canSeeAllContent(viewer)) {
+      if (!orgless && !canSeeAllContent(viewer)) {
         const audienceMatch = audienceMatches(
           context.db,
           "session",
@@ -149,15 +159,20 @@ export const learningRouter = {
         throw new ORPCError("UNAUTHORIZED");
       }
 
-      const [row] = await context.db
-        .select()
-        .from(learningSession)
-        .where(
-          and(
+      const readableWhere = canPublishContent(viewer)
+        ? and(
             eq(learningSession.id, input.id),
             eq(learningSession.organizationId, organizationId)
           )
-        );
+        : and(
+            eq(learningSession.id, input.id),
+            inArray(learningSession.visibility, ["public", "logged_in"])
+          );
+
+      const [row] = await context.db
+        .select()
+        .from(learningSession)
+        .where(readableWhere);
 
       if (!row) {
         throw new ORPCError("NOT_FOUND", { message: "学习会议不存在" });
@@ -195,6 +210,8 @@ export const learningRouter = {
       if (!viewer) {
         throw new ORPCError("UNAUTHORIZED");
       }
+
+      requirePublishRights(viewer);
 
       const targets: AudienceTargets = {
         organizations: input.audienceOrganizations,
@@ -240,6 +257,8 @@ export const learningRouter = {
       if (!viewer) {
         throw new ORPCError("UNAUTHORIZED");
       }
+
+      requirePublishRights(viewer);
 
       const [existing] = await context.db
         .select({ createdBy: learningSession.createdBy })
@@ -319,6 +338,8 @@ export const learningRouter = {
       if (!viewer) {
         throw new ORPCError("UNAUTHORIZED");
       }
+
+      requirePublishRights(viewer);
 
       const [existing] = await context.db
         .select({ createdBy: learningSession.createdBy })

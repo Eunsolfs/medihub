@@ -111,6 +111,23 @@ export const canSeeAllPatients = (viewer: Viewer) => isAdminRole(viewer.role);
  */
 export const canSeeAllContent = (viewer: Viewer) => isAdminRole(viewer.role);
 
+/**
+ * 没有归属科室的账号（`individual`，注册后落在个人空间）只能只读：
+ * 可以浏览公开/登录可见的内容，但不能发帖子、开会议、建资料库目录。
+ */
+export const canPublishContent = (viewer: Viewer) =>
+  viewer.role !== "individual";
+
+/** 写操作前的校验：无科室账号一律拒绝。 */
+export const requirePublishRights = (viewer: Viewer) => {
+  if (!canPublishContent(viewer)) {
+    throw new ORPCError("FORBIDDEN", {
+      message:
+        "当前账号没有归属科室，只能浏览内容；请联系管理员分配科室后再发布",
+    });
+  }
+};
+
 /** 有主内容的编辑权：创建者本人或管理员（与阅读权解耦）。 */
 export const canEditOwned = (
   viewer: Viewer,
