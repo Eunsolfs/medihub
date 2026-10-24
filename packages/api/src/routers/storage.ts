@@ -1,5 +1,5 @@
 import { ORPCError } from "@orpc/server";
-import { and, asc, count, eq, isNull } from "drizzle-orm";
+import { and, asc, count, eq, isNull, or } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { z } from "zod";
 
@@ -155,10 +155,14 @@ const loadTarget = async (
   return target;
 };
 
-/** 创建时的作用域：scope=organization 落在调用者自己的科室。 */
+/**
+ * 创建时的作用域：scope=organization 落在「当前生效的科室」。
+ * root 没有归属科室，因此用顶部科室切换器传来的 `x-org-scope`。
+ */
 const resolveOrganizationId = (
   viewer: Viewer,
-  scope: "global" | "organization"
+  scope: "global" | "organization",
+  scopedOrganizationId?: string
 ): string | null => {
   if (scope === "global") {
     if (viewer.role !== "root") {
@@ -170,13 +174,18 @@ const resolveOrganizationId = (
     return null;
   }
 
-  if (!viewer.organizationId) {
+  const organizationId = scopedOrganizationId ?? viewer.organizationId;
+
+  if (!organizationId) {
     throw new ORPCError("PRECONDITION_FAILED", {
-      message: "当前账号没有归属科室，无法创建科室级存储",
+      message:
+        viewer.role === "root"
+          ? "请先在顶部选择科室，再创建科室级存储"
+          : "当前账号没有归属科室，无法创建科室级存储",
     });
   }
 
-  return viewer.organizationId;
+  return organizationId;
 };
 
 /** 合并式构造配置：更新时传部分字段，未传的沿用旧值。 */
@@ -279,6 +288,16 @@ export const storageRouter = {
       }
 
       filters.push(eq(storageTarget.organizationId, viewer.organizationId));
+    } else if (context.scopeOrganizationId) {
+      // 全局管理员切换科室后，只看「该科室的」与「全站共用」的目标。
+      const scoped = or(
+        eq(storageTarget.organizationId, context.scopeOrganizationId),
+        isNull(storageTarget.organizationId)
+      );
+
+      if (scoped) {
+        filters.push(scoped);
+      }
     }
 
     const rows = await context.db
@@ -309,7 +328,13 @@ export const storageRouter = {
       }
 
       const storage = requireStorage(context.storage);
-      const organizationId = resolveOrganizationId(viewer, input.scope);
+
+      const organizationId = resolveOrganizationId(
+        viewer,
+        input.scope,
+        context.scopeOrganizationId
+      );
+
       const config = buildConfig(input.driver, input);
 
       assertConfigComplete(input.driver, config);

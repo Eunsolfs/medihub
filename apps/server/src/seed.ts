@@ -98,10 +98,35 @@ const main = async () => {
     throw new Error("创建科室失败");
   }
 
+  // 第二个科室：用来演示「科室资料互相独立」与 root 的科室切换/筛选。
+  const [existingBurns] = await db
+    .select()
+    .from(organization)
+    .where(eq(organization.code, "burns"));
+
+  const [insertedBurns] = existingBurns
+    ? [existingBurns]
+    : await db
+        .insert(organization)
+        .values({
+          code: "burns",
+          description: "演示科室：烧伤科",
+          kind: "department",
+          name: "烧伤科",
+        })
+        .returning();
+
+  const burnsOrganizationId = insertedBurns?.id;
+
+  if (!burnsOrganizationId) {
+    throw new Error("创建烧伤科失败");
+  }
+
+  // root 不隶属于任何科室：作为全局管理员，通过顶部科室切换器查看各科室资料。
   await createAccount({
     email: ROOT_EMAIL,
     name: "系统管理员",
-    organizationId,
+    organizationId: null,
     password: ROOT_PASSWORD,
     role: "root",
     title: "信息科",
@@ -266,6 +291,23 @@ const main = async () => {
           kind: entry.kind,
           organizationId,
           patientId: createdPatient.id,
+          summary: [
+            "## 入院情况",
+            "",
+            `${seed.name}，因「${entry.diagnosis}」入院。入院查体见局部皮肤缺损，血运良好，无明显渗出。`,
+            "",
+            "## 手术经过",
+            "",
+            entry.treatment,
+            "术中止血彻底，皮瓣血运良好，放置引流一条。",
+            "",
+            "## 术后与随访",
+            "",
+            "- 术后 24 小时内重点观察皮瓣颜色、温度与毛细血管反应。",
+            "- 按时间线归档术前、术中、术后与随访照片。",
+            "",
+            "> 本段为演示用病历摘要，不是真实病历。",
+          ].join("\n"),
           tags: [],
           treatment: entry.treatment,
         })
@@ -318,6 +360,93 @@ const main = async () => {
             visibility: "org",
           });
         }
+      }
+    }
+  }
+
+  // 烧伤科：一位患者 + 一次入院 + 两张照片，用于验证科室之间的数据隔离。
+  const [burnPatient] = await db
+    .insert(patient)
+    .values({
+      createdBy: adminId,
+      gender: "male",
+      medicalRecordNo: "MRN-2026-9001",
+      name: "赵明",
+      organizationId: burnsOrganizationId,
+      phone: "136****8890",
+      status: "active",
+      summary: "双下肢火焰烧伤 25% TBSA",
+      tags: ["烧伤", "植皮"],
+    })
+    .returning();
+
+  if (burnPatient) {
+    const [burnAdmission] = await db
+      .insert(admission)
+      .values({
+        admittedAt: daysAgo(18),
+        admissionNo: "ZY20269001",
+        attendingDoctor: "周主任",
+        createdBy: adminId,
+        department: "烧伤科",
+        diagnosis: "双下肢深二度烧伤 25% TBSA",
+        dischargedAt: daysAgo(4),
+        kind: "inpatient",
+        organizationId: burnsOrganizationId,
+        patientId: burnPatient.id,
+        summary: [
+          "## 入院情况",
+          "",
+          "火焰烧伤总面积约 25% TBSA，其中深二度约 12%。",
+          "",
+          "## 治疗经过",
+          "",
+          "补液抗休克、创面清创、分次削痂植皮。",
+        ].join("\n"),
+        tags: ["烧伤"],
+        treatment: "削痂 + 自体薄中厚皮片移植",
+      })
+      .returning();
+
+    if (burnAdmission) {
+      for (const [index, stage] of (["preop", "postop"] as const).entries()) {
+        const fileName = seedFiles[index % Math.max(seedFiles.length, 1)];
+
+        if (!fileName) {
+          continue;
+        }
+
+        const buffer = await readFile(path.join(seedAssetsDir, fileName));
+
+        const storageKey = buildStorageKey(
+          burnsOrganizationId,
+          "image/png",
+          fileName
+        );
+
+        await driver.put(storageKey, buffer);
+
+        await db.insert(asset).values({
+          admissionId: burnAdmission.id,
+          byteSize: buffer.byteLength,
+          capturedAt: new Date(
+            burnAdmission.admittedAt.getTime() + (index + 1) * 86_400_000
+          ),
+          checksum: createHash("sha256").update(buffer).digest("hex"),
+          description: stage === "preop" ? "烧伤创面入院时" : "植皮术后",
+          kind: "image",
+          mimeType: "image/png",
+          organizationId: burnsOrganizationId,
+          originalName: `burns-${stage}.png`,
+          ownerId: adminId,
+          patientId: burnPatient.id,
+          stage,
+          storageKey,
+          storageTargetId: target.id,
+          tags: ["烧伤", stage],
+          timelineOrder: index,
+          visibility: "org",
+        });
       }
     }
   }

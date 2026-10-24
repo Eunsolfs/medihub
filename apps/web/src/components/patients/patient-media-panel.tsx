@@ -305,15 +305,21 @@ const MediaBody = ({
 
   if (admission && !gridMode) {
     return (
-      <AssetTimeline
-        admissionId={admission.id}
-        assets={assets}
-        onChanged={onChanged}
-      />
+      <div className="min-w-0">
+        <AssetTimeline
+          admissionId={admission.id}
+          assets={assets}
+          onChanged={onChanged}
+        />
+      </div>
     );
   }
 
-  return <AssetGrid assets={assets} selection={selection} />;
+  return (
+    <div className="min-w-0">
+      <AssetGrid assets={assets} selection={selection} />
+    </div>
+  );
 };
 
 interface PatientMediaPanelProps {
@@ -414,9 +420,9 @@ export const PatientMediaPanel = ({
     : "全部素材";
 
   return (
-    <section className="grid gap-3">
-      <header className="flex flex-col gap-1">
-        <h2 className="truncate text-base font-medium">{title}</h2>
+    <section className="grid min-w-0 gap-3">
+      <header className="flex min-w-0 flex-col gap-1">
+        <h2 className="line-clamp-2 text-base font-medium">{title}</h2>
         <p className="text-muted-foreground text-xs">
           {total} 个素材
           {admission ? " · 按拍摄日期排列" : " · 该患者所有就诊汇总"}

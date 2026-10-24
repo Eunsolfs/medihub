@@ -76,6 +76,9 @@ export const auditRouter = {
         }
 
         filters.push(eq(auditLog.organizationId, viewer.organizationId));
+      } else if (context.scopeOrganizationId) {
+        // 全局管理员切换科室后只看该科室的审计流。
+        filters.push(eq(auditLog.organizationId, context.scopeOrganizationId));
       }
 
       if (input.action) {

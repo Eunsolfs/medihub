@@ -4,6 +4,7 @@ import {
   DownloadIcon,
   ExternalLinkIcon,
   PencilLineIcon,
+  XIcon,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
@@ -78,7 +79,10 @@ interface NavigationState {
   asset: MediaAsset;
 }
 
-/** 全屏素材预览：按 MIME 分发到图片 / 音视频 / PDF / docx / xlsx / pptx / 文本 / 下载降级。 */
+/**
+ * 全屏素材预览：桌面接近全屏（最大 1600×1000），移动端占满 100dvh。
+ * 预览区固定深色，按 MIME 分发到图片 / 音视频 / PDF / docx / xlsx / pptx / 文本 / 下载降级。
+ */
 export const AssetPreview = ({
   asset,
   open,
@@ -107,6 +111,7 @@ export const AssetPreview = ({
   }, [current, items]);
 
   const index = current ? list.findIndex((item) => item.id === current.id) : -1;
+
   const previous = index > 0 ? list[index - 1] : undefined;
 
   const next =
@@ -152,20 +157,8 @@ export const AssetPreview = ({
         <ImagePreview
           key={current.id}
           asset={current}
-          onPrev={
-            previous
-              ? () => {
-                  navigate(previous);
-                }
-              : undefined
-          }
-          onNext={
-            next
-              ? () => {
-                  navigate(next);
-                }
-              : undefined
-          }
+          onPrev={previous ? () => navigate(previous) : undefined}
+          onNext={next ? () => navigate(next) : undefined}
         />
       );
     }
@@ -189,8 +182,8 @@ export const AssetPreview = ({
 
     if (isAudioAsset(current)) {
       return (
-        <div className="bg-muted/30 flex size-full flex-col items-center justify-center gap-4 p-8">
-          <p className="max-w-md text-center text-sm font-medium">
+        <div className="flex size-full flex-col items-center justify-center gap-4 p-8">
+          <p className="max-w-md text-center text-sm font-medium text-white">
             {current.originalName}
           </p>
           <audio
@@ -210,7 +203,7 @@ export const AssetPreview = ({
           key={current.id}
           src={assetFileUrl(current.id)}
           title={current.originalName}
-          className="bg-background size-full border-0"
+          className="size-full border-0 bg-white"
         />
       );
     }
@@ -256,109 +249,126 @@ export const AssetPreview = ({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="flex h-[92dvh] w-[min(96vw,1200px)] max-w-[min(96vw,1200px)] flex-col">
+      <DialogContent
+        className="h-[100dvh] w-screen max-w-none sm:h-[min(92vh,1000px)] sm:w-[min(96vw,1600px)] sm:max-w-[min(96vw,1600px)]"
+        showCloseButton={false}
+        variant="flush"
+      >
         <div
-          className="border-border flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border"
+          className="flex size-full min-h-0 flex-col overflow-hidden bg-black/95"
           data-testid="asset-preview"
         >
-          <div className="border-border flex flex-wrap items-center gap-2 border-b px-3 py-2 pr-8">
-            <DialogHeader className="min-w-0 flex-1">
-              <DialogTitle>
-                <span className="block truncate">
-                  {current?.originalName ?? "素材预览"}
-                </span>
-              </DialogTitle>
-              <DialogDescription>
-                <span className="text-muted-foreground block truncate text-xs">
-                  {current ? metaOf(current) : ""}
-                  {current?.capturedAt
-                    ? ` · ${formatDateTime(current.capturedAt)}`
-                    : ""}
-                </span>
-              </DialogDescription>
-            </DialogHeader>
+          <div className="border-border bg-popover flex min-h-12 shrink-0 items-center gap-2 border-b px-2 py-1.5 sm:px-3">
+            <div className="min-w-0 flex-1">
+              <DialogHeader>
+                <DialogTitle>
+                  <span className="block truncate">
+                    {current?.originalName ?? "素材预览"}
+                  </span>
+                </DialogTitle>
+                <DialogDescription>
+                  <span className="text-muted-foreground hidden truncate text-xs sm:block">
+                    {current ? metaOf(current) : ""}
+                    {current?.capturedAt
+                      ? ` · ${formatDateTime(current.capturedAt)}`
+                      : ""}
+                  </span>
+                </DialogDescription>
+              </DialogHeader>
+            </div>
 
-            {list.length > 1 ? (
-              <div className="hidden items-center gap-1 sm:flex">
+            <div className="hidden shrink-0 items-center gap-1 sm:flex">
+              {list.length > 1 ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    disabled={!previous}
+                    onClick={() => navigate(previous)}
+                    aria-label="上一张"
+                    title="上一张"
+                  >
+                    <ChevronLeftIcon />
+                  </Button>
+                  <span
+                    className="text-muted-foreground text-xs tabular-nums"
+                    data-testid="asset-preview-counter"
+                  >
+                    {index + 1}/{list.length}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    disabled={!next}
+                    onClick={() => navigate(next)}
+                    aria-label="下一张"
+                    title="下一张"
+                  >
+                    <ChevronRightIcon />
+                  </Button>
+                </>
+              ) : null}
+
+              {office.status === "ready" ? (
                 <Button
                   type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  disabled={!previous}
-                  onClick={() => {
-                    navigate(previous);
-                  }}
-                  aria-label="上一张"
-                  title="上一张"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEditing(true)}
+                  title="在 OnlyOffice 中编辑"
                 >
-                  <ChevronLeftIcon />
+                  <PencilLineIcon />
+                  <span className="hidden md:inline">在线编辑</span>
                 </Button>
-                <span className="text-muted-foreground text-xs tabular-nums">
-                  {index + 1}/{list.length}
-                </span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  disabled={!next}
-                  onClick={() => {
-                    navigate(next);
-                  }}
-                  aria-label="下一张"
-                  title="下一张"
+              ) : null}
+
+              {current ? (
+                <a
+                  href={assetDownloadUrl(current.id)}
+                  download={current.originalName}
+                  className={buttonVariants({ size: "sm", variant: "outline" })}
+                  title="下载原文件"
                 >
-                  <ChevronRightIcon />
-                </Button>
-              </div>
-            ) : null}
+                  <DownloadIcon />
+                  <span className="hidden md:inline">下载</span>
+                </a>
+              ) : null}
 
-            {office.status === "ready" ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setEditing(true);
-                }}
-                title="在 OnlyOffice 中编辑"
-              >
-                <PencilLineIcon />
-                <span className="hidden sm:inline">在线编辑</span>
-              </Button>
-            ) : null}
+              {current &&
+              (isWordAsset(current) ||
+                isPresentationAsset(current) ||
+                isSpreadsheetAsset(current)) ? (
+                <a
+                  href={`/api/office/${current.id}/pdf`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={cn(
+                    buttonVariants({ size: "sm", variant: "ghost" }),
+                    "hidden md:inline-flex"
+                  )}
+                  title="在新标签页打开 PDF 预览"
+                >
+                  <ExternalLinkIcon />
+                </a>
+              ) : null}
+            </div>
 
-            {current ? (
-              <a
-                href={assetDownloadUrl(current.id)}
-                download={current.originalName}
-                className={buttonVariants({ size: "sm", variant: "outline" })}
-                title="下载原文件"
-              >
-                <DownloadIcon />
-                <span className="hidden sm:inline">下载</span>
-              </a>
-            ) : null}
-
-            {current &&
-            (isWordAsset(current) ||
-              isPresentationAsset(current) ||
-              isSpreadsheetAsset(current)) ? (
-              <a
-                href={`/api/office/${current.id}/pdf`}
-                target="_blank"
-                rel="noreferrer"
-                className={cn(
-                  buttonVariants({ size: "sm", variant: "ghost" }),
-                  "hidden md:inline-flex"
-                )}
-                title="在新标签页打开 PDF 预览"
-              >
-                <ExternalLinkIcon />
-              </a>
-            ) : null}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-11 shrink-0 sm:size-8"
+              onClick={() => handleOpenChange(false)}
+              aria-label="关闭预览"
+              title="关闭"
+            >
+              <XIcon />
+            </Button>
           </div>
 
-          <div className="bg-muted/20 min-h-0 flex-1 overflow-hidden">
+          <div className="relative min-h-0 flex-1 overflow-hidden bg-black/95">
             {body()}
           </div>
         </div>

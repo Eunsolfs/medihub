@@ -24,8 +24,12 @@ const mount =
   async (c: HonoContext) => {
     const session = await auth.api.getSession({ headers: c.req.raw.headers });
 
+    // root 通过顶部「科室」切换器指定作用域；普通账号的这个头会被忽略。
+    const scopeOrganizationId =
+      c.req.header("x-org-scope")?.trim() || undefined;
+
     const { matched, response } = await handler.handle(c.req.raw, {
-      context: { db, session, storage },
+      context: { db, session, scopeOrganizationId, storage },
       prefix,
     });
 

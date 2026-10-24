@@ -2,6 +2,7 @@ import { useRouterState } from "@tanstack/react-router";
 import { ChevronRightIcon, SearchIcon } from "lucide-react";
 
 import { findActiveNav } from "#src/components/app-shell/nav.ts";
+import { OrgScopeSelect } from "#src/components/app-shell/org-scope-select.tsx";
 import { ThemeMenu } from "#src/components/app-shell/theme-menu.tsx";
 import { UserMenu } from "#src/components/app-shell/user-menu.tsx";
 
@@ -61,6 +62,7 @@ export const AppTopbar = ({ onOpenSearch }: AppTopbarProps) => (
           Ctrl K
         </kbd>
       </button>
+      <OrgScopeSelect />
       <ThemeMenu />
       <UserMenu />
     </div>

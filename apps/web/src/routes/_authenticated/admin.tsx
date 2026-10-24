@@ -126,6 +126,12 @@ const AdminPage = () => {
         title="系统管理"
       />
 
+      {isRoot ? (
+        <p className="text-muted-foreground -mt-2 text-xs text-pretty">
+          你当前是全局管理员，可在顶部切换科室查看该科室的成员与存储配置；全局管理员账号本身不归属任何科室。
+        </p>
+      ) : null}
+
       <Tabs defaultValue="users">
         <TabsList
           aria-label="系统管理分区"

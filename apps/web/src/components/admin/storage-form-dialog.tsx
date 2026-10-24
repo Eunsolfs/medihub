@@ -35,6 +35,7 @@ import type {
   StorageTargetRow,
 } from "#src/components/admin/types.ts";
 import { api } from "#src/lib/api.ts";
+import { useOrgScope } from "#src/lib/org-scope.ts";
 
 interface StorageFormDialogProps {
   open: boolean;
@@ -56,14 +57,21 @@ export const StorageFormDialog = ({
   const isRoot = viewer.role === "root";
   const initialSummary = target?.summary ?? null;
 
+  const { currentOrganization, organizationId: scopeOrganizationId } =
+    useOrgScope();
+
   const [name, setName] = useState(target?.name ?? "");
 
   const [driver, setDriver] = useState<StorageDriver>(
     target?.driver ?? "local"
   );
 
+  // root 未选择顶部科室时默认创建全局存储；选择了科室则默认科室级存储。
+  const defaultScope: StorageScope =
+    !isRoot || scopeOrganizationId ? "organization" : "global";
+
   const [scope, setScope] = useState<StorageScope>(
-    target?.scope ?? (isRoot ? "global" : "organization")
+    target?.scope ?? defaultScope
   );
 
   const [rootPath, setRootPath] = useState(
@@ -229,9 +237,9 @@ export const StorageFormDialog = ({
                   items={[
                     { label: "全部科室共用", value: "global" },
                     {
-                      label: viewer.organizationId
-                        ? "仅本科室"
-                        : "仅本科室（当前账号未归属科室）",
+                      label: scopeOrganizationId
+                        ? `仅 ${currentOrganization?.name ?? "当前科室"}`
+                        : "仅当前科室（请先在顶部选择科室）",
                       value: "organization",
                     },
                   ]}
@@ -248,15 +256,15 @@ export const StorageFormDialog = ({
                   <SelectContent>
                     <SelectItem value="global">全部科室共用</SelectItem>
                     <SelectItem
-                      disabled={!viewer.organizationId}
+                      disabled={!scopeOrganizationId}
                       value="organization"
                     >
-                      仅本科室
+                      仅当前科室
                     </SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-muted-foreground text-xs">
-                  全局目标对所有科室可见；本科室目标只有本科室管理员能管理。
+                  未在顶部选择科室时默认创建全局存储；选择科室后默认创建该科室的存储。
                 </p>
               </div>
             )

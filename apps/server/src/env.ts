@@ -18,6 +18,8 @@ export const env = createEnv({
     /** OnlyOffice Document Server 地址；配置后可在浏览器里在线编辑 docx/xlsx/pptx。 */
     ONLYOFFICE_URL: z.url().optional(),
     ONLYOFFICE_JWT_SECRET: z.string().optional(),
+    /** 额外允许的登录来源，逗号分隔（局域网 IP、反代域名）。 */
+    BETTER_AUTH_TRUSTED_ORIGINS: z.string().optional(),
     /** 首次启动时创建超级管理员的邮箱与密码。 */
     SEED_ROOT_EMAIL: z.email().optional(),
     SEED_ROOT_PASSWORD: z.string().min(8).optional(),

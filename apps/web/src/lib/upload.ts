@@ -2,6 +2,8 @@
  * 媒体上传：`/api/files/upload` 走原始 body + x-file-name 头（不是 multipart），
  * 用 XHR 换取上传进度。所有调用方（上传按钮、拖拽区、表格另存新版本）都从这里走。
  */
+import { scopeHeaders } from "#src/lib/org-scope-storage.ts";
+
 export interface UploadTarget {
   patientId?: string;
   admissionId?: string;
@@ -172,6 +174,11 @@ export const uploadFile = async (
       "content-type",
       file.type || "application/octet-stream"
     );
+
+    // root 切换科室后，上传也要落到当前科室。
+    for (const [key, value] of Object.entries(scopeHeaders())) {
+      xhr.setRequestHeader(key, value);
+    }
 
     xhr.upload.addEventListener("progress", (event) => {
       if (onProgress && event.lengthComputable && event.total > 0) {

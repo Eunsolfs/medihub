@@ -70,6 +70,9 @@ export const usersRouter = {
       // 而不是静默回退成本组织成员。
       if (viewer.role !== "root") {
         filters.push(eq(user.organizationId, scopedOrganizationId(viewer)));
+      } else if (context.scopeOrganizationId) {
+        // 全局管理员切换科室后，成员列表跟随当前科室。
+        filters.push(eq(user.organizationId, context.scopeOrganizationId));
       }
 
       if (input.organizationId) {

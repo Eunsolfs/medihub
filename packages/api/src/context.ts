@@ -19,6 +19,11 @@ export interface Context {
   storage?: StorageAccess;
   /** 由 `protectedProcedure` 注入：已归一化的当前用户。 */
   viewer?: Viewer;
-  /** 由 `organizationProcedure` 注入：当前用户的工作空间。 */
+  /**
+   * 由 `organizationProcedure` 注入：本次请求生效的科室。
+   * root 可以借助顶部「科室」切换器指定任意科室（请求头 x-org-scope）。
+   */
   organizationId?: string;
+  /** 请求头里 root 指定的科室 id，只有 root 会用它。 */
+  scopeOrganizationId?: string;
 }

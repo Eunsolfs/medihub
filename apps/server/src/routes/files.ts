@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import { Hono } from "hono";
 import type { Context } from "hono";
 
@@ -11,6 +11,7 @@ import {
   post,
   postMedia,
 } from "@medihub/db/schema/content";
+import { organization } from "@medihub/db/schema/organization";
 import { storageTarget } from "@medihub/db/schema/system";
 import { buildStorageKey, detectAssetKind } from "@medihub/storage";
 import type { StorageDriver, StorageTargetLike } from "@medihub/storage";
@@ -18,6 +19,36 @@ import type { StorageDriver, StorageTargetLike } from "@medihub/storage";
 import { db, storage, storageRoot } from "#src/context.ts";
 import { env } from "#src/env.ts";
 import { viewerOf } from "#src/lib/session.ts";
+
+/**
+ * 上传要落到哪个科室：普通账号用自己的科室；root 用顶部切换器指定的科室，
+ * 没指定时回落到系统第一个科室，保证「无归属科室的全局管理员」也能直接上传。
+ */
+const uploadOrganizationId = async (viewer: Viewer, scope?: string) => {
+  if (viewer.role !== "root") {
+    return viewer.organizationId;
+  }
+
+  const requested = scope?.trim() || viewer.organizationId;
+
+  if (requested) {
+    const [target] = await db
+      .select({ id: organization.id })
+      .from(organization)
+      .where(eq(organization.id, requested));
+
+    return target?.id ?? null;
+  }
+
+  const [first] = await db
+    .select({ id: organization.id })
+    .from(organization)
+    .where(eq(organization.kind, "department"))
+    .orderBy(asc(organization.createdAt))
+    .limit(1);
+
+  return first?.id ?? null;
+};
 
 /**
  * 找到本次写入用的存储目标：优先指定的、其次本组织默认、再次全局默认。
@@ -305,7 +336,12 @@ export const filesRoute = new Hono()
       return c.json({ error: "请先登录" }, 401);
     }
 
-    if (!viewer.organizationId) {
+    const organizationId = await uploadOrganizationId(
+      viewer,
+      c.req.header("x-org-scope")
+    );
+
+    if (!organizationId) {
       return c.json({ error: "当前账号没有可用的工作空间" }, 400);
     }
 
@@ -348,17 +384,13 @@ export const filesRoute = new Hono()
     const capturedAtParam = c.req.query("capturedAt");
 
     const target = await resolveTarget(
-      viewer.organizationId,
+      organizationId,
       c.req.query("targetId") || undefined
     );
 
     const driver = driverOf(target);
 
-    const storageKey = buildStorageKey(
-      viewer.organizationId,
-      mimeType,
-      fileName
-    );
+    const storageKey = buildStorageKey(organizationId, mimeType, fileName);
 
     await driver.put(storageKey, body);
 
@@ -375,7 +407,7 @@ export const filesRoute = new Hono()
         description: c.req.query("description") || null,
         kind,
         mimeType,
-        organizationId: viewer.organizationId,
+        organizationId,
         originalName: fileName,
         ownerId: viewer.id,
         patientId: c.req.query("patientId") || null,

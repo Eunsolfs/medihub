@@ -22,6 +22,7 @@ const admissionInput = z.object({
   patientId: z.string().min(1),
   tags: z.array(z.string().trim().min(1).max(20)).max(20).default([]),
   treatment: z.string().max(2000).nullish(),
+  summary: z.string().max(20_000).nullish(),
 });
 
 const admissionId = z.object({ id: z.string().min(1) });
@@ -140,6 +141,7 @@ export const admissionsRouter = {
           patientId: input.patientId,
           tags: input.tags,
           treatment: emptyToNull(input.treatment),
+          summary: emptyToNull(input.summary),
         })
         .returning();
 
@@ -193,6 +195,9 @@ export const admissionsRouter = {
           ...(values.treatment === undefined
             ? {}
             : { treatment: emptyToNull(values.treatment) }),
+          ...(values.summary === undefined
+            ? {}
+            : { summary: emptyToNull(values.summary) }),
         })
         .where(
           and(

@@ -109,14 +109,22 @@ const renderRole = (user: UserRow) => (
   <Pill tone={roleTone(user.role)}>{userRoleLabel(user.role)}</Pill>
 );
 
-const renderOrganization = (user: UserRow) => (
-  <div className="grid gap-0.5">
-    <span>{user.organizationName ?? "未归属科室"}</span>
-    <span className="text-muted-foreground text-xs">
-      {user.title ?? "未填写职称"}
-    </span>
-  </div>
-);
+const renderOrganization = (user: UserRow) => {
+  const isGlobalAdmin = user.role === "root" && !user.organizationName;
+
+  return (
+    <div className="grid gap-0.5">
+      {isGlobalAdmin ? (
+        <Pill tone="primary">全局管理员</Pill>
+      ) : (
+        <span>{user.organizationName ?? "未归属科室"}</span>
+      )}
+      <span className="text-muted-foreground text-xs">
+        {user.title ?? "未填写职称"}
+      </span>
+    </div>
+  );
+};
 
 const renderStatus = (user: UserRow) => (
   <Pill tone={user.status === "active" ? "success" : "danger"}>

@@ -41,7 +41,7 @@ const RootLayout = () => (
 
 export const Route = createRootRouteWithContext<RouterContext>()({
   // 会话接口偶发失败（服务重启、网络抖动）时按未登录处理：
-  // 页面会跳到登录页，而不是整站白屏报错——登录态由每次导航重新确认。
+  // 页面会跳到登录页，而不是整站白屏报错。
   beforeLoad: async () => {
     try {
       return { session: await getSession() };
@@ -49,6 +49,9 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       return { session: null };
     }
   },
+  // 会话 5 分钟内不重复请求：否则每次点击侧栏都会重新校验登录态，
+  // 页面先闪成空白/骨架再恢复。
+  staleTime: 5 * 60 * 1000,
   head: () => ({
     meta: [
       { title: "医档通 MediHub" },

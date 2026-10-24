@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import type { SubmitEvent } from "react";
 import { toast } from "sonner";
@@ -34,6 +34,7 @@ import type {
   UserRow,
 } from "#src/components/admin/types.ts";
 import { api } from "#src/lib/api.ts";
+import { useOrgScope } from "#src/lib/org-scope.ts";
 
 interface UserFormDialogProps {
   open: boolean;
@@ -53,45 +54,48 @@ export const UserFormDialog = ({
   const queryClient = useQueryClient();
   const isRoot = viewer.role === "root";
   const editing = user !== null;
+  const { organizationId: scopeOrganizationId, organizations } = useOrgScope();
 
   const [email, setEmail] = useState(user?.email ?? "");
   const [password, setPassword] = useState("");
   const [name, setName] = useState(user?.name ?? "");
   const [role, setRole] = useState<UserRole>(user?.role ?? "member");
 
-  const [organizationId, setOrganizationId] = useState(
-    user?.organizationId ?? NO_ORGANIZATION
-  );
+  // 空字符串表示「还没选科室」；NO_ORGANIZATION 表示「无（全局管理员）」。
+  const [organizationId, setOrganizationId] = useState(() => {
+    if (!user) {
+      return scopeOrganizationId ?? "";
+    }
+
+    if (user.organizationId) {
+      return user.organizationId;
+    }
+
+    return user.role === "root" ? NO_ORGANIZATION : "";
+  });
 
   const [title, setTitle] = useState(user?.title ?? "");
   const [phone, setPhone] = useState("");
 
-  // 只有 root 需要选择归属科室；科室管理员创建时后端固定使用其本科室。
-  const orgsQuery = useQuery({
-    ...api.orgs.list.queryOptions({ input: { page: 1, pageSize: 100 } }),
-    enabled: open && isRoot,
-  });
+  const effectiveRole: UserRole = isRoot ? role : "member";
 
-  const orgItems = orgsQuery.data?.items ?? [];
-
-  const organizationOptions = orgItems.map((organization) => ({
+  const organizationOptions = organizations.map((organization) => ({
     label: organization.name,
     value: organization.id,
   }));
 
-  const currentOrganizationId = user?.organizationId ?? null;
-  const currentOrganizationName = user?.organizationName ?? null;
-
   // 组织列表只取前 100 条；当前账号所在科室不在列表里时补一个选项，
-  // 避免编辑时下拉框显示成「不归属科室」。
+  // 避免编辑时下拉框显示成未归属状态。
   if (
-    currentOrganizationId !== null &&
-    currentOrganizationName !== null &&
-    !orgItems.some((organization) => organization.id === currentOrganizationId)
+    user?.organizationId &&
+    user.organizationName &&
+    !organizations.some(
+      (organization) => organization.id === user.organizationId
+    )
   ) {
     organizationOptions.push({
-      label: currentOrganizationName,
-      value: currentOrganizationId,
+      label: user.organizationName,
+      value: user.organizationId,
     });
   }
 
@@ -122,22 +126,59 @@ export const UserFormDialog = ({
 
   const isPending = createMutation.isPending || updateMutation.isPending;
 
+  const handleRoleChange = (nextRole: UserRole) => {
+    setRole(nextRole);
+
+    if (nextRole === "root") {
+      setOrganizationId(NO_ORGANIZATION);
+
+      return;
+    }
+
+    if (nextRole === "individual") {
+      setOrganizationId("");
+
+      return;
+    }
+
+    // 从「全局管理员」切回科室角色时，优先预选顶部当前科室。
+    if (organizationId === NO_ORGANIZATION || organizationId === "") {
+      setOrganizationId(scopeOrganizationId ?? "");
+    }
+  };
+
   const handleSubmit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    const trimmedName = name.trim();
-    const effectiveRole: UserRole = isRoot ? role : "member";
+    const requiresOrganization =
+      effectiveRole === "member" || effectiveRole === "dept_admin";
 
-    const effectiveOrganizationId =
-      organizationId === NO_ORGANIZATION ? null : organizationId;
+    if (
+      isRoot &&
+      requiresOrganization &&
+      (organizationId === "" || organizationId === NO_ORGANIZATION)
+    ) {
+      toast.error("请选择归属科室");
+
+      return;
+    }
+
+    const organizationValue =
+      organizationId === "" || organizationId === NO_ORGANIZATION
+        ? null
+        : organizationId;
+
+    const trimmedName = name.trim();
 
     if (user) {
       updateMutation.mutate({
         id: user.id,
         name: trimmedName,
         role: effectiveRole,
-        // 科室管理员不能把成员移出本科室，因此不提交科室字段。
-        ...(isRoot ? { organizationId: effectiveOrganizationId } : {}),
+        // 科室管理员不能把成员移出本科室；individual 的科室由后端维护。
+        ...(isRoot && effectiveRole !== "individual"
+          ? { organizationId: organizationValue }
+          : {}),
         ...(title.trim() ? { title: title.trim() } : { title: null }),
         ...(phone.trim() ? { phone: phone.trim() } : {}),
       });
@@ -150,8 +191,8 @@ export const UserFormDialog = ({
       name: trimmedName,
       password,
       role: effectiveRole,
-      ...(isRoot && effectiveOrganizationId
-        ? { organizationId: effectiveOrganizationId }
+      ...(isRoot && effectiveRole !== "individual"
+        ? { organizationId: organizationValue }
         : {}),
       title: title.trim() || undefined,
       phone: phone.trim() || undefined,
@@ -261,7 +302,7 @@ export const UserFormDialog = ({
                   }))}
                   onValueChange={(value) => {
                     if (typeof value === "string" && isUserRole(value)) {
-                      setRole(value);
+                      handleRoleChange(value);
                     }
                   }}
                   value={role}
@@ -290,38 +331,86 @@ export const UserFormDialog = ({
             <div className="grid gap-2">
               <Label htmlFor="admin-user-organization">归属科室</Label>
               {isRoot ? (
-                <Select
-                  items={[
-                    { label: "不归属科室（全局账号）", value: NO_ORGANIZATION },
-                    ...organizationOptions,
-                  ]}
-                  onValueChange={(value) => {
-                    if (typeof value === "string") {
-                      setOrganizationId(value);
-                    }
-                  }}
-                  value={organizationId}
-                >
-                  <SelectTrigger
-                    className="w-full"
-                    id="admin-user-organization"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NO_ORGANIZATION}>
-                      不归属科室（全局账号）
-                    </SelectItem>
-                    {organizationOptions.map((organization) => (
-                      <SelectItem
-                        key={organization.value}
-                        value={organization.value}
+                effectiveRole === "individual" ? (
+                  <p className="text-muted-foreground flex h-8 items-center rounded-lg border border-dashed px-2.5 text-xs">
+                    个人用户由系统创建个人空间，不归属科室
+                  </p>
+                ) : effectiveRole === "root" ? (
+                  <>
+                    <Select
+                      items={[
+                        {
+                          label: "无（全局管理员）",
+                          value: NO_ORGANIZATION,
+                        },
+                        ...organizationOptions,
+                      ]}
+                      onValueChange={(value) => {
+                        if (typeof value === "string") {
+                          setOrganizationId(value);
+                        }
+                      }}
+                      value={
+                        organizationId === "" ? NO_ORGANIZATION : organizationId
+                      }
+                    >
+                      <SelectTrigger
+                        className="w-full"
+                        id="admin-user-organization"
                       >
-                        {organization.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NO_ORGANIZATION}>
+                          无（全局管理员）
+                        </SelectItem>
+                        {organizationOptions.map((organization) => (
+                          <SelectItem
+                            key={organization.value}
+                            value={organization.value}
+                          >
+                            {organization.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-muted-foreground text-xs">
+                      全局管理员不归属任何科室，可以管理全部科室。
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <Select
+                      items={organizationOptions}
+                      onValueChange={(value) => {
+                        if (typeof value === "string") {
+                          setOrganizationId(value);
+                        }
+                      }}
+                      value={organizationId === "" ? null : organizationId}
+                    >
+                      <SelectTrigger
+                        className="w-full"
+                        id="admin-user-organization"
+                      >
+                        <SelectValue placeholder="请选择科室" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {organizationOptions.map((organization) => (
+                          <SelectItem
+                            key={organization.value}
+                            value={organization.value}
+                          >
+                            {organization.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-muted-foreground text-xs">
+                      科室成员与科室管理员必须归属一个科室。
+                    </p>
+                  </>
+                )
               ) : (
                 <p className="text-muted-foreground flex h-8 items-center rounded-lg border border-dashed px-2.5 text-xs">
                   账号会自动归入您所在的科室

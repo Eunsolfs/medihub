@@ -44,8 +44,9 @@ export default defineConfig({
       ...(core.ignorePatterns ?? []),
       ...generatedFiles,
       ...vendoredFiles,
-      // 一次性截图 / 验收脚本，不是产品代码。
+      // 一次性截图 / 验收脚本与构建辅助脚本，不是产品代码。
       "apps/web/scripts/**",
+      "apps/server/scripts/**",
     ],
     jsPlugins: [
       // Knip reads this string. A spread of `shadcn.jsPlugins` is invisible to it.

@@ -43,7 +43,8 @@ type AdmissionField =
   | "admittedAt"
   | "admissionNo"
   | "department"
-  | "dischargedAt";
+  | "dischargedAt"
+  | "summary";
 
 interface AdmissionFormValues {
   admittedAt: string;
@@ -55,6 +56,7 @@ interface AdmissionFormValues {
   dischargedAt: string;
   kind: AdmissionKind;
   notes: string;
+  summary: string;
   tags: string[];
   treatment: string;
 }
@@ -76,6 +78,7 @@ const valuesOf = (record: AdmissionRecord | null): AdmissionFormValues => ({
   dischargedAt: record ? toDateTimeInput(record.dischargedAt) : "",
   kind: record?.kind ?? "inpatient",
   notes: record?.notes ?? "",
+  summary: record?.summary ?? "",
   tags: record ? [...record.tags] : [],
   treatment: record?.treatment ?? "",
 });
@@ -109,12 +112,18 @@ const validate = (values: AdmissionFormValues): AdmissionFormError[] => {
     errors.push({ field: "department", message: "科室不能超过 60 个字符" });
   }
 
+  if (values.summary.length > 20_000) {
+    errors.push({ field: "summary", message: "病历摘要不能超过 20000 个字符" });
+  }
+
   return errors;
 };
 
 interface AdmissionFormProps {
   patientId: string;
   record: AdmissionRecord | null;
+  /** 打开时聚焦哪个字段（从「编辑摘要」进来时聚焦摘要）。 */
+  focusField?: "summary";
   onClose: () => void;
   onSaved?: (admissionId: string) => void;
 }
@@ -122,6 +131,7 @@ interface AdmissionFormProps {
 const AdmissionForm = ({
   patientId,
   record,
+  focusField,
   onClose,
   onSaved,
 }: AdmissionFormProps) => {
@@ -140,6 +150,7 @@ const AdmissionForm = ({
   const dischargedAtError = errorOf("dischargedAt");
   const admissionNoError = errorOf("admissionNo");
   const departmentError = errorOf("department");
+  const summaryError = errorOf("summary");
 
   const invalidate = async () => {
     await Promise.all([
@@ -203,6 +214,7 @@ const AdmissionForm = ({
       dischargedAt: fromDateTimeInput(values.dischargedAt),
       kind: values.kind,
       notes: trimmedOrNull(values.notes),
+      summary: trimmedOrNull(values.summary),
       tags: values.tags,
       treatment: trimmedOrNull(values.treatment),
     };
@@ -393,6 +405,37 @@ const AdmissionForm = ({
             value={values.notes}
           />
         </div>
+
+        <div className="grid gap-1.5 sm:col-span-2">
+          <div className="flex flex-wrap items-baseline justify-between gap-1">
+            <Label htmlFor="admission-summary">病历摘要（支持 Markdown）</Label>
+            <span className="text-muted-foreground text-xs">
+              {values.summary.length}/20000
+            </span>
+          </div>
+          <Textarea
+            aria-invalid={Boolean(summaryError)}
+            autoFocus={focusField === "summary"}
+            className="font-mono text-xs"
+            id="admission-summary"
+            maxLength={20_000}
+            onChange={(event) => {
+              setField("summary", event.target.value);
+            }}
+            placeholder={
+              "## 入院情况\n\n…\n\n## 手术经过\n\n…\n\n## 术后与随访\n\n- 观察皮瓣血运\n- 按时间线归档照片"
+            }
+            rows={10}
+            value={values.summary}
+          />
+          {summaryError ? (
+            <p className="text-destructive text-xs">{summaryError}</p>
+          ) : (
+            <p className="text-muted-foreground text-xs">
+              支持标题、列表、表格与引用；保存后在患者详情页按 Markdown 渲染。
+            </p>
+          )}
+        </div>
       </div>
 
       <DialogFooter>
@@ -420,6 +463,8 @@ interface AdmissionFormDialogProps {
   admissionId?: string | null;
   /** 已知的完整就诊记录（详情页预取后传入）。 */
   admission?: AdmissionRecord | null;
+  /** 打开时聚焦摘要输入框（「编辑摘要 / 填写摘要」入口）。 */
+  focusField?: "summary";
   onSaved?: (admissionId: string) => void;
 }
 
@@ -430,6 +475,7 @@ export const AdmissionFormDialog = ({
   patientId,
   admissionId,
   admission,
+  focusField,
   onSaved,
 }: AdmissionFormDialogProps) => {
   const isEditing = Boolean(admissionId);
@@ -459,6 +505,7 @@ export const AdmissionFormDialog = ({
           <LoadingRows rows={6} />
         ) : (
           <AdmissionForm
+            focusField={focusField}
             onClose={() => {
               onOpenChange(false);
             }}

@@ -11,7 +11,12 @@ import {
   useRouter,
 } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
-import { ChevronRightIcon, PencilIcon, Trash2Icon } from "lucide-react";
+import {
+  ChevronRightIcon,
+  PencilIcon,
+  PlusIcon,
+  Trash2Icon,
+} from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -22,6 +27,7 @@ import { PageHeader } from "#src/components/app-shell/ui/page-header.tsx";
 import { AdmissionFormDialog } from "#src/components/patients/admission-form-dialog.tsx";
 import { AdmissionHeader } from "#src/components/patients/admission-header.tsx";
 import { AdmissionList } from "#src/components/patients/admission-list.tsx";
+import { AdmissionSummaryCard } from "#src/components/patients/admission-summary-card.tsx";
 import { describePatient } from "#src/components/patients/display.ts";
 import { PatientFormDialog } from "#src/components/patients/patient-form-dialog.tsx";
 import { PatientInfoCard } from "#src/components/patients/patient-info-card.tsx";
@@ -37,6 +43,8 @@ import { formatDateTime, formatRelative } from "#src/lib/format.ts";
 
 interface AdmissionDialogState {
   admissionId: string | null;
+  /** 从「编辑摘要 / 填写摘要」进入时聚焦摘要输入框。 */
+  focusField?: "summary";
   open: boolean;
 }
 
@@ -105,14 +113,15 @@ const PatientDetailPage = () => {
   const removeAdmissionMutation = useMutation(
     api.admissions.remove.mutationOptions({
       onSuccess: async () => {
+        setRemoveAdmissionOpen(false);
+        // 先切回「全部素材」，让已删除就诊的详情查询卸载，避免失效时对不存在的记录再请求一次。
+        setSelectedAdmissionId(null);
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: api.patients.key() }),
           queryClient.invalidateQueries({ queryKey: api.admissions.key() }),
           queryClient.invalidateQueries({ queryKey: api.assets.key() }),
         ]);
         toast.success("已删除就诊记录");
-        setSelectedAdmissionId(null);
-        setRemoveAdmissionOpen(false);
       },
     })
   );
@@ -149,6 +158,14 @@ const PatientDetailPage = () => {
       <PageHeader
         actions={
           <>
+            <Button
+              onClick={() => {
+                setAdmissionDialog({ admissionId: null, open: true });
+              }}
+            >
+              <PlusIcon />
+              新建就诊
+            </Button>
             <Button
               onClick={() => {
                 setEditOpen(true);
@@ -188,7 +205,7 @@ const PatientDetailPage = () => {
       <PatientInfoCard patient={patient} />
 
       <div className="grid gap-4 lg:grid-cols-[20rem_minmax(0,1fr)] lg:items-start">
-        <div className="lg:sticky lg:top-20">
+        <div className="min-w-0 lg:sticky lg:top-20">
           <AdmissionList
             admissions={data.admissions}
             onCreate={() => {
@@ -217,10 +234,25 @@ const PatientDetailPage = () => {
             />
           ) : null}
 
+          {selectedAdmission ? (
+            <AdmissionSummaryCard
+              isLoading={admissionDetailQuery.isPending}
+              key={`summary-${selectedAdmission.id}`}
+              onEdit={() => {
+                setAdmissionDialog({
+                  admissionId: selectedAdmission.id,
+                  focusField: "summary",
+                  open: true,
+                });
+              }}
+              summary={admissionDetail?.summary}
+            />
+          ) : null}
+
           <PatientMediaPanel
             admission={selectedAdmission}
             admissions={data.admissions}
-            key={selectedAdmission?.id ?? "all"}
+            key={`media-${selectedAdmission?.id ?? "all"}`}
             patientId={patient.id}
           />
         </div>
@@ -240,6 +272,7 @@ const PatientDetailPage = () => {
             ? admissionDetail
             : null
         }
+        focusField={admissionDialog.focusField}
         onOpenChange={(open) => {
           setAdmissionDialog((previous) => ({ ...previous, open }));
         }}

@@ -82,6 +82,8 @@ export const admission = snakeCase.table(
     diagnosis: text(),
     chiefComplaint: text(),
     treatment: text(),
+    /** 病历摘要（Markdown）：入院情况、手术经过、病理、出院医嘱等长文本。 */
+    summary: text(),
     notes: text(),
     tags: tagsColumn(),
     createdBy: text().references(() => user.id, { onDelete: "set null" }),

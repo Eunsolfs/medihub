@@ -5,8 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vp run -r --parallel dev",
-    "build": "vp run -r build",
-    "ready": "vp check && vp run knip && vp test && vp run test:e2e && vp run -r build",
+    "build": "vp run --filter @medihub/web build && vp run --filter @medihub/server build",
+    "check": "vp check",
+    "test": "vp test",
+    "seed": "vp run --filter @medihub/server seed",
+    "ready": "vp check && vp run knip && vp test && vp run test:e2e && vp run build",
     "prepare": "vp config",
     "db:generate": "vp run --filter @medihub/db db:generate",
     "db:migrate": "vp run --filter @medihub/server db:migrate",

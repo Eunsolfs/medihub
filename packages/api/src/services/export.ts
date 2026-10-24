@@ -106,10 +106,28 @@ const uniqueFileName = (name: string, index: number, used: Set<string>) => {
   return candidate;
 };
 
-const toNodeStream = (stream: ReadableStream<Uint8Array>) =>
-  // 驱动返回的是 WHATWG 标准流，与 Node 的 stream/web 是同一实现；差别只在
-  // lib.dom 与 @types/node 对 ReadableStream 泛型的声明，这里收敛一次类型。
-  Readable.fromWeb(stream);
+/**
+ * 存储驱动返回的是 Web ReadableStream，archiver 需要 Node 的 Readable。
+ * lib.dom 与 @types/node 对同一实现的泛型声明不一致，这里用读取器桥接，
+ * 避免类型断言把差异藏起来。
+ */
+const toNodeStream = (stream: ReadableStream<Uint8Array>) => {
+  const reader = stream.getReader();
+
+  return Readable.from(
+    (async function* readChunks() {
+      for (;;) {
+        const { done, value } = await reader.read();
+
+        if (done) {
+          return;
+        }
+
+        yield value;
+      }
+    })()
+  );
+};
 
 const buildReadme = (
   input: RunExportInput,
