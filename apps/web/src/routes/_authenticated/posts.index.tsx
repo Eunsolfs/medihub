@@ -23,10 +23,7 @@ import { OrglessNotice } from "#src/components/app-shell/ui/orgless-notice.tsx";
 import { PageHeader } from "#src/components/app-shell/ui/page-header.tsx";
 import { PaginationBar } from "#src/components/app-shell/ui/pagination-bar.tsx";
 import { PostCard } from "#src/components/posts/post-card.tsx";
-import {
-  defaultPostFilters,
-  PostFilters,
-} from "#src/components/posts/post-filters.tsx";
+import { PostFilters } from "#src/components/posts/post-filters.tsx";
 import type { PostFiltersState } from "#src/components/posts/post-filters.tsx";
 import {
   copyText,
@@ -265,17 +262,71 @@ const PostsGridSkeleton = () => (
   </div>
 );
 
+interface PostsSearch {
+  mine?: boolean;
+  q?: string;
+  status?: string;
+  visibility?: string;
+}
+
+const searchString = (value: unknown) =>
+  typeof value === "string" && value.trim().length > 0 ? value : undefined;
+
+const validatePostsSearch = (search: Record<string, unknown>): PostsSearch => ({
+  mine: search.mine === true || search.mine === "true" ? true : undefined,
+  q: searchString(search.q),
+  status: searchString(search.status),
+  visibility: searchString(search.visibility),
+});
+
+const toPostsSearch = (filters: PostFiltersState): PostsSearch => {
+  const search: PostsSearch = {};
+
+  if (filters.mine) {
+    search.mine = true;
+  }
+
+  if (filters.q.trim()) {
+    search.q = filters.q.trim();
+  }
+
+  if (filters.status !== "all") {
+    search.status = filters.status;
+  }
+
+  if (filters.visibility !== "all") {
+    search.visibility = filters.visibility;
+  }
+
+  return search;
+};
+
 const PostsPage = () => {
   const navigate = useNavigate();
+  const search = Route.useSearch();
   const { session } = useRouteContext({ from: "/_authenticated" });
-  const [filters, setFilters] = useState<PostFiltersState>(defaultPostFilters);
+
+  // 筛选状态放在 URL 里：刷新、后退与分享链接都能还原。
+  const filters: PostFiltersState = {
+    mine: search.mine ?? false,
+    q: search.q ?? "",
+    status: search.status ?? "all",
+    visibility: search.visibility ?? "all",
+  };
+
   const [page, setPage] = useState(1);
   const deferredQuery = useDeferredValue(filters.q.trim());
   const canManageAll = isAdminRole(sessionRoleOf(session));
   const canPublish = useCanPublish();
 
   const handleFilterChange = (patch: Partial<PostFiltersState>) => {
-    setFilters((previous) => ({ ...previous, ...patch }));
+    const next = { ...filters, ...patch };
+
+    void navigate({
+      replace: true,
+      search: toPostsSearch(next),
+      to: "/posts",
+    });
     setPage(1);
   };
 
@@ -311,7 +362,7 @@ const PostsPage = () => {
           canManageAll={canManageAll}
           filters={filters}
           onClearFilters={() => {
-            setFilters(defaultPostFilters);
+            void navigate({ replace: true, search: {}, to: "/posts" });
             setPage(1);
           }}
           onPageChange={setPage}
@@ -325,4 +376,5 @@ const PostsPage = () => {
 
 export const Route = createFileRoute("/_authenticated/posts/")({
   component: PostsPage,
+  validateSearch: validatePostsSearch,
 });

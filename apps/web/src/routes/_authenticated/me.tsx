@@ -208,6 +208,127 @@ const ProfileForm = ({ name, phone, title }: ProfileFormProps) => {
   );
 };
 
+const ChangePasswordCard = () => {
+  const [values, setValues] = useState({
+    confirm: "",
+    current: "",
+    next: "",
+  });
+
+  const [pending, setPending] = useState(false);
+
+  const handleSubmit = async (event: SubmitEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (values.next.length < 8) {
+      toast.error("新密码至少 8 位");
+
+      return;
+    }
+
+    if (values.next !== values.confirm) {
+      toast.error("两次输入的新密码不一致");
+
+      return;
+    }
+
+    setPending(true);
+
+    try {
+      const { error } = await authClient.changePassword({
+        currentPassword: values.current,
+        newPassword: values.next,
+        revokeOtherSessions: true,
+      });
+
+      if (error) {
+        toast.error(
+          error.status === 400
+            ? "当前密码不正确"
+            : (error.message ?? "修改密码失败")
+        );
+
+        return;
+      }
+
+      toast.success("密码已更新，其他设备已退出登录");
+      setValues({ confirm: "", current: "", next: "" });
+    } catch {
+      toast.error("修改密码失败，请稍后重试");
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>修改密码</CardTitle>
+        <CardDescription>
+          修改后其他设备上的登录会被退出，当前浏览器保持登录。
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form className="grid gap-3" onSubmit={handleSubmit}>
+          <div className="grid gap-2">
+            <Label htmlFor="password-current">当前密码</Label>
+            <Input
+              autoComplete="current-password"
+              id="password-current"
+              onChange={(event) => {
+                setValues((current) => ({
+                  ...current,
+                  current: event.target.value,
+                }));
+              }}
+              required
+              type="password"
+              value={values.current}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="password-next">新密码（至少 8 位）</Label>
+            <Input
+              autoComplete="new-password"
+              id="password-next"
+              minLength={8}
+              onChange={(event) => {
+                setValues((current) => ({
+                  ...current,
+                  next: event.target.value,
+                }));
+              }}
+              required
+              type="password"
+              value={values.next}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="password-confirm">确认新密码</Label>
+            <Input
+              autoComplete="new-password"
+              id="password-confirm"
+              minLength={8}
+              onChange={(event) => {
+                setValues((current) => ({
+                  ...current,
+                  confirm: event.target.value,
+                }));
+              }}
+              required
+              type="password"
+              value={values.confirm}
+            />
+          </div>
+          <Button className="w-fit" disabled={pending} type="submit">
+            {pending ? "正在保存…" : "更新密码"}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  );
+};
+
 const SignOutCard = () => {
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -330,6 +451,7 @@ const MePage = () => {
             phone={phoneOf(user)}
             title={viewer.title ?? ""}
           />
+          <ChangePasswordCard />
           <SignOutCard />
         </div>
 
