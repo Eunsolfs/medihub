@@ -2,6 +2,29 @@
 
 本项目从第一版起的所有对外变更。版本号遵循 `MAJOR.MINOR.PATCH`。
 
+## v1.2.1 — 2026-10-25
+
+### 安装与部署复核修复
+
+- **在线升级能识别只有 tag、没有 GitHub Release 的仓库**：检查更新时若
+  `releases/latest` 返回 404，回退到 `/tags` 取最新版本 tag（此前会显示
+  「仓库还没有发布 Release」并无法升级）。
+- **一键安装脚本**：
+  - 删除「tag 下载失败就退到 main 分支」的兜底——避免装出未发布代码却显示为某版本；
+    现在直接失败并提示检查 tag/网络；
+  - `--dry-run` 不再下载源码包（只做一次 GitHub 版本查询）；
+  - 构建/迁移时显式补 `/usr/local/bin` 到 PATH，避免 `runuser` 找不到 pnpm；
+  - 生成的 `.env` 权限改为 `600`（含会话密钥与 OnlyOffice JWT）；
+  - Node/pnpm 版本比较改为 `sort -V`，低于仓库 `engines`（24.22.1 / 12.15.0）会重装；
+  - 校验 `--url` 协议、`--port` 范围；`--update` 与 `--seed` 互斥；去掉未使用的 `jq`。
+- **文档纠正**：
+  - INSTALL：耗时改为更真实的 5–15 分钟；补充「脚本不创建 1Panel 站点/证书」、
+    反向代理必须设置 `client_max_body_size 300m` / `proxy_read_timeout 300s` /
+    单值 `X-Forwarded-For`；命令行 `--update` 失败**不会自动回滚**，给出恢复命令。
+  - UPGRADE：检查更新的 200/404 判断写清楚（首个接口 404 属正常，回退 tags）；
+    健康检查示例版本号改为占位；`UPDATE_DB_PATH` 支持绝对路径。
+- 版本号统一 1.2.1。
+
 ## v1.2.0 — 2026-10-25
 
 ### 新功能：网页安装向导 `/install`

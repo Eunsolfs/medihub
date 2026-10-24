@@ -1,7 +1,7 @@
 # 在线升级与回滚（系统管理 → 版本与升级）
 
 MediHub 内置了一套「在站点里点一下就升级」的机制：`root` 账号在 **系统管理 → 版本与升级**
-卡片里查看当前版本、GitHub 最新 Release，一键升级或回滚。服务端会以 detached 子进程运行
+卡片里查看当前版本、GitHub 最新版本（Release 或 tag），一键升级或回滚。服务端会以 detached 子进程运行
 升级执行器 `apps/server/scripts/updater.mjs`，自动完成**备份 → 下载发布包 → 构建 → 迁移 →
 切换产物 → 重启 → 健康检查**，健康检查不通过就**自动回滚**。
 
@@ -158,18 +158,24 @@ sudo -u www -H bash -lc 'command -v node pnpm tar && node -v && pnpm -v'
 ### 3.3 能访问 GitHub
 
 ```bash
-# Release 接口（检查更新用）
+# 版本检查接口（有 Release 时用 releases/latest，没有时回退到 tags）
 curl -fsS -m 10 -o /dev/null -w '%{http_code}\n' \
   https://api.github.com/repos/Eunsolfs/medihub/releases/latest
-# 源码包下载（升级用，走 codeload，和 api 不是同一个域名）
+curl -fsS -m 10 -o /dev/null -w '%{http_code}\n' \
+  https://api.github.com/repos/Eunsolfs/medihub/tags
+# 源码包下载（升级用，走 codeload，和 api 不是同一个域名；把 v1.1.0 换成目标版本）
 curl -fsS -m 15 -o /dev/null -w '%{http_code}\n' \
   https://codeload.github.com/Eunsolfs/medihub/tar.gz/refs/tags/v1.1.0
 ```
 
-两个都返回 `200` 才行（第二个在你还没发布 `v1.1.0` 时会是 `404`，属正常，说明网络通）。
-内网/国内服务器可能只挡其中某一个，别只测一个。
+判断标准：
 
-### 3.4 Release tag 形如 `v1.1.0`
+- **源码包地址必须返回 200**（目标 tag 不存在时是 404，说明版本号写错或 tag 还没推）；
+- 版本检查：`releases/latest` 返回 200，或它返回 404 但 `/tags` 返回 200 —— 都算通过。
+  本仓库目前只有 tag、没建 GitHub Release，因此实际走 `/tags` 回退，这是正常的。
+- 内网/国内服务器可能只挡其中一个域名，别只测一个。
+
+### 3.4 版本 tag 形如 `v1.1.0`
 
 执行器接受 `1.1.0` 与 `v1.1.0` 两种写法（会先去掉前缀 `v`），版本号必须匹配
 `^\d+\.\d+\.\d+([-+][0-9A-Za-z.-]+)?$`。
@@ -181,15 +187,15 @@ https://codeload.github.com/<repo>/tar.gz/refs/tags/v<version>
 https://codeload.github.com/<repo>/tar.gz/refs/tags/<version>
 ```
 
-所以 tag 打成 `v1.1.0` 或 `1.1.0` 都能升级；但**必须真的打了 tag**——只建 Release 不建 tag
-是不行的。另外「最新 Release」取的是 `releases/latest`，**草稿（draft）与预发布
-（pre-release）不算**。
+所以 tag 打成 `v1.1.0` 或 `1.1.0` 都能升级；但**必须真的打了 tag**（`git push origin v1.1.0`），
+只建 Release 不建 tag 是不行的。检查更新时：有 Release 就取 `releases/latest`
+（草稿 draft 与预发布 pre-release 不算）；没有 Release 则回退到 `/tags`，取最新的版本 tag。
 
 ### 3.5 健康检查地址可达
 
 ```bash
 curl -fsS http://127.0.0.1:3000/api/health
-# {"status":"ok","version":"1.0.0"}
+# {"status":"ok","version":"<当前版本>"}
 ```
 
 `/api/health` 是公开接口（不需要登录）。它在 `<DATABASE_URL>` 上跑一条 `select 1` 再返回
@@ -269,7 +275,8 @@ UPDATE_REPO="Eunsolfs/medihub"
 # 安装根目录，必须是绝对路径，且该目录里有根 package.json 与 apps/。
 UPDATE_WORKDIR="/opt/medihub"
 
-# SQLite 相对 UPDATE_WORKDIR；若 DATABASE_URL 用的是绝对路径，这里也写相对的那一段。
+# SQLite 路径：相对 UPDATE_WORKDIR 或直接写绝对路径。
+# 手工部署常用 /data/medihub/local.db，此时这里也写绝对路径。
 UPDATE_DB_PATH="apps/server/local.db"
 
 # 重启命令：按你的部署方式三选一，详见 §5。

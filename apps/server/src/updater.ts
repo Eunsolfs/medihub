@@ -55,28 +55,60 @@ const fetchLatest = async (): Promise<LatestRelease> => {
       { headers, signal: AbortSignal.timeout(8000) }
     );
 
-    if (!response.ok) {
+    if (response.ok) {
+      const data = (await response.json()) as {
+        body?: string;
+        html_url?: string;
+        published_at?: string;
+        tag_name?: string;
+      };
+
+      const latestVersion = (data.tag_name ?? "").replace(/^v/u, "") || null;
+
+      if (latestVersion) {
+        return {
+          latestVersion,
+          notes: data.body?.slice(0, 2000),
+          publishedAt: data.published_at,
+          url: data.html_url,
+        };
+      }
+    } else if (response.status !== 404) {
       return {
-        error:
-          response.status === 404
-            ? "仓库还没有发布 Release"
-            : `GitHub 返回 ${response.status}`,
+        error: `GitHub 返回 ${response.status}`,
         latestVersion: null,
       };
     }
 
-    const data = (await response.json()) as {
-      body?: string;
-      html_url?: string;
-      published_at?: string;
-      tag_name?: string;
-    };
+    // 仓库可能只打了 tag、没有建 Release；回退到 tags 列表取最新的版本 tag。
+    const tagsResponse = await fetch(
+      `https://api.github.com/repos/${env.UPDATE_REPO}/tags?per_page=30`,
+      { headers, signal: AbortSignal.timeout(8000) }
+    );
+
+    if (!tagsResponse.ok) {
+      return {
+        error:
+          tagsResponse.status === 404
+            ? "仓库没有可用的 Release 或 tag"
+            : `GitHub 返回 ${tagsResponse.status}`,
+        latestVersion: null,
+      };
+    }
+
+    const tags = (await tagsResponse.json()) as { name?: string }[];
+
+    const latestTag = tags
+      .map((tag) => tag.name ?? "")
+      .find((name) => /^v?\d+\.\d+\.\d+/u.test(name));
+
+    if (!latestTag) {
+      return { error: "仓库没有可用的版本 tag", latestVersion: null };
+    }
 
     return {
-      latestVersion: (data.tag_name ?? "").replace(/^v/u, "") || null,
-      notes: data.body?.slice(0, 2000),
-      publishedAt: data.published_at,
-      url: data.html_url,
+      latestVersion: latestTag.replace(/^v/u, ""),
+      url: `https://github.com/${env.UPDATE_REPO}/releases/tag/${latestTag}`,
     };
   } catch {
     return { error: "无法连接 GitHub，请检查服务器网络", latestVersion: null };

@@ -3,7 +3,8 @@
 适用：已安装 1Panel 的 Linux 服务器（Debian / Ubuntu / Rocky / Alma / CentOS Stream）。
 脚本会装好 Node.js 24、pnpm、系统服务，并把网站跑起来；OnlyOffice 参数可以稍后填。
 
-> 需要 root 或 sudo。全程约 3–6 分钟（取决于服务器带宽，构建占大头）。
+> 需要 root 或 sudo。下载依赖 + 构建通常 **5–15 分钟**（取决于服务器带宽；国内机器可能更久）。
+> 脚本**不会**替你创建 1Panel 站点与证书，也不会改你的 Nginx 配置——反向代理那一步需要在面板里点一次。
 
 ## 一条命令（真正的一行）
 
@@ -26,8 +27,19 @@ sudo bash install-medihub.sh --url https://medihub.example.com --seed
 安装完成后：
 
 1. 在 1Panel「网站 → 反向代理」新建站点，目标 `http://127.0.0.1:3000`，申请 HTTPS；
-2. 打开你的域名，用 root 登录；
-3. 到「我的 → 修改密码」改掉初始密码。
+2. **同站点配置里加上传与超时设置**（否则大视频/PPT 上传会 413 或 502）：
+
+   ```nginx
+   client_max_body_size 300m;
+   proxy_read_timeout 300s;
+   proxy_set_header X-Forwarded-For $remote_addr;
+   ```
+
+   Better Auth 按客户端 IP 限流，`X-Forwarded-For` 只接受单值；详细原因见
+   [DEPLOY-1PANEL.md §9](./DEPLOY-1PANEL.md)。1Panel 的「网站 → 配置」里可直接加这几行。
+
+3. 打开你的域名，用 root 登录（没加 `--seed` 则打开 `/install` 完成初始化）；
+4. 到「我的 → 修改密码」改掉初始密码。
 
 ## 方式二：网页安装向导（不写命令行参数）
 
@@ -106,8 +118,22 @@ ONLYOFFICE_JWT_SECRET="和 Document Server 里一致的 JWT 密钥"
 
 - 界面：root 登录 → 系统管理 → 版本与升级 → 检查更新 → 升级（失败自动回滚）；
 - 命令行：`sudo bash install-medihub.sh --update`（保留数据，升级前自动备份数据库）。
+  注意：**命令行升级失败时不会自动回滚**，脚本会把升级前的数据库备份到
+  `.updates/backups/manual-<时间>/db.sqlite`，需要时手动恢复：
+
+  ```bash
+  sudo systemctl stop medihub
+  sudo cp /opt/medihub/.updates/backups/manual-<时间>/db.sqlite /opt/medihub/apps/server/local.db
+  sudo rm -rf /opt/medihub/apps/server/dist
+  sudo bash install-medihub.sh --update --tag <上一个版本>   # 重新铺回旧版本
+  ```
+
+  （系统磁盘上的完整自动回滚只在「系统管理 → 版本与升级」的在线升级里提供。）
 
 升级与回滚细节见 [UPGRADE.md](UPGRADE.md)。
+
+> `--dry-run` 不会修改系统、不会下载源码包（但仍会执行一次 GitHub 版本查询）；
+> `--update` 与 `--seed` 不能同时使用（避免重复写入演示数据）。
 
 ## 脚本做了什么
 

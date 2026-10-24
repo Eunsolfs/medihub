@@ -89,6 +89,23 @@ done
 [[ $EUID -eq 0 ]] || fail "请用 root 或 sudo 运行：sudo bash $0"
 [[ "$DRY_RUN" == "true" ]] || command -v systemctl >/dev/null || fail "未找到 systemd"
 
+# 参数校验：早失败比装到一半失败好。
+if [[ -n "$SITE_URL" ]]; then
+  [[ "$SITE_URL" =~ ^https?:// ]] || fail "--url 必须以 http:// 或 https:// 开头"
+  SITE_URL="${SITE_URL%/}"
+fi
+
+[[ "$APP_PORT" =~ ^[0-9]+$ ]] || fail "--port 必须是数字"
+[[ "$APP_PORT" -ge 1 && "$APP_PORT" -le 65535 ]] || fail "--port 超出范围"
+
+if [[ "$UPDATE_MODE" == "true" && "$SEED" == "true" ]]; then
+  fail "--update 用于升级现有安装，不要再叠加 --seed（会重复写入演示数据）"
+fi
+
+if [[ -n "$ONLYOFFICE_URL" && ! "$ONLYOFFICE_URL" =~ ^https?:// ]]; then
+  fail "--onlyoffice-url 必须以 http:// 或 https:// 开头"
+fi
+
 ARCH="$(uname -m)"
 case "$ARCH" in
   x86_64|amd64) NODE_ARCH="x64" ;;
@@ -107,16 +124,16 @@ install_system_deps() {
   case "$DISTRO" in
     debian|ubuntu)
       run apt-get update -qq
-      run apt-get install -y -qq curl tar xz-utils ca-certificates jq
+      run apt-get install -y -qq curl tar xz-utils ca-certificates
       ;;
     rocky|almalinux|centos|rhel|fedora)
-      run dnf install -y -q curl tar xz ca-certificates jq
+      run dnf install -y -q curl tar xz ca-certificates
       ;;
     *)
       if command -v apt-get >/dev/null; then
-        run apt-get update -qq && run apt-get install -y -qq curl tar xz-utils ca-certificates jq
+        run apt-get update -qq && run apt-get install -y -qq curl tar xz-utils ca-certificates
       elif command -v dnf >/dev/null; then
-        run dnf install -y -q curl tar xz ca-certificates jq
+        run dnf install -y -q curl tar xz ca-certificates
       else
         warn "未识别的发行版 $DISTRO，请确保 curl/tar/xz 已安装"
       fi
@@ -130,8 +147,16 @@ ensure_node() {
     current="$(node -v 2>/dev/null | sed 's/^v//')"
   fi
 
-  local major="${current%%.*}"
-  if [[ -n "$current" && "$major" -ge 24 ]]; then
+  # 版本至少 24.22.1（与仓库 engines.node 对齐）；`sort -V -C` 判断已排序即 current >= 目标。
+  if [[ -n "$current" ]] &&
+    printf '%s\n%s\n' "$NODE_VERSION" "$current" | sort -V -C; then
+    local existing
+    existing="$(command -v node)"
+
+    if [[ "$existing" != "/usr/local/bin/node" ]]; then
+      warn "检测到 Node.js 位于 $existing；systemd 会使用该路径，请确保 $RUN_USER 用户可执行"
+    fi
+
     log "已安装 Node.js v$current，跳过"
     return
   fi
@@ -143,16 +168,23 @@ ensure_node() {
   run tar -xJf "/tmp/$tarball" -C /usr/local --strip-components=1 --no-same-owner
 
   if [[ "$DRY_RUN" != "true" ]]; then
-    node -v >/dev/null || fail "Node.js 安装失败"
+    local installed_major
+    installed_major="$(node -v 2>/dev/null | sed 's/^v//' | cut -d. -f1)"
+
+    [[ "${installed_major:-0}" -ge 24 ]] ||
+      fail "Node.js 安装后版本不是 24.x（当前：$(node -v 2>/dev/null || echo 无)），请检查 PATH 中是否有旧版 node 抢先"
   fi
 }
 
 ensure_pnpm() {
   if command -v pnpm >/dev/null; then
     local current
-    current="$(pnpm -v 2>/dev/null | cut -d. -f1)"
-    if [[ "$current" =~ ^[0-9]+$ && "$current" -ge 10 ]]; then
-      log "已安装 pnpm $(pnpm -v)，跳过"
+    current="$(pnpm -v 2>/dev/null)"
+
+    # 至少 PNPM_VERSION（与仓库 engines.pnpm 对齐）。
+    if [[ -n "$current" ]] &&
+      printf '%s\n%s\n' "$PNPM_VERSION" "$current" | sort -V -C; then
+      log "已安装 pnpm $current，跳过"
       return
     fi
   fi
@@ -187,23 +219,25 @@ latest_tag() {
 
 fetch_release() {
   local tag="$1" tmp="$2"
-  local candidates=(
-    "https://codeload.github.com/$REPO/tar.gz/refs/tags/$tag"
-    "https://codeload.github.com/$REPO/tar.gz/refs/heads/main"
-  )
 
-  for url in "${candidates[@]}"; do
-    log "下载源码包：$url"
-    if curl -fsSL "$url" -o "$tmp/release.tar.gz"; then
-      break
-    fi
-  done
+  # DRY-RUN 不访问网络、不下载。
+  if [[ "$DRY_RUN" == "true" ]]; then
+    printf '  + 下载 https://codeload.github.com/%s/tar.gz/refs/tags/%s\n' "$REPO" "$tag"
+    echo "$tmp/dry-run"
+    return
+  fi
 
-  [[ -s "$tmp/release.tar.gz" ]] || fail "源码包下载失败，请检查 GitHub 网络或 tag"
+  local url="https://codeload.github.com/$REPO/tar.gz/refs/tags/$tag"
+  log "下载源码包：$url"
+
+  curl -fsSL "$url" -o "$tmp/release.tar.gz" ||
+    fail "下载 $tag 的源码包失败：请确认 tag 存在、服务器能访问 codeload.github.com，或手动指定 --tag"
 
   run tar -xzf "$tmp/release.tar.gz" -C "$tmp"
   local extracted
   extracted="$(find "$tmp" -maxdepth 1 -mindepth 1 -type d | head -n1)"
+
+  [[ -n "$extracted" ]] || fail "解压源码包失败"
   echo "$extracted"
 }
 
@@ -335,17 +369,23 @@ EOF
   fi
 
   chown "$RUN_USER:$RUN_USER" "$env_file"
+  # .env 里有会话密钥与 OnlyOffice JWT，只允许服务用户读取。
+  chmod 600 "$env_file"
 }
 
 install_deps_and_build() {
   log "安装依赖并构建（首次约 2-5 分钟）"
-  run runuser -u "$RUN_USER" -- bash -lc "cd '$DIR' && pnpm install --frozen-lockfile"
-  run runuser -u "$RUN_USER" -- bash -lc "cd '$DIR' && pnpm run build"
+  # 显式补 /usr/local/bin：脚本把 Node/pnpm 装在这里，runuser 的登录 shell 未必包含。
+  run runuser -u "$RUN_USER" -- bash -lc \
+    "export PATH=/usr/local/bin:\$PATH; cd '$DIR' && pnpm install --frozen-lockfile"
+  run runuser -u "$RUN_USER" -- bash -lc \
+    "export PATH=/usr/local/bin:\$PATH; cd '$DIR' && pnpm run build"
 }
 
 migrate_and_seed() {
   log "初始化数据库"
-  run runuser -u "$RUN_USER" -- bash -lc "cd '$DIR' && pnpm run db:migrate"
+  run runuser -u "$RUN_USER" -- bash -lc \
+    "export PATH=/usr/local/bin:\$PATH; cd '$DIR' && pnpm run db:migrate"
 
   if [[ "$SEED" == "true" ]]; then
     local email="${SEED_ROOT_EMAIL:-root@medihub.local}"
@@ -353,7 +393,7 @@ migrate_and_seed() {
 
     log "写入演示数据与超级管理员 $email"
     run runuser -u "$RUN_USER" -- bash -lc \
-      "cd '$DIR' && SEED_ROOT_EMAIL='$email' SEED_ROOT_PASSWORD='$password' pnpm run seed"
+      "export PATH=/usr/local/bin:\$PATH; cd '$DIR' && SEED_ROOT_EMAIL='$email' SEED_ROOT_PASSWORD='$password' pnpm run seed"
     printf '\n  超级管理员：%s\n  初始密码：%s\n  （请登录后到「我的 → 修改密码」立即修改）\n\n' "$email" "$password"
   fi
 }
@@ -465,8 +505,12 @@ main() {
   ensure_pnpm
   ensure_user
 
-  local tag="${TAG:-$(latest_tag)}"
-  if [[ "$UPDATE_MODE" == "true" && -z "$TAG" ]]; then
+  local tag
+  if [[ -n "$TAG" ]]; then
+    tag="$TAG"
+  elif [[ "$DRY_RUN" == "true" ]]; then
+    tag="latest"
+  else
     tag="$(latest_tag)"
   fi
   log "目标版本：$tag"
@@ -510,4 +554,5 @@ main() {
 }
 
 main "$@"
+
 
