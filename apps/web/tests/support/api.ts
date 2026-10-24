@@ -4,16 +4,39 @@ import type { Page } from "@playwright/test";
 
 import type { AppRouterClient } from "@medihub/api";
 
+import { e2eAdmin } from "./e2e-admin.ts";
 import { e2eBaseURL } from "./server.ts";
 
 export const password = "correct-horse-battery";
 
 export const uniqueEmail = () => `${crypto.randomUUID()}@example.com`;
 
+const signInForCookie = async (email: string, signInPassword: string) => {
+  const response = await fetch(`${e2eBaseURL}/api/auth/sign-in/email`, {
+    body: JSON.stringify({ email, password: signInPassword }),
+    headers: { "content-type": "application/json", origin: e2eBaseURL },
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Sign in failed with ${response.status}`);
+  }
+
+  return response.headers
+    .getSetCookie()
+    .map((header) => header.split(";")[0])
+    .join("; ");
+};
+
+const clientWithCookie = (cookie: string): AppRouterClient =>
+  createORPCClient(
+    new RPCLink({ headers: { cookie }, url: `${e2eBaseURL}/rpc` })
+  );
+
 /**
- * Signs up through the running server, as the sign-up form does, and returns a
- * client that calls as the new user. A new account automatically owns a personal
- * workspace, so it can create patients straight away.
+ * Signs up through the running server, then gets the new account claimed into
+ * the E2E department by its admin (the same flow the product offers in
+ * 系统管理 → 待分配用户). Only department members may create patient records.
  */
 export const signUp = async (email = uniqueEmail()) => {
   const response = await fetch(`${e2eBaseURL}/api/auth/sign-up/email`, {
@@ -31,11 +54,22 @@ export const signUp = async (email = uniqueEmail()) => {
     .map((header) => header.split(";")[0])
     .join("; ");
 
-  const client: AppRouterClient = createORPCClient(
-    new RPCLink({ headers: { cookie }, url: `${e2eBaseURL}/rpc` })
-  );
+  const client = clientWithCookie(cookie);
+  const profile = await client.me.profile();
 
-  return { client, email };
+  if (!profile) {
+    throw new Error("新账号缺少会话");
+  }
+
+  const adminCookie = await signInForCookie(e2eAdmin.email, e2eAdmin.password);
+  await clientWithCookie(adminCookie).users.claim({
+    userId: profile.viewer.id,
+  });
+
+  // 认领后会话里的角色与科室已变化，重新登录一次拿新会话。
+  const memberCookie = await signInForCookie(email, password);
+
+  return { client: clientWithCookie(memberCookie), email };
 };
 
 /** Signs in through the real form and waits until the app leaves `/login`. */

@@ -4,6 +4,10 @@ import { CalendarDaysIcon, FolderIcon, UsersIcon } from "lucide-react";
 
 import { Button } from "@medihub/ui/components/button";
 
+import {
+  getSessionRole,
+  isOrglessRole,
+} from "#src/components/app-shell/roles.ts";
 import { PageHeader } from "#src/components/app-shell/ui/page-header.tsx";
 import { SectionCard } from "#src/components/app-shell/ui/section-card.tsx";
 import { LoadingRows } from "#src/components/app-shell/ui/skeletons.tsx";
@@ -26,6 +30,8 @@ const todayLabel = new Intl.DateTimeFormat("zh-CN", {
 
 const DashboardPage = () => {
   const { session } = useRouteContext({ from: "__root__" });
+  const role = getSessionRole(session);
+  const orgless = isOrglessRole(role);
   const overviewQuery = useQuery(api.stats.overview.queryOptions());
   const overview = overviewQuery.data;
   const name = session?.user.name ?? "";
@@ -34,28 +40,34 @@ const DashboardPage = () => {
     <div className="grid gap-5">
       <PageHeader
         actions={
-          <>
-            <Button
-              nativeButton={false}
-              render={<a aria-label="患者档案" href="/patients" />}
-              variant="outline"
-            >
-              <UsersIcon />
-              患者档案
-            </Button>
-            <Button
-              nativeButton={false}
-              render={<Link aria-label="上传资料" to="/library" />}
-            >
-              <FolderIcon />
-              上传资料
-            </Button>
-          </>
+          orgless ? null : (
+            <>
+              <Button
+                nativeButton={false}
+                render={<a aria-label="患者档案" href="/patients" />}
+                variant="outline"
+              >
+                <UsersIcon />
+                患者档案
+              </Button>
+              <Button
+                nativeButton={false}
+                render={<Link aria-label="上传资料" to="/library" />}
+              >
+                <FolderIcon />
+                上传资料
+              </Button>
+            </>
+          )
         }
         description={
-          name
-            ? `${name}，这里是科室的资料概览与最近的临床动态。`
-            : "科室的资料概览与最近的临床动态。"
+          orgless
+            ? name
+              ? `${name}，你的账号还没有归属科室；这里展示你可以访问的资料与教学动态。`
+              : "你的账号还没有归属科室；这里展示你可以访问的资料与教学动态。"
+            : name
+              ? `${name}，这里是科室的资料概览与最近的临床动态。`
+              : "科室的资料概览与最近的临床动态。"
         }
         meta={
           <>
@@ -71,19 +83,44 @@ const DashboardPage = () => {
         title="工作台"
       />
 
-      {overviewQuery.isPending || !overview ? (
-        <LoadingRows rows={4} />
-      ) : (
+      {overviewQuery.isPending ? <LoadingRows rows={4} /> : null}
+
+      {overviewQuery.isError ? (
+        <SectionCard
+          description="网络或权限异常，概览数据暂时取不到；其余页面通常不受影响。"
+          title="概览暂时不可用"
+        >
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              onClick={() => {
+                void overviewQuery.refetch();
+              }}
+              variant="outline"
+            >
+              重试
+            </Button>
+            <Link className="text-sm hover:underline" to="/library">
+              直接去资料库
+            </Link>
+          </div>
+        </SectionCard>
+      ) : null}
+
+      {overview ? (
         <>
-          <StatOverview counts={overview.counts} />
+          <StatOverview counts={overview.counts} orgless={orgless} />
 
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]">
             <div className="order-1 grid h-fit gap-5 xl:order-none xl:col-start-2 xl:row-start-1">
               <SectionCard
-                description="科室里最常用的三个动作"
+                description={
+                  orgless
+                    ? "分配科室后可用的入口会显示在这里"
+                    : "科室里最常用的三个动作"
+                }
                 title="快捷操作"
               >
-                <QuickActions />
+                <QuickActions orgless={orgless} />
               </SectionCard>
             </div>
 
@@ -103,20 +140,42 @@ const DashboardPage = () => {
                 <RecentUploads assets={overview.activity.recentAssets} />
               </SectionCard>
 
-              <SectionCard
-                action={
-                  <a
-                    className="text-xs font-medium hover:underline"
-                    href="/patients"
-                  >
-                    全部患者
-                  </a>
-                }
-                description="按建档时间倒序"
-                title="最近新增患者"
-              >
-                <RecentPatients patients={overview.activity.recentPatients} />
-              </SectionCard>
+              {orgless ? (
+                <SectionCard
+                  description="需要科室归属后才能使用"
+                  title="患者档案"
+                >
+                  <p className="text-muted-foreground text-sm text-pretty">
+                    你的账号还没有归属科室，患者档案与影像上传暂不可用；请联系管理员在系统管理
+                    → 待分配用户里分配科室。
+                  </p>
+                  <div className="mt-3">
+                    <Button
+                      nativeButton={false}
+                      render={<Link to="/me" />}
+                      size="sm"
+                      variant="outline"
+                    >
+                      查看我的账号
+                    </Button>
+                  </div>
+                </SectionCard>
+              ) : (
+                <SectionCard
+                  action={
+                    <a
+                      className="text-xs font-medium hover:underline"
+                      href="/patients"
+                    >
+                      全部患者
+                    </a>
+                  }
+                  description="按建档时间倒序"
+                  title="最近新增患者"
+                >
+                  <RecentPatients patients={overview.activity.recentPatients} />
+                </SectionCard>
+              )}
             </div>
 
             <div className="order-3 grid h-fit gap-5 xl:order-none xl:col-start-2 xl:row-start-2">
@@ -136,7 +195,7 @@ const DashboardPage = () => {
             </div>
           </div>
         </>
-      )}
+      ) : null}
     </div>
   );
 };

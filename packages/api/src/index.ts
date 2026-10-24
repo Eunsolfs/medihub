@@ -19,6 +19,7 @@ export {
   canPublishContent,
   isAdminRole,
   postViewGate,
+  requireClinicalRights,
   requirePublishRights,
   toViewer,
 } from "#src/access.ts";

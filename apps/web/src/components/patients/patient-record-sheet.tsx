@@ -63,6 +63,8 @@ interface PatientRecordSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   patient: PatientRecord;
+  /** 作者本人或管理员才显示「编辑档案」。 */
+  canEdit: boolean;
   onEdit: () => void;
 }
 
@@ -71,6 +73,7 @@ export const PatientRecordSheet = ({
   open,
   onOpenChange,
   patient,
+  canEdit,
   onEdit,
 }: PatientRecordSheetProps) => {
   const { canManageIdCard } = useViewer();
@@ -93,10 +96,12 @@ export const PatientRecordSheet = ({
           >
             关闭
           </Button>
-          <Button onClick={onEdit} type="button">
-            <PencilIcon />
-            编辑档案
-          </Button>
+          {canEdit ? (
+            <Button onClick={onEdit} type="button">
+              <PencilIcon />
+              编辑档案
+            </Button>
+          ) : null}
         </>
       }
       onOpenChange={onOpenChange}

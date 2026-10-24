@@ -4,10 +4,11 @@ import {
   CropIcon,
   DownloadIcon,
   ExternalLinkIcon,
+  Loader2Icon,
   PencilLineIcon,
   XIcon,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 
 import { Button, buttonVariants } from "@medihub/ui/components/button";
 import {
@@ -28,13 +29,10 @@ import {
 } from "#src/lib/format.ts";
 import type { UploadedAsset } from "#src/lib/upload.ts";
 
-import { DocxViewer } from "./docx-viewer.tsx";
 import { ImageEditorDialog } from "./image-editor-dialog.tsx";
 import { ImagePreview } from "./image-preview.tsx";
-import { OnlyOfficeEditor } from "./office-editor.tsx";
 import { PptxViewer } from "./pptx-viewer.tsx";
 import { PreviewFallback } from "./preview-fallback.tsx";
-import { SpreadsheetViewer } from "./spreadsheet-viewer.tsx";
 import { TextViewer } from "./text-viewer.tsx";
 import type { MediaAsset } from "./types.ts";
 import {
@@ -53,6 +51,32 @@ import {
 } from "./types.ts";
 import { useOfficeConfig } from "./use-file-resource.ts";
 import { useIsMobile } from "./use-is-mobile.ts";
+
+// 重型文档渲染器按需加载：首屏（只浏览图片/视频）不会请求 xlsx / docx / OnlyOffice 桥。
+const DocxViewer = lazy(async () => {
+  const module = await import("./docx-viewer.tsx");
+
+  return { default: module.DocxViewer };
+});
+
+const SpreadsheetViewer = lazy(async () => {
+  const module = await import("./spreadsheet-viewer.tsx");
+
+  return { default: module.SpreadsheetViewer };
+});
+
+const OnlyOfficeEditor = lazy(async () => {
+  const module = await import("./office-editor.tsx");
+
+  return { default: module.OnlyOfficeEditor };
+});
+
+const ViewerLoading = ({ label }: { label: string }) => (
+  <div className="text-muted-foreground flex h-full items-center justify-center gap-2 text-sm">
+    <Loader2Icon className="size-4 animate-spin" />
+    {label}
+  </div>
+);
 
 export interface AssetPreviewProps {
   asset: MediaAsset | null;
@@ -151,13 +175,15 @@ export const AssetPreview = ({
 
     if (editing && office.status === "ready") {
       return (
-        <OnlyOfficeEditor
-          data={office.data}
-          title={current.originalName}
-          onExit={() => {
-            setEditing(false);
-          }}
-        />
+        <Suspense fallback={<ViewerLoading label="正在加载在线编辑器…" />}>
+          <OnlyOfficeEditor
+            data={office.data}
+            title={current.originalName}
+            onExit={() => {
+              setEditing(false);
+            }}
+          />
+        </Suspense>
       );
     }
 
@@ -219,17 +245,23 @@ export const AssetPreview = ({
 
     if (isSpreadsheetAsset(current)) {
       return (
-        <SpreadsheetViewer
-          key={current.id}
-          asset={current}
-          enabled={open}
-          onUploaded={onUploaded}
-        />
+        <Suspense fallback={<ViewerLoading label="正在加载表格预览…" />}>
+          <SpreadsheetViewer
+            key={current.id}
+            asset={current}
+            enabled={open}
+            onUploaded={onUploaded}
+          />
+        </Suspense>
       );
     }
 
     if (isWordAsset(current)) {
-      return <DocxViewer key={current.id} asset={current} enabled={open} />;
+      return (
+        <Suspense fallback={<ViewerLoading label="正在加载 Word 预览…" />}>
+          <DocxViewer key={current.id} asset={current} enabled={open} />
+        </Suspense>
+      );
     }
 
     if (isPresentationAsset(current)) {

@@ -12,7 +12,10 @@ import {
 import { cn } from "@medihub/ui/lib/utils";
 
 import { SidebarNav } from "#src/components/app-shell/app-sidebar.tsx";
-import { isNavActive, MOBILE_TABS } from "#src/components/app-shell/nav.ts";
+import {
+  isNavActive,
+  visibleMobileTabs,
+} from "#src/components/app-shell/nav.ts";
 import { ThemeMenu } from "#src/components/app-shell/theme-menu.tsx";
 import { UserMenu } from "#src/components/app-shell/user-menu.tsx";
 
@@ -29,14 +32,13 @@ interface MobileTabBarProps {
 
 export const MobileTabBar = ({ role, onOpenSearch }: MobileTabBarProps) => {
   const [moreOpen, setMoreOpen] = useState(false);
+  const tabs = visibleMobileTabs(role);
 
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
 
-  const moreActive = !MOBILE_TABS.some((tab) =>
-    isNavActive(pathname, tab.href)
-  );
+  const moreActive = !tabs.some((tab) => isNavActive(pathname, tab.href));
 
   return (
     <>
@@ -44,8 +46,13 @@ export const MobileTabBar = ({ role, onOpenSearch }: MobileTabBarProps) => {
         aria-label="底部导航"
         className="bg-background/95 pb-safe fixed inset-x-0 bottom-0 z-30 border-t backdrop-blur-md md:hidden"
       >
-        <div className="mx-auto grid max-w-lg grid-cols-5">
-          {MOBILE_TABS.map((tab) => {
+        <div
+          className="mx-auto grid max-w-lg"
+          style={{
+            gridTemplateColumns: `repeat(${tabs.length + 1}, minmax(0, 1fr))`,
+          }}
+        >
+          {tabs.map((tab) => {
             const Icon = tab.icon;
             const active = isNavActive(pathname, tab.href);
 

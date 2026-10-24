@@ -27,6 +27,8 @@ interface AdmissionRecordSheetProps {
   admission: AdmissionSummary | null;
   record: AdmissionRecord | null;
   isLoading?: boolean;
+  /** 作者本人或管理员才显示「编辑全部」。 */
+  canEdit: boolean;
   onEdit: () => void;
 }
 
@@ -37,6 +39,7 @@ export const AdmissionRecordSheet = ({
   admission,
   record,
   isLoading = false,
+  canEdit,
   onEdit,
 }: AdmissionRecordSheetProps) => {
   const summary = record?.summary?.trim() ?? "";
@@ -61,10 +64,12 @@ export const AdmissionRecordSheet = ({
           >
             关闭
           </Button>
-          <Button onClick={onEdit} type="button">
-            <PencilIcon />
-            编辑全部
-          </Button>
+          {canEdit ? (
+            <Button onClick={onEdit} type="button">
+              <PencilIcon />
+              编辑全部
+            </Button>
+          ) : null}
         </>
       }
       onOpenChange={onOpenChange}

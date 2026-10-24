@@ -15,12 +15,13 @@ import { cn } from "@medihub/ui/lib/utils";
 
 import { ConfirmDialog } from "#src/components/app-shell/ui/confirm-dialog.tsx";
 import { api } from "#src/lib/api.ts";
-import { formatBytes, formatDate, stageLabel } from "#src/lib/format.ts";
+import { formatDate, stageLabel } from "#src/lib/format.ts";
 
 import { AssetMetaDialog } from "./asset-meta-dialog.tsx";
 import { AssetPreview } from "./asset-preview.tsx";
 import { AssetThumb } from "./asset-thumb.tsx";
 import type { MediaAsset } from "./types.ts";
+import { useIsMobile } from "./use-is-mobile.ts";
 
 export interface AssetTimelineProps {
   admissionId?: string;
@@ -115,6 +116,7 @@ export const AssetTimeline = ({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
+  const isMobile = useIsMobile();
 
   const sourceIds = useMemo(
     () => assets.map((asset) => asset.id).join("|"),
@@ -228,14 +230,14 @@ export const AssetTimeline = ({
             </div>
           </header>
 
-          <ul className="space-y-2">
+          <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
             {group.items.map((asset) => {
               const date = dateOf(asset);
 
               return (
                 <li
                   key={asset.id}
-                  draggable
+                  draggable={!isMobile}
                   data-testid="asset-timeline-card"
                   onDragStart={(event) => {
                     setDragId(asset.id);
@@ -261,7 +263,7 @@ export const AssetTimeline = ({
                     handleDrop(asset.id);
                   }}
                   className={cn(
-                    "group border-border bg-background hover:border-primary/40 relative flex cursor-pointer items-start gap-3 rounded-lg border p-2.5 transition-all hover:shadow-sm",
+                    "group border-border bg-background hover:border-primary/40 relative flex min-w-0 cursor-pointer flex-col overflow-hidden rounded-lg border transition-all hover:shadow-sm",
                     dragId === asset.id && "opacity-50",
                     overId === asset.id &&
                       dragId !== asset.id &&
@@ -271,57 +273,40 @@ export const AssetTimeline = ({
                     setPreview(asset);
                   }}
                 >
-                  <GripVerticalIcon className="text-muted-foreground/60 mt-1 size-4 shrink-0 cursor-grab" />
-
-                  <div className="w-16 shrink-0">
-                    <span className="text-muted-foreground block text-[11px] font-medium tabular-nums">
-                      {date ? timeFormatter.format(date) : "—"}
-                    </span>
+                  <div className="relative w-full">
                     <AssetThumb
                       asset={asset}
-                      className="mt-1 aspect-square w-16"
+                      className="aspect-square w-full rounded-none"
                     />
+                    {isMobile ? null : (
+                      <GripVerticalIcon
+                        className="text-muted-foreground/70 absolute top-2 left-2 size-4 cursor-grab drop-shadow"
+                        data-testid="asset-timeline-drag-handle"
+                      />
+                    )}
                   </div>
 
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <p
-                        className="truncate text-sm font-medium"
-                        title={asset.originalName}
-                      >
-                        {asset.originalName}
-                      </p>
-                      <Badge variant="outline">{stageLabel(asset.stage)}</Badge>
-                      {asset.bodyPart ? (
-                        <span className="text-muted-foreground text-xs">
-                          {asset.bodyPart}
-                        </span>
-                      ) : null}
-                    </div>
-                    <p className="text-muted-foreground mt-0.5 truncate text-xs">
-                      {asset.ownerName
-                        ? `上传者 ${asset.ownerName}`
-                        : "上传者未知"}
-                      {typeof asset.byteSize === "number"
-                        ? ` · ${formatBytes(asset.byteSize)}`
-                        : ""}
+                  <div className="min-w-0 p-2">
+                    <p
+                      className="truncate text-xs font-medium"
+                      title={asset.originalName}
+                    >
+                      {asset.originalName}
                     </p>
-                    {asset.tags && asset.tags.length > 0 ? (
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {asset.tags.slice(0, 6).map((tag) => (
-                          <span
-                            key={tag}
-                            className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-[11px]"
-                          >
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
+                    <div className="text-muted-foreground mt-1 flex min-w-0 items-center gap-1 text-[11px]">
+                      <span className="shrink-0 tabular-nums">
+                        {date ? timeFormatter.format(date) : "—"}
+                      </span>
+                      <span aria-hidden="true">·</span>
+                      <span className="truncate">
+                        {stageLabel(asset.stage)}
+                        {asset.bodyPart ? ` · ${asset.bodyPart}` : ""}
+                      </span>
+                    </div>
                   </div>
 
                   <div
-                    className="flex shrink-0 items-center gap-0.5 opacity-100 transition-opacity sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100"
+                    className="bg-background/90 absolute top-1.5 right-1.5 z-10 flex items-center gap-0.5 rounded-md p-0.5 opacity-0 shadow-sm backdrop-blur transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 max-sm:opacity-100"
                     onClick={(event) => {
                       event.stopPropagation();
                     }}

@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-import { isAdminRole } from "#src/components/app-shell/roles.ts";
+import { isAdminRole, isOrglessRole } from "#src/components/app-shell/roles.ts";
 
 export interface NavItem {
   href: string;
@@ -19,6 +19,8 @@ export interface NavItem {
   icon: LucideIcon;
   /** 仅 root / dept_admin 可见 */
   adminOnly?: boolean;
+  /** 没有归属科室的账号（individual）看不到这个入口 */
+  orglessHidden?: boolean;
 }
 
 export interface NavGroup {
@@ -45,6 +47,8 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         label: "患者档案",
         description: "多次入院记录与影像时间线",
         icon: FolderHeart,
+        // 没有归属科室的账号不能使用患者档案，入口一并隐藏。
+        orglessHidden: true,
       },
     ],
   },
@@ -99,10 +103,23 @@ export const NAV_GROUPS: readonly NavGroup[] = [
 
 const ALL_NAV_ITEMS = NAV_GROUPS.flatMap((group) => group.items);
 
+const isVisibleItem = (item: NavItem, role: string | undefined) => {
+  if (item.adminOnly === true && !isAdminRole(role)) {
+    return false;
+  }
+
+  return !(item.orglessHidden === true && isOrglessRole(role));
+};
+
 /** 移动端底部标签栏：工作台 / 患者 / 资料库 / 分享，第五项「更多」由外壳提供。 */
 export const MOBILE_TABS: readonly NavItem[] = ALL_NAV_ITEMS.filter((item) =>
   ["/dashboard", "/patients", "/library", "/posts"].includes(item.href)
 );
+
+/** 按角色过滤后的底部标签：没有归属科室时去掉患者档案。 */
+export const visibleMobileTabs = (
+  role: string | undefined
+): readonly NavItem[] => MOBILE_TABS.filter((tab) => isVisibleItem(tab, role));
 
 export const visibleNavGroups = (
   role: string | undefined
@@ -110,9 +127,7 @@ export const visibleNavGroups = (
   const groups: NavGroup[] = [];
 
   for (const group of NAV_GROUPS) {
-    const items = group.items.filter(
-      (item) => item.adminOnly !== true || isAdminRole(role)
-    );
+    const items = group.items.filter((item) => isVisibleItem(item, role));
 
     if (items.length > 0) {
       groups.push({ label: group.label, items });

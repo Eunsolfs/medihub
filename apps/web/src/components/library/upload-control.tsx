@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useRouteContext } from "@tanstack/react-router";
 import { UploadIcon } from "lucide-react";
 import { useState } from "react";
 
@@ -11,6 +12,10 @@ import {
   SelectValue,
 } from "@medihub/ui/components/select";
 
+import {
+  getSessionRole,
+  isOrglessRole,
+} from "#src/components/app-shell/roles.ts";
 import type { LibrarySource } from "#src/components/library/library-source.ts";
 import { UploadButton } from "#src/components/media/index.ts";
 import { api } from "#src/lib/api.ts";
@@ -35,18 +40,41 @@ export const LibraryUpload = ({
   onUploaded,
   source,
 }: LibraryUploadProps) => {
+  const { session: routeSession } = useRouteContext({ from: "__root__" });
+  // 没有归属科室的账号后端一律拒绝上传，患者下拉也会 403，所以不发起任何请求。
+  const orgless = isOrglessRole(getSessionRole(routeSession));
   const [patientId, setPatientId] = useState("");
   const [sessionId, setSessionId] = useState("");
 
   const patientsQuery = useQuery({
     ...api.patients.options.queryOptions(),
-    enabled: source === "patients",
+    enabled: !orgless && source === "patients",
   });
 
   const sessionsQuery = useQuery({
     ...api.learning.list.queryOptions({ input: { page: 1, pageSize: 100 } }),
-    enabled: source === "sessions",
+    enabled: !orgless && source === "sessions",
   });
+
+  if (orgless) {
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          disabled
+          onClick={noopUpload}
+          size="sm"
+          title="当前账号没有归属科室，不能上传文件"
+          variant="outline"
+        >
+          <UploadIcon />
+          上传
+        </Button>
+        <span className="text-muted-foreground text-xs">
+          没有归属科室，暂不能上传
+        </span>
+      </div>
+    );
+  }
 
   if (source === "collections") {
     return (

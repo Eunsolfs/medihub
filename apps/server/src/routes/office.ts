@@ -148,6 +148,22 @@ const convertToPdf = async (id: string, sourcePath: string) => {
 };
 
 export const officeRoute = new Hono()
+  /**
+   * Office 集成就绪状态：前端据此显示「已配置 / 未配置」，
+   * 不必等到用户点开文档才发现预览或编辑不可用。
+   */
+  .get("/status", async (c) => {
+    const viewer = await viewerOf(c.req.raw);
+
+    if (!viewer) {
+      return c.json({ error: "请先登录" }, 401);
+    }
+
+    return c.json({
+      libreOffice: Boolean(env.SOFFICE_PATH),
+      onlyOffice: Boolean(env.ONLYOFFICE_URL && env.ONLYOFFICE_JWT_SECRET),
+    });
+  })
   /** 在线预览：能转 PDF 的走 PDF，转不了的交给前端本地渲染。 */
   .get("/:id/pdf", async (c) => {
     const id = c.req.param("id");

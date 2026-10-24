@@ -37,7 +37,8 @@ const Field = ({ label, value, multiline = false }: FieldProps) => (
 interface AdmissionHeaderProps {
   admission: AdmissionSummary;
   detail: AdmissionRecord | null;
-  canDelete: boolean;
+  /** 作者本人或管理员才显示编辑/删除。 */
+  canEdit: boolean;
   onEdit: () => void;
   onDelete: () => void;
   /** 打开「就诊全部资料」抽屉。 */
@@ -48,25 +49,25 @@ interface AdmissionHeaderProps {
 export const AdmissionHeader = ({
   admission,
   detail,
-  canDelete,
+  canEdit,
   onEdit,
   onDelete,
   onViewAll,
 }: AdmissionHeaderProps) => (
   <SectionCard
     action={
-      <div className="flex items-center gap-1">
-        <Button onClick={onEdit} size="sm" variant="outline">
-          <PencilIcon />
-          编辑
-        </Button>
-        {canDelete ? (
+      canEdit ? (
+        <div className="flex items-center gap-1">
+          <Button onClick={onEdit} size="sm" variant="outline">
+            <PencilIcon />
+            编辑
+          </Button>
           <Button onClick={onDelete} size="sm" variant="destructive">
             <Trash2Icon />
             删除
           </Button>
-        ) : null}
-      </div>
+        </div>
+      ) : null
     }
     contentClassName="grid gap-3"
     description={

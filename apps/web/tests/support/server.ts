@@ -8,6 +8,7 @@ import { retry } from "es-toolkit/function";
 
 import { createTestDatabase } from "@medihub/db/testing";
 
+import { seedDepartmentAdmin } from "./e2e-admin.ts";
 import { closeTestHttp } from "./http.ts";
 
 export const e2eBaseURL = `http://localhost:${process.env.E2E_TEST_PORT ?? "3200"}`;
@@ -114,6 +115,7 @@ export const startTestServer = async (baseURL: string) => {
       )
     );
     await waitForServer(`${baseURL}/api/health`);
+    await seedDepartmentAdmin(baseURL, database.url);
     await Promise.all(
       ["/", "/login", "/patients"].map(async (route) => {
         const response = await fetch(`${baseURL}${route}`);

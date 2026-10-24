@@ -23,6 +23,7 @@ import {
 } from "@medihub/ui/components/tabs";
 
 import { AuditPanel } from "#src/components/admin/audit-panel.tsx";
+import { OfficeStatusCard } from "#src/components/admin/office-status-card.tsx";
 import { OrgsPanel } from "#src/components/admin/orgs-panel.tsx";
 import { StoragePanel } from "#src/components/admin/storage-panel.tsx";
 import type { AdminViewer } from "#src/components/admin/types.ts";
@@ -131,6 +132,8 @@ const AdminPage = () => {
           你当前是全局管理员，可在顶部切换科室查看该科室的成员与存储配置；全局管理员账号本身不归属任何科室。
         </p>
       ) : null}
+
+      <OfficeStatusCard />
 
       <Tabs defaultValue="users">
         <TabsList

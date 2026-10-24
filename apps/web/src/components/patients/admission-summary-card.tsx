@@ -18,6 +18,8 @@ const collapseThreshold = 600;
 interface AdmissionSummaryCardProps {
   summary: string | null | undefined;
   isLoading?: boolean;
+  /** 作者本人或管理员才显示「编辑摘要 / 填写摘要」。 */
+  canEdit: boolean;
   onEdit: () => void;
   /** 打开「就诊全部资料」抽屉，看完整摘要与其它字段。 */
   onViewAll: () => void;
@@ -27,6 +29,7 @@ interface AdmissionSummaryCardProps {
 export const AdmissionSummaryCard = ({
   summary,
   isLoading = false,
+  canEdit,
   onEdit,
   onViewAll,
 }: AdmissionSummaryCardProps) => {
@@ -45,10 +48,12 @@ export const AdmissionSummaryCard = ({
       return (
         <div className="grid justify-items-start gap-2">
           <p className="text-muted-foreground text-sm">尚未填写病历摘要</p>
-          <Button onClick={onEdit} size="sm">
-            <PencilIcon />
-            填写摘要
-          </Button>
+          {canEdit ? (
+            <Button onClick={onEdit} size="sm">
+              <PencilIcon />
+              填写摘要
+            </Button>
+          ) : null}
         </div>
       );
     }
@@ -115,7 +120,7 @@ export const AdmissionSummaryCard = ({
   return (
     <SectionCard
       action={
-        hasContent ? (
+        hasContent && canEdit ? (
           <Button onClick={onEdit} size="sm" variant="outline">
             <PencilIcon />
             编辑摘要
@@ -123,7 +128,11 @@ export const AdmissionSummaryCard = ({
         ) : null
       }
       description={
-        hasContent ? "Markdown 渲染，可在对话框里继续补充" : undefined
+        hasContent
+          ? canEdit
+            ? "Markdown 渲染，可在对话框里继续补充"
+            : "Markdown 渲染"
+          : undefined
       }
       title="病历摘要"
     >

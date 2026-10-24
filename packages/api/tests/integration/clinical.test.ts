@@ -20,8 +20,10 @@ import {
  */
 describe("患者与就诊", () => {
   it("创建后能在自己的科室里看到，跨科室看不到", async () => {
-    const doctor = await signUp();
-    const other = await signUp();
+    const department = await signUpDepartment();
+    const doctor = department.client;
+    const otherDepartment = await signUpDepartment();
+    const other = otherDepartment.client;
 
     const created = await doctor.patients.create({
       gender: "female",
@@ -43,7 +45,8 @@ describe("患者与就诊", () => {
   });
 
   it("就诊记录按入院时间倒序返回", async () => {
-    const doctor = await signUp();
+    const department = await signUpDepartment();
+    const doctor = department.client;
     const created = await doctor.patients.create({ name: "时间线患者" });
 
     await doctor.admissions.create({
@@ -66,7 +69,8 @@ describe("患者与就诊", () => {
   });
 
   it("同科室成员不能删除别人创建的患者", async () => {
-    const owner = await signUp();
+    const department = await signUpDepartment();
+    const owner = department.client;
     const colleague = await signUp();
     const profile = await owner.me.profile();
 
@@ -100,7 +104,7 @@ describe("患者与就诊", () => {
   });
 
   it("同科室成员看不到别人建档的患者，管理员可以看到", async () => {
-    const ownerAccount = await signUpAccount();
+    const ownerAccount = await signUpDepartment();
     const colleagueAccount = await signUpAccount();
     const owner = ownerAccount.client;
     const profile = await owner.me.profile();
@@ -191,7 +195,8 @@ describe("患者与就诊", () => {
 
 describe("素材", () => {
   it("软删除后不再出现在列表里", async () => {
-    const doctor = await signUp();
+    const department = await signUpDepartment();
+    const doctor = department.client;
     const profile = await doctor.me.profile();
 
     if (!profile?.viewer.organizationId) {
@@ -545,6 +550,9 @@ describe("无科室账号", () => {
     await expect(
       visitor.learning.create({ heldAt: new Date(), title: "无科室会议" })
     ).rejects.toThrow();
+    await expect(
+      visitor.patients.create({ name: "无科室患者" })
+    ).rejects.toThrow();
 
     const author = await signUpDepartment("dept_admin");
 
@@ -569,7 +577,8 @@ describe("无科室账号", () => {
 
 describe("数据库约束", () => {
   it("就诊出院时间早于入院时间会被拒绝", async () => {
-    const doctor = await signUp();
+    const department = await signUpDepartment();
+    const doctor = department.client;
     const created = await doctor.patients.create({ name: "约束患者" });
 
     await expect(

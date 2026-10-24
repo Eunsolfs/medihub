@@ -400,14 +400,11 @@ export const filesRoute = new Hono()
       return c.json({ error: "请先登录" }, 401);
     }
 
-    // 无科室账号（个人空间）只能上传患者资料，不能往科室资料库塞文件。
-    if (
-      viewer.role === "individual" &&
-      !(c.req.query("patientId") ?? c.req.query("admissionId"))
-    ) {
+    // 没有归属科室的账号不允许上传任何文件（临床资料与科室资料库都需要科室归属）。
+    if (viewer.role === "individual") {
       return c.json(
         {
-          error: "当前账号没有归属科室，只能上传患者资料；请联系管理员分配科室",
+          error: "当前账号没有归属科室，不能上传文件；请联系管理员分配科室",
         },
         403
       );

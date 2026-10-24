@@ -14,6 +14,10 @@ import {
   SelectValue,
 } from "@medihub/ui/components/select";
 
+import {
+  getSessionRole,
+  isOrglessRole,
+} from "#src/components/app-shell/roles.ts";
 import { DataTableShell } from "#src/components/app-shell/ui/data-table-shell.tsx";
 import type { DataTableColumn } from "#src/components/app-shell/ui/data-table-shell.tsx";
 import { EmptyState } from "#src/components/app-shell/ui/empty-state.tsx";
@@ -21,6 +25,7 @@ import { PageHeader } from "#src/components/app-shell/ui/page-header.tsx";
 import { PaginationBar } from "#src/components/app-shell/ui/pagination-bar.tsx";
 import { SkeletonTable } from "#src/components/app-shell/ui/skeletons.tsx";
 import { describePatient, pageSize } from "#src/components/patients/display.ts";
+import { PatientsOrgRequired } from "#src/components/patients/org-required.tsx";
 import { PatientFormDialog } from "#src/components/patients/patient-form-dialog.tsx";
 import { PatientStatusBadge } from "#src/components/patients/patient-status-badge.tsx";
 import { PatientsErrorState } from "#src/components/patients/patients-error-state.tsx";
@@ -420,7 +425,7 @@ const PatientStats = () => {
   );
 };
 
-const PatientsPage = () => {
+const PatientsPageContent = () => {
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const viewer = useViewer();
@@ -494,6 +499,17 @@ const PatientsPage = () => {
   );
 };
 
+/** 没有归属科室的账号连页面都不进：直接渲染拦截页，loader 也已跳过请求。 */
+const PatientsPage = () => {
+  const viewer = useViewer();
+
+  if (isOrglessRole(viewer.role)) {
+    return <PatientsOrgRequired />;
+  }
+
+  return <PatientsPageContent />;
+};
+
 const PatientsRouteError = ({ error }: ErrorComponentProps) => {
   const router = useRouter();
 
@@ -523,6 +539,11 @@ export const Route = createFileRoute("/_authenticated/patients/")({
     tag: search.tag,
   }),
   loader: async ({ context, deps }) => {
+    // 没有归属科室的账号：不发任何患者档案请求，组件直接渲染拦截页。
+    if (isOrglessRole(getSessionRole(context.session))) {
+      return;
+    }
+
     await context.queryClient.query(patientListOptions(deps));
   },
   validateSearch,

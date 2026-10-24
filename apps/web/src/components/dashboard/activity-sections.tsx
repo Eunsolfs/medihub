@@ -135,40 +135,58 @@ const QUICK_ACTIONS: readonly QuickAction[] = [
   },
 ];
 
-/** 工作台右侧的高频入口：写操作永远比统计数字更值得占据视线。 */
-export const QuickActions = () => (
-  <ul className="grid gap-1">
-    {QUICK_ACTIONS.map((action) => {
-      const Icon = action.icon;
+interface QuickActionsProps {
+  /** 没有归属科室的账号：患者档案与上传都不可用，只留下能用的入口 */
+  orgless?: boolean;
+}
 
-      return (
-        <li key={action.href}>
-          <a
-            className="hover:bg-muted/60 group flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors"
-            href={action.href}
-          >
-            <span
-              aria-hidden="true"
-              className="bg-accent text-accent-foreground grid size-9 shrink-0 place-items-center rounded-lg"
-            >
-              <Icon className="size-4" />
-            </span>
-            <span className="grid min-w-0 flex-1 gap-0.5">
-              <span className="text-sm font-medium">{action.label}</span>
-              <span className="text-muted-foreground truncate text-xs">
-                {action.description}
-              </span>
-            </span>
-            <ArrowRightIcon
-              aria-hidden="true"
-              className="text-muted-foreground/60 group-hover:text-foreground size-4 shrink-0 transition-colors"
-            />
-          </a>
-        </li>
-      );
-    })}
-  </ul>
-);
+/** 工作台右侧的高频入口：写操作永远比统计数字更值得占据视线。 */
+export const QuickActions = ({ orgless = false }: QuickActionsProps) => {
+  const actions = orgless
+    ? QUICK_ACTIONS.filter((action) => action.href === "/posts/new")
+    : QUICK_ACTIONS;
+
+  return (
+    <div className="grid gap-2">
+      <ul className="grid gap-1">
+        {actions.map((action) => {
+          const Icon = action.icon;
+
+          return (
+            <li key={action.href}>
+              <a
+                className="hover:bg-muted/60 group flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors"
+                href={action.href}
+              >
+                <span
+                  aria-hidden="true"
+                  className="bg-accent text-accent-foreground grid size-9 shrink-0 place-items-center rounded-lg"
+                >
+                  <Icon className="size-4" />
+                </span>
+                <span className="grid min-w-0 flex-1 gap-0.5">
+                  <span className="text-sm font-medium">{action.label}</span>
+                  <span className="text-muted-foreground truncate text-xs">
+                    {action.description}
+                  </span>
+                </span>
+                <ArrowRightIcon
+                  aria-hidden="true"
+                  className="text-muted-foreground/60 group-hover:text-foreground size-4 shrink-0 transition-colors"
+                />
+              </a>
+            </li>
+          );
+        })}
+      </ul>
+      {orgless ? (
+        <p className="text-muted-foreground text-xs text-pretty">
+          分配科室后，患者档案与资料上传会自动可用。
+        </p>
+      ) : null}
+    </div>
+  );
+};
 
 interface StorageBreakdownProps {
   counts: {

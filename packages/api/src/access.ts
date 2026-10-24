@@ -87,7 +87,7 @@ export const canAccessPatient = (
   viewer: Viewer,
   record: { createdBy?: string | null; organizationId?: string }
 ) => {
-  if (isAdminRole(viewer.role)) {
+  if (viewer.role === "root") {
     return true;
   }
 
@@ -95,11 +95,28 @@ export const canAccessPatient = (
     return true;
   }
 
-  return (
-    viewer.role === "individual" &&
-    record.organizationId !== undefined &&
-    record.organizationId === viewer.organizationId
-  );
+  // 科室管理员只能管本科室的患者；跨科室一律按不存在处理。
+  if (viewer.role === "dept_admin") {
+    return (
+      record.organizationId !== undefined &&
+      record.organizationId === viewer.organizationId
+    );
+  }
+
+  return false;
+};
+
+/**
+ * 没有归属科室的账号不能使用患者档案与上传：临床数据必须有科室归属。
+ */
+export const canUseClinical = (viewer: Viewer) => viewer.role !== "individual";
+
+export const requireClinicalRights = (viewer: Viewer) => {
+  if (!canUseClinical(viewer)) {
+    throw new ORPCError("FORBIDDEN", {
+      message: "当前账号没有归属科室，不能使用患者档案；请联系管理员分配科室",
+    });
+  }
 };
 
 /** 患者档案列表的过滤条件：非管理员只能看到自己建档的患者。 */

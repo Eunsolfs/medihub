@@ -7,6 +7,13 @@ const ADMIN_ROLES = ["root", "dept_admin"] as const;
 export const isAdminRole = (role: string | undefined): boolean =>
   ADMIN_ROLES.some((adminRole) => adminRole === role);
 
+/**
+ * 没有归属科室的账号（注册后落在个人空间）：患者档案与上传一律不可用。
+ * 这是产品口径上的硬拦截，不是只读提示。
+ */
+export const isOrglessRole = (role: string | undefined): boolean =>
+  role === "individual";
+
 type SessionLike = { user: object | null } | null | undefined;
 
 /**

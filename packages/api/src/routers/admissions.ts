@@ -7,7 +7,12 @@ import { asset } from "@medihub/db/schema/content";
 import { admission, admissionKind, patient } from "@medihub/db/schema/patients";
 
 import type { Viewer } from "#src/access.ts";
-import { canAccessPatient, canDelete, organizationIdOf } from "#src/access.ts";
+import {
+  canAccessPatient,
+  canDelete,
+  organizationIdOf,
+  requireClinicalRights,
+} from "#src/access.ts";
 import { organizationProcedure } from "#src/procedures.ts";
 
 const admissionInput = z.object({
@@ -69,6 +74,8 @@ export const admissionsRouter = {
         throw new ORPCError("UNAUTHORIZED");
       }
 
+      requireClinicalRights(viewer);
+
       await requirePatient(context, organizationId, input.patientId, viewer);
 
       return await context.db
@@ -105,6 +112,8 @@ export const admissionsRouter = {
       if (!viewer) {
         throw new ORPCError("UNAUTHORIZED");
       }
+
+      requireClinicalRights(viewer);
 
       const [row] = await context.db
         .select()
@@ -147,6 +156,8 @@ export const admissionsRouter = {
       if (!viewer) {
         throw new ORPCError("UNAUTHORIZED");
       }
+
+      requireClinicalRights(viewer);
 
       await requirePatient(context, organizationId, input.patientId, viewer);
 
@@ -193,6 +204,8 @@ export const admissionsRouter = {
       if (!viewer) {
         throw new ORPCError("UNAUTHORIZED");
       }
+
+      requireClinicalRights(viewer);
 
       const [existing] = await context.db
         .select({ patientId: admission.patientId })
@@ -270,6 +283,8 @@ export const admissionsRouter = {
       if (!viewer) {
         throw new ORPCError("UNAUTHORIZED");
       }
+
+      requireClinicalRights(viewer);
 
       const [existing] = await context.db
         .select({

@@ -22,6 +22,10 @@ import { toast } from "sonner";
 
 import { Button } from "@medihub/ui/components/button";
 
+import {
+  getSessionRole,
+  isOrglessRole,
+} from "#src/components/app-shell/roles.ts";
 import { ConfirmDialog } from "#src/components/app-shell/ui/confirm-dialog.tsx";
 import { PageHeader } from "#src/components/app-shell/ui/page-header.tsx";
 import { AdmissionFormDialog } from "#src/components/patients/admission-form-dialog.tsx";
@@ -30,6 +34,7 @@ import { AdmissionList } from "#src/components/patients/admission-list.tsx";
 import { AdmissionRecordSheet } from "#src/components/patients/admission-record-sheet.tsx";
 import { AdmissionSummaryCard } from "#src/components/patients/admission-summary-card.tsx";
 import { describePatient } from "#src/components/patients/display.ts";
+import { PatientsOrgRequired } from "#src/components/patients/org-required.tsx";
 import { PatientFormDialog } from "#src/components/patients/patient-form-dialog.tsx";
 import { PatientInfoCard } from "#src/components/patients/patient-info-card.tsx";
 import { PatientMediaPanel } from "#src/components/patients/patient-media-panel.tsx";
@@ -37,7 +42,7 @@ import { PatientRecordSheet } from "#src/components/patients/patient-record-shee
 import { PatientStatusBadge } from "#src/components/patients/patient-status-badge.tsx";
 import { PatientsErrorState } from "#src/components/patients/patients-error-state.tsx";
 import {
-  canDeleteRecord,
+  canEditRecord,
   useViewer,
 } from "#src/components/patients/use-viewer.ts";
 import { api } from "#src/lib/api.ts";
@@ -62,7 +67,7 @@ const patientsListSearch = {
   tag: "",
 } as const;
 
-const PatientDetailPage = () => {
+const PatientDetailContent = () => {
   const { patientId } = Route.useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -132,13 +137,13 @@ const PatientDetailPage = () => {
     })
   );
 
-  const canDeletePatient = canDeleteRecord({
+  const canEditPatient = canEditRecord({
     createdBy: patient.createdBy,
     role: viewer.role,
     viewerId: viewer.id,
   });
 
-  const canDeleteAdmission = canDeleteRecord({
+  const canEditAdmission = canEditRecord({
     createdBy: admissionDetail?.createdBy,
     role: viewer.role,
     viewerId: viewer.id,
@@ -163,25 +168,25 @@ const PatientDetailPage = () => {
 
       <PageHeader
         actions={
-          <>
-            <Button
-              onClick={() => {
-                setAdmissionDialog({ admissionId: null, open: true });
-              }}
-            >
-              <PlusIcon />
-              新建就诊
-            </Button>
-            <Button
-              onClick={() => {
-                setEditOpen(true);
-              }}
-              variant="outline"
-            >
-              <PencilIcon />
-              编辑档案
-            </Button>
-            {canDeletePatient ? (
+          canEditPatient ? (
+            <>
+              <Button
+                onClick={() => {
+                  setAdmissionDialog({ admissionId: null, open: true });
+                }}
+              >
+                <PlusIcon />
+                新建就诊
+              </Button>
+              <Button
+                onClick={() => {
+                  setEditOpen(true);
+                }}
+                variant="outline"
+              >
+                <PencilIcon />
+                编辑档案
+              </Button>
               <Button
                 onClick={() => {
                   setDeleteOpen(true);
@@ -191,8 +196,8 @@ const PatientDetailPage = () => {
                 <Trash2Icon />
                 删除档案
               </Button>
-            ) : null}
-          </>
+            </>
+          ) : null
         }
         description={patient.summary ?? "尚未填写诊断摘要"}
         meta={
@@ -231,7 +236,7 @@ const PatientDetailPage = () => {
           {selectedAdmission ? (
             <AdmissionHeader
               admission={selectedAdmission}
-              canDelete={canDeleteAdmission}
+              canEdit={canEditAdmission}
               detail={admissionDetail}
               onDelete={() => {
                 setRemoveAdmissionOpen(true);
@@ -250,6 +255,7 @@ const PatientDetailPage = () => {
 
           {selectedAdmission ? (
             <AdmissionSummaryCard
+              canEdit={canEditAdmission}
               isLoading={admissionDetailQuery.isPending}
               key={`summary-${selectedAdmission.id}`}
               onEdit={() => {
@@ -330,6 +336,7 @@ const PatientDetailPage = () => {
 
       <AdmissionRecordSheet
         admission={selectedAdmission}
+        canEdit={canEditAdmission}
         isLoading={Boolean(selectedAdmission) && admissionDetailQuery.isPending}
         onEdit={() => {
           setRecordSheet(null);
@@ -346,6 +353,7 @@ const PatientDetailPage = () => {
       />
 
       <PatientRecordSheet
+        canEdit={canEditPatient}
         onEdit={() => {
           setRecordSheet(null);
           setEditOpen(true);
@@ -358,6 +366,17 @@ const PatientDetailPage = () => {
       />
     </div>
   );
+};
+
+/** 没有归属科室的账号连页面都不进：loader 已跳过请求，这里直接渲染拦截页。 */
+const PatientDetailPage = () => {
+  const viewer = useViewer();
+
+  if (isOrglessRole(viewer.role)) {
+    return <PatientsOrgRequired />;
+  }
+
+  return <PatientDetailContent />;
 };
 
 const PatientDetailRouteError = ({ error }: ErrorComponentProps) => {
@@ -382,6 +401,11 @@ export const Route = createFileRoute("/_authenticated/patients/$patientId")({
   component: PatientDetailPage,
   errorComponent: PatientDetailRouteError,
   loader: async ({ context, params }) => {
+    // 没有归属科室的账号：不发任何患者档案请求。
+    if (isOrglessRole(getSessionRole(context.session))) {
+      return;
+    }
+
     await context.queryClient.query(
       api.patients.get.queryOptions({ input: { id: params.patientId } })
     );

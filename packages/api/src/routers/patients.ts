@@ -16,6 +16,7 @@ import {
   canDelete,
   canSeeAllPatients,
   organizationIdOf,
+  requireClinicalRights,
 } from "#src/access.ts";
 import { organizationProcedure } from "#src/procedures.ts";
 
@@ -55,6 +56,8 @@ export const patientsRouter = {
       if (!viewer) {
         throw new ORPCError("UNAUTHORIZED");
       }
+
+      requireClinicalRights(viewer);
 
       const filters: SQL[] = [eq(patient.organizationId, organizationId)];
 
@@ -133,6 +136,8 @@ export const patientsRouter = {
       throw new ORPCError("UNAUTHORIZED");
     }
 
+    requireClinicalRights(viewer);
+
     return await context.db
       .select({
         id: patient.id,
@@ -161,6 +166,8 @@ export const patientsRouter = {
       if (!viewer) {
         throw new ORPCError("UNAUTHORIZED");
       }
+
+      requireClinicalRights(viewer);
 
       const [row] = await context.db
         .select()
@@ -208,6 +215,8 @@ export const patientsRouter = {
         throw new ORPCError("UNAUTHORIZED");
       }
 
+      requireClinicalRights(viewer);
+
       const [created] = await context.db
         .insert(patient)
         .values({
@@ -243,6 +252,8 @@ export const patientsRouter = {
       if (!viewer) {
         throw new ORPCError("UNAUTHORIZED");
       }
+
+      requireClinicalRights(viewer);
 
       const [existing] = await context.db
         .select({
@@ -305,6 +316,8 @@ export const patientsRouter = {
       if (!viewer) {
         throw new ORPCError("UNAUTHORIZED");
       }
+
+      requireClinicalRights(viewer);
 
       const [existing] = await context.db
         .select({ createdBy: patient.createdBy })

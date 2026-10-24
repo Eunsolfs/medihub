@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouteContext } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -21,6 +22,10 @@ import {
   SelectValue,
 } from "@medihub/ui/components/select";
 
+import {
+  getSessionRole,
+  isOrglessRole,
+} from "#src/components/app-shell/roles.ts";
 import type { ExportKind } from "#src/components/exports/exports-api.ts";
 import { api } from "#src/lib/api.ts";
 import { formatDate } from "#src/lib/format.ts";
@@ -37,9 +42,6 @@ const KIND_OPTIONS: readonly {
   { hint: "按学习会议归档资料打包", label: "会议", value: "session" },
 ];
 
-const isExportKind = (value: string): value is ExportKind =>
-  KIND_OPTIONS.some((option) => option.value === value);
-
 interface ExportCreateDialogProps {
   onOpenChange: (open: boolean) => void;
   open: boolean;
@@ -52,7 +54,23 @@ interface ExportCreateBodyProps {
 /** 表单主体：每次打开重新挂载，默认值写在初值里，省掉重置副作用。 */
 const ExportCreateBody = ({ onClose }: ExportCreateBodyProps) => {
   const queryClient = useQueryClient();
-  const [kind, setKind] = useState<ExportKind>("patient");
+  const { session: routeSession } = useRouteContext({ from: "__root__" });
+  // 没有归属科室的账号拿不到患者/就诊数据，直接不提供这两类导出。
+  const orgless = isOrglessRole(getSessionRole(routeSession));
+
+  const kindOptions = orgless
+    ? KIND_OPTIONS.filter(
+        (option) => option.value === "selection" || option.value === "post"
+      )
+    : KIND_OPTIONS;
+
+  const isAllowedKind = (candidate: string): candidate is ExportKind =>
+    kindOptions.some((option) => option.value === candidate);
+
+  const [kind, setKind] = useState<ExportKind>(
+    orgless ? "selection" : "patient"
+  );
+
   const [patientId, setPatientId] = useState("");
   const [admissionId, setAdmissionId] = useState("");
   const [sessionId, setSessionId] = useState("");
@@ -60,7 +78,8 @@ const ExportCreateBody = ({ onClose }: ExportCreateBodyProps) => {
   const [assetIds, setAssetIds] = useState<string[]>([]);
   const [includeFiles, setIncludeFiles] = useState(true);
 
-  const needsPatients = kind === "patient" || kind === "admission";
+  const needsPatients =
+    !orgless && (kind === "patient" || kind === "admission");
 
   const patientsQuery = useQuery({
     ...api.patients.list.queryOptions({ input: { page: 1, pageSize: 100 } }),
@@ -69,7 +88,7 @@ const ExportCreateBody = ({ onClose }: ExportCreateBodyProps) => {
 
   const admissionsQuery = useQuery({
     ...api.admissions.listByPatient.queryOptions({ input: { patientId } }),
-    enabled: kind === "admission" && patientId.length > 0,
+    enabled: !orgless && kind === "admission" && patientId.length > 0,
   });
 
   const sessionsQuery = useQuery({
@@ -162,12 +181,12 @@ const ExportCreateBody = ({ onClose }: ExportCreateBodyProps) => {
         <div className="grid gap-2">
           <Label htmlFor="export-kind">导出类型</Label>
           <Select
-            items={KIND_OPTIONS.map((option) => ({
+            items={kindOptions.map((option) => ({
               label: `${option.label} · ${option.hint}`,
               value: option.value,
             }))}
             onValueChange={(value) => {
-              if (typeof value === "string" && isExportKind(value)) {
+              if (typeof value === "string" && isAllowedKind(value)) {
                 setKind(value);
               }
             }}
@@ -177,13 +196,18 @@ const ExportCreateBody = ({ onClose }: ExportCreateBodyProps) => {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {KIND_OPTIONS.map((option) => (
+              {kindOptions.map((option) => (
                 <SelectItem key={option.value} value={option.value}>
                   {option.label} · {option.hint}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+          {orgless ? (
+            <p className="text-muted-foreground text-xs">
+              没有归属科室时只能导出资料库素材或文章附件；患者与就诊导出需先分配科室。
+            </p>
+          ) : null}
         </div>
 
         {needsPatients ? (
