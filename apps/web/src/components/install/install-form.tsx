@@ -270,6 +270,13 @@ export const InstallForm = ({ status, onSuccess }: InstallFormProps) => {
                     placeholder="https://office.example.com"
                     value={onlyOfficeUrl}
                   />
+                  <p className="text-muted-foreground text-xs leading-5">
+                    在 1Panel「应用商店 → 已安装」打开 OnlyOffice 应用，用它的
+                    <span className="font-medium"> 访问地址 </span>
+                    （形如 <code>https://office.example.com</code> 或{" "}
+                    <code>http://服务器IP:8080</code>，不带路径）。
+                    浏览器打开「地址 + /healthcheck」返回 true 即为可用。
+                  </p>
                 </div>
 
                 <div className="grid gap-2">
@@ -284,6 +291,11 @@ export const InstallForm = ({ status, onSuccess }: InstallFormProps) => {
                     type="password"
                     value={onlyOfficeJwtSecret}
                   />
+                  <p className="text-muted-foreground text-xs leading-5">
+                    在 OnlyOffice 应用详情 →「环境变量 / 参数」里找{" "}
+                    <code>JWT_SECRET</code>（安装时自动生成的一长串）。
+                    也可先留空，装好后到「系统管理 → Office 集成」再配。
+                  </p>
                 </div>
               </div>
             ) : null}

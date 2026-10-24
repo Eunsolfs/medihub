@@ -70,6 +70,38 @@ ONLYOFFICE_JWT_SECRET="和 Document Server 里一致的 JWT 密钥"
 > OnlyOffice 也要能通过 `BETTER_AUTH_URL` 拉取文档。若两者不在同一台机器，
 > 请把 `ONLYOFFICE_URL` 填成 OnlyOffice 可访问、且本站也可访问的地址。
 
+### 地址与密钥怎么找
+
+**Document Server 地址**：就是 OnlyOffice 自己的访问地址，不是医档通的地址。
+
+- 1Panel：「应用商店 → 已安装 → OnlyOffice」，详情里的「访问地址 / 端口」即是；
+  形如 `https://office.example.com` 或 `http://服务器IP:8080`，**不要带路径**。
+- 命令行（同一台机器）：
+
+  ```bash
+  docker ps --format '{{.Names}}\t{{.Ports}}' | grep -i onlyoffice
+  # 例如 0.0.0.0:8080->80/tcp，则地址是 http://服务器IP:8080
+  curl -fsS http://127.0.0.1:8080/healthcheck   # 返回 true 即可用
+  ```
+
+**JWT 密钥**：与 Document Server 的 `JWT_SECRET` 必须一致。
+
+- 1Panel：OnlyOffice 应用详情 →「环境变量 / 参数」，找 `JWT_SECRET`（安装时自动生成）；
+- 命令行：
+
+  ```bash
+  docker exec <onlyoffice容器名> env | grep -i jwt
+  ```
+
+- 也可以先留空：安装完成后到「系统管理 → Office 集成」看状态，再决定要不要配。
+
+**常见坑**：
+
+- 填了 `http://127.0.0.1:8080` 在**另一台机器**上不成立——OnlyOffice 和医档通不在同一容器/主机时，
+  必须填双方都能访问的地址；
+- 主站是 HTTPS、编辑器是 HTTP 时，浏览器会按混合内容拦截（白屏），需要给 OnlyOffice 也配 HTTPS；
+- 改完 `.env` 后必须 `systemctl restart medihub`，否则状态卡片仍显示「未配置」。
+
 ## 日常升级
 
 - 界面：root 登录 → 系统管理 → 版本与升级 → 检查更新 → 升级（失败自动回滚）；
