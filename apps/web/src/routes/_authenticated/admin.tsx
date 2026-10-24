@@ -27,6 +27,7 @@ import { OfficeStatusCard } from "#src/components/admin/office-status-card.tsx";
 import { OrgsPanel } from "#src/components/admin/orgs-panel.tsx";
 import { StoragePanel } from "#src/components/admin/storage-panel.tsx";
 import type { AdminViewer } from "#src/components/admin/types.ts";
+import { UpdateCard } from "#src/components/admin/update-card.tsx";
 import { UsersPanel } from "#src/components/admin/users-panel.tsx";
 import { isAdminRole } from "#src/components/app-shell/roles.ts";
 import { EmptyState } from "#src/components/app-shell/ui/empty-state.tsx";
@@ -133,7 +134,14 @@ const AdminPage = () => {
         </p>
       ) : null}
 
-      <OfficeStatusCard />
+      {isRoot ? (
+        <div className="grid gap-4 xl:grid-cols-2">
+          <OfficeStatusCard />
+          <UpdateCard />
+        </div>
+      ) : (
+        <OfficeStatusCard />
+      )}
 
       <Tabs defaultValue="users">
         <TabsList

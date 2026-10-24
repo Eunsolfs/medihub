@@ -1,4 +1,4 @@
-import { cp, rm, stat } from "node:fs/promises";
+import { copyFile, cp, mkdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
 /**
@@ -26,3 +26,12 @@ await rm(target, { force: true, recursive: true });
 await cp(source, target, { recursive: true });
 
 console.log(`SPA 已复制到 ${path.relative(process.cwd(), target)}`);
+
+// 升级执行器随构建产物一起发布，线上 dist 自包含，不依赖仓库其它目录。
+const distScripts = path.resolve(here, "../dist/scripts");
+await mkdir(distScripts, { recursive: true });
+await copyFile(
+  path.resolve(here, "updater.mjs"),
+  path.join(distScripts, "updater.mjs")
+);
+console.log("升级执行器已复制到 dist/scripts/updater.mjs");

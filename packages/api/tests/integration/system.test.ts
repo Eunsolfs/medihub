@@ -21,6 +21,7 @@ import {
 
 import type { Context, StorageAccess } from "#src/context.ts";
 import { appRouter } from "#src/index.ts";
+import type { UpdaterAccess } from "#src/update.ts";
 
 const { db, remove } = await createTestDatabase();
 
@@ -416,5 +417,145 @@ describe("storage", () => {
     await expect(
       admin.client.storage.remove({ id: target.id })
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+});
+
+const withUpdater = (
+  updater: UpdaterAccess | undefined,
+  session: Context["session"] = null,
+  version = "1.0.0"
+) =>
+  createRouterClient(appRouter, {
+    context: {
+      db,
+      session,
+      storage,
+      updater,
+      version,
+    },
+  });
+
+const fakeUpdater = (
+  options: {
+    canRollback?: boolean;
+    phase?: "idle" | "succeeded" | "failed";
+  } = {}
+): UpdaterAccess => ({
+  canRollback: async () => {
+    await Promise.resolve();
+
+    return options.canRollback ?? false;
+  },
+  checkLatest: async () => {
+    await Promise.resolve();
+
+    return {
+      latestVersion: "9.9.9",
+      url: "https://example.com/release",
+    };
+  },
+  rollback: async () => {
+    await Promise.resolve();
+
+    return {
+      mode: "rollback" as const,
+      phase: "running" as const,
+      startedAt: Date.now(),
+    };
+  },
+  start: async (targetVersion) => {
+    await Promise.resolve();
+
+    return {
+      mode: "upgrade" as const,
+      phase: "running" as const,
+      startedAt: Date.now(),
+      targetVersion,
+    };
+  },
+  state: async () => {
+    await Promise.resolve();
+
+    return { phase: options.phase ?? "idle" };
+  },
+});
+
+const sessionOf = async (cookie: string) =>
+  await auth.api.getSession({ headers: new Headers({ cookie }) });
+
+describe("system.update", () => {
+  it("只有 root 能查看升级状态", async () => {
+    const root = await signInAs("root", null);
+    const department = await createOrganization("升级测试科室");
+    const admin = await signInAs("dept_admin", department.id);
+    const anonymous = withUpdater(fakeUpdater());
+
+    const status = await withUpdater(
+      fakeUpdater(),
+      await sessionOf(root.cookie)
+    ).system.updateStatus();
+
+    expect(status.enabled).toBe(true);
+    expect(status.currentVersion).toBe("1.0.0");
+    expect(status.latest.latestVersion).toBe("9.9.9");
+
+    await expect(admin.client.system.updateStatus()).rejects.toThrow();
+    await expect(anonymous.system.updateStatus()).rejects.toThrow();
+  });
+
+  it("未配置升级时状态显示 enabled=false", async () => {
+    const root = await signInAs("root", null);
+
+    const status = await withUpdater(
+      undefined,
+      await sessionOf(root.cookie)
+    ).system.updateStatus();
+
+    expect(status.enabled).toBe(false);
+    expect(status.canRollback).toBe(false);
+  });
+
+  it("root 可以发起升级与回滚，非 root 被拒绝", async () => {
+    const root = await signInAs("root", null);
+    const department = await createOrganization("升级操作科室");
+    const admin = await signInAs("dept_admin", department.id);
+
+    const client = withUpdater(
+      fakeUpdater({ canRollback: true }),
+      await sessionOf(root.cookie)
+    );
+
+    await expect(
+      client.system.startUpdate({ targetVersion: "1.1.0" })
+    ).resolves.toMatchObject({ phase: "running", targetVersion: "1.1.0" });
+
+    await expect(client.system.rollbackUpdate()).resolves.toMatchObject({
+      phase: "running",
+    });
+
+    await expect(
+      admin.client.system.startUpdate({ targetVersion: "1.1.0" })
+    ).rejects.toThrow();
+    await expect(admin.client.system.rollbackUpdate()).rejects.toThrow();
+  });
+
+  it("拒绝升级到当前版本，且没有备份时不能回滚", async () => {
+    const root = await signInAs("root", null);
+    const client = withUpdater(fakeUpdater(), await sessionOf(root.cookie));
+
+    await expect(
+      client.system.startUpdate({ targetVersion: "1.0.0" })
+    ).rejects.toThrow();
+    await expect(client.system.rollbackUpdate()).rejects.toThrow();
+  });
+
+  it("未注入 updater 时启动与回滚都被拒绝", async () => {
+    const root = await signInAs("root", null);
+    const client = withUpdater(undefined, await sessionOf(root.cookie));
+
+    await expect(
+      client.system.startUpdate({ targetVersion: "1.1.0" })
+    ).rejects.toThrow();
+    await expect(client.system.rollbackUpdate()).rejects.toThrow();
   });
 });

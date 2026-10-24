@@ -9,6 +9,7 @@ import { appRouter } from "@medihub/api";
 import type { Context } from "@medihub/api";
 
 import { auth, db, storage } from "#src/context.ts";
+import { updater, updaterEnabled } from "#src/updater.ts";
 import { appVersion } from "#src/version.ts";
 
 const logServerError = (cause: unknown) => {
@@ -36,6 +37,7 @@ const mount =
         scopeOrganizationId,
         storage,
         version: appVersion,
+        ...(updaterEnabled() ? { updater } : {}),
       },
       prefix,
     });

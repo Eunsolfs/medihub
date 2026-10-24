@@ -3,6 +3,7 @@ import type { Database } from "@medihub/db";
 import type { StorageDriver, StorageTargetLike } from "@medihub/storage";
 
 import type { Viewer } from "#src/access.ts";
+import type { UpdaterAccess } from "#src/update.ts";
 
 /** 服务端注入的存储访问器：密钥留在 apps/server，api 包只拿驱动实例。 */
 export interface StorageAccess {
@@ -17,6 +18,8 @@ export interface Context {
   db: Database;
   session: Session | null;
   storage?: StorageAccess;
+  /** 在线升级执行器；未配置时 updater 为 undefined。 */
+  updater?: UpdaterAccess;
   /** 由 `protectedProcedure` 注入：已归一化的当前用户。 */
   viewer?: Viewer;
   /**

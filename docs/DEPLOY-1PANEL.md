@@ -976,6 +976,14 @@ curl -I https://medihub.example.com/
 
 ## 13. 升级与回滚
 
+本节是**命令行手工流程**，适合改过配置、看过源码、或在线升级不可用时使用。
+
+> 已经在跑稳定版本、只想换版本号？优先用内置的在线升级：
+> **系统管理 → 版本与升级**（仅 root 可见），一键完成备份、构建、迁移、切换、重启与健康检查，
+> 失败会自动回滚。配置与注意事项见 [UPGRADE.md](./UPGRADE.md)。
+> 两种方式**不要混用**（在线升级只替换 `apps/server/dist`，不更新源码，见
+> [UPGRADE.md §10.2](./UPGRADE.md#102-与手工升级流程的关系)）。
+
 ### 13.1 升级（标准流程）
 
 ```bash
@@ -1082,6 +1090,8 @@ Drizzle 的迁移是**单向**的：`packages/db/src/migrations` 里只有 `up`�
 - [ ] `df -h` 数据盘剩余 > 30%
 - [ ] 计划任务手工执行一次 `exit 0`，备份文件大小合理
 - [ ] `curl -m 3 http://<公网IP>:3000/` 超时（3000 没有暴露）
+- [ ] `public` 产物存在：`ls -l apps/server/dist/public/index.html`；若开启在线升级，再确认
+      `ls -l apps/server/dist/scripts/updater.mjs`（见 [UPGRADE.md §3.6](./UPGRADE.md#36-构建产物里带着执行器脚本)）
 - [ ] 重启服务器后，站点与进程都自动恢复（`systemctl status supervisord` / `pm2 status`）
 
 ---
@@ -1233,5 +1243,6 @@ proxy_set_header x-org-scope $http_x_org_scope;
 
 ## 相关文档
 
+- [在线升级与回滚](./UPGRADE.md)
 - [ONLYOFFICE 是否免费与接入方案](./ONLYOFFICE.md)
 - [文档索引](./README.md)

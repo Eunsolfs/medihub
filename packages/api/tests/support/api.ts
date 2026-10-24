@@ -14,6 +14,7 @@ import {
 
 import { appRouter } from "#src/index.ts";
 import type { Context, StorageAccess } from "#src/index.ts";
+import type { UpdaterAccess } from "#src/update.ts";
 
 // Each test file has a database of its own, so files run in parallel and share no rows.
 const { db, remove } = await createTestDatabase();
@@ -39,10 +40,25 @@ export const testStorage: StorageAccess = {
 export const testDb = db;
 
 /** Calls the procedures in this process, through their middleware and validation, as the session's user. */
+export interface ClientOptions {
+  updater?: UpdaterAccess;
+  version?: string;
+}
+
 export const createClient = (
   session: Context["session"] = null,
-  storage: StorageAccess = testStorage
-) => createRouterClient(appRouter, { context: { db, session, storage } });
+  storage: StorageAccess = testStorage,
+  options: ClientOptions = {}
+) =>
+  createRouterClient(appRouter, {
+    context: {
+      db,
+      session,
+      storage,
+      updater: options.updater,
+      version: options.version,
+    },
+  });
 
 /** Same as `signUp`, but also hands back the email so the account can be re-signed-in. */
 export const signUpAccount = async (password = "correct-horse-battery") => {

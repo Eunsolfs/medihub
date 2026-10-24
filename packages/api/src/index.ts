@@ -13,6 +13,7 @@ import { patientsRouter } from "#src/routers/patients.ts";
 import { postsRouter } from "#src/routers/posts.ts";
 import { statsRouter } from "#src/routers/stats.ts";
 import { storageRouter } from "#src/routers/storage.ts";
+import { systemRouter } from "#src/routers/system.ts";
 import { usersRouter } from "#src/routers/users.ts";
 
 export {
@@ -25,6 +26,14 @@ export {
 } from "#src/access.ts";
 
 export { loadAudience } from "#src/audience.ts";
+
+export type {
+  LatestRelease,
+  UpdatePhase,
+  UpdateState,
+  UpdateStatus,
+  UpdaterAccess,
+} from "#src/update.ts";
 
 export {
   signShareAccess,
@@ -61,6 +70,7 @@ export const appRouter = {
   posts: postsRouter,
   stats: statsRouter,
   storage: storageRouter,
+  system: systemRouter,
   users: usersRouter,
 };
 

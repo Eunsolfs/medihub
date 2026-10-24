@@ -30,3 +30,6 @@ apps/server/storage
 
 # 临时预览产物
 preview-tmp
+# 在线升级的备份、下载与状态（服务端本地数据）
+.updates/
+

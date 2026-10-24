@@ -1,5 +1,5 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "ignore": ["apps/web/scripts/**"],
+  "ignore": ["apps/web/scripts/**", "apps/server/scripts/**"],
   "ignoreExportsUsedInFile": true,
 }

@@ -126,6 +126,14 @@ pnpm dev                                       # web :5173 / api :3000
 | `ONLYOFFICE_URL` / `ONLYOFFICE_JWT_SECRET` | 可选，OnlyOffice Document Server；配置后可在浏览器里真正编辑 Office 文档 |
 | `BETTER_AUTH_TRUSTED_ORIGINS`              | 可选，逗号分隔，额外允许的来源（局域网 IP、反向代理域名）                |
 | `SEED_ROOT_EMAIL` / `SEED_ROOT_PASSWORD`   | 可选，`pnpm seed` 时创建的超级管理员                                     |
+| `UPDATE_ENABLED`                           | 可选，`true` 时开启 root 在线升级（需同时配置重启命令与安装目录）        |
+| `UPDATE_WORKDIR`                           | 安装目录绝对路径（含 `package.json` 与 `apps/`），需服务用户可写         |
+| `UPDATE_RESTART_CMD`                       | 重启命令，如 `systemctl restart medihub`                                 |
+| `UPDATE_HEALTH_URL`                        | 升级后健康检查地址，默认 `http://127.0.0.1:3000/api/health`              |
+| `UPDATE_DB_PATH` / `UPDATE_KEEP_BACKUPS`   | 升级备份的数据库路径与保留份数（默认 `apps/server/local.db` / 3）        |
+| `UPDATE_REPO` / `UPDATE_GITHUB_TOKEN`      | 读取 Release 与下载源码包的仓库（默认 `Eunsolfs/medihub`）与可选 token   |
+
+在线升级与回滚的完整说明见 `docs/UPGRADE.md`。
 
 ## 存储
 

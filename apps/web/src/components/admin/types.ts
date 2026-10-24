@@ -42,6 +42,11 @@ type AuditList = ProcedureOutput<AuditClient["list"]>;
 
 export type AuditRow = AuditList["items"][number];
 
+type SystemClient = AppRouterClient["system"];
+
+/** 在线升级面板的完整状态（当前版本 / 最新 Release / 任务状态 / 可回滚）。 */
+export type UpdateStatus = ProcedureOutput<SystemClient["updateStatus"]>;
+
 /** 系统管理页只对两种管理员角色开放。 */
 type AdminRole = "root" | "dept_admin";
 
