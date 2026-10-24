@@ -1,4 +1,4 @@
-import { PencilIcon, Trash2Icon } from "lucide-react";
+import { Maximize2Icon, PencilIcon, Trash2Icon } from "lucide-react";
 
 import { Badge } from "@medihub/ui/components/badge";
 import { Button } from "@medihub/ui/components/button";
@@ -40,6 +40,8 @@ interface AdmissionHeaderProps {
   canDelete: boolean;
   onEdit: () => void;
   onDelete: () => void;
+  /** 打开「就诊全部资料」抽屉。 */
+  onViewAll: () => void;
 }
 
 /** 当前选中就诊的抬头信息：时间、住院号、诊断与治疗经过，附编辑/删除入口。 */
@@ -49,6 +51,7 @@ export const AdmissionHeader = ({
   canDelete,
   onEdit,
   onDelete,
+  onViewAll,
 }: AdmissionHeaderProps) => (
   <SectionCard
     action={
@@ -83,6 +86,15 @@ export const AdmissionHeader = ({
       </>
     }
   >
+    <div className="flex flex-wrap items-center gap-2">
+      <Button onClick={onViewAll} size="sm" variant="outline">
+        <Maximize2Icon />
+        查看全部资料
+      </Button>
+      <span className="text-muted-foreground text-xs">
+        主诉 / 治疗 / 备注与完整病历摘要
+      </span>
+    </div>
     <div className="grid gap-3 sm:grid-cols-2">
       <Field label="诊断" value={admission.diagnosis} />
       <Field label="主治医生" value={detail?.attendingDoctor} />

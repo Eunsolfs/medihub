@@ -261,7 +261,7 @@ const main = async () => {
     const [createdPatient] = await db
       .insert(patient)
       .values({
-        createdBy: adminId,
+        createdBy: memberId,
         gender: seed.gender,
         medicalRecordNo: `MRN-2026-${String(patientIndex + 1).padStart(4, "0")}`,
         name: seed.name,
@@ -362,6 +362,48 @@ const main = async () => {
         }
       }
     }
+  }
+
+  // 由科室管理员建档：普通成员看不到，用于演示「谁的患者归谁」。
+  const [adminPatient] = await db
+    .insert(patient)
+    .values({
+      createdBy: adminId,
+      gender: "female",
+      medicalRecordNo: "MRN-2026-0004",
+      name: "周敏",
+      organizationId,
+      phone: "135****6621",
+      status: "follow_up",
+      summary: "面部色素痣切除术后随访",
+      tags: ["色素痣", "随访"],
+    })
+    .returning();
+
+  if (adminPatient) {
+    await db.insert(admission).values({
+      admittedAt: daysAgo(45),
+      admissionNo: "ZY20260031",
+      attendingDoctor: "李主任",
+      createdBy: adminId,
+      department: "整形外科",
+      diagnosis: "面部色素痣（交界痣）",
+      dischargedAt: daysAgo(41),
+      kind: "surgery",
+      organizationId,
+      patientId: adminPatient.id,
+      summary: [
+        "## 入院情况",
+        "",
+        "左面颊色素痣约 0.8cm，边界清楚，门诊建议手术切除。",
+        "",
+        "## 手术经过",
+        "",
+        "局麻下行梭形切除 + 美容缝合。",
+      ].join("\n"),
+      tags: ["色素痣"],
+      treatment: "梭形切除 + 美容缝合",
+    });
   }
 
   // 烧伤科：一位患者 + 一次入院 + 两张照片，用于验证科室之间的数据隔离。

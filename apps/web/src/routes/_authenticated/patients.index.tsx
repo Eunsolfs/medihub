@@ -1,7 +1,7 @@
 import { useQueries, useSuspenseQuery } from "@tanstack/react-query";
 import { Link, createFileRoute, useRouter } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
-import { ChevronRightIcon, PencilIcon, PlusIcon } from "lucide-react";
+import { ChevronRightIcon, InfoIcon, PencilIcon, PlusIcon } from "lucide-react";
 import { Suspense, useEffect, useRef, useState } from "react";
 
 import { Button } from "@medihub/ui/components/button";
@@ -28,6 +28,7 @@ import type {
   PatientListItem,
   PatientStatus,
 } from "#src/components/patients/types.ts";
+import { useViewer } from "#src/components/patients/use-viewer.ts";
 import { api } from "#src/lib/api.ts";
 import {
   formatDateTime,
@@ -245,9 +246,12 @@ const PatientTable = ({
   onChange,
   onEdit,
   onCreate,
+  isAdmin,
 }: PatientToolbarProps & {
   onEdit: (patientId: string) => void;
   onCreate: () => void;
+  /** 成员只能看到自己建档的患者，空态文案与管理员不同。 */
+  isAdmin: boolean;
 }) => {
   const { data } = useSuspenseQuery(patientListOptions(search));
   const columns = buildPatientColumns({ onEdit });
@@ -263,9 +267,23 @@ const PatientTable = ({
       .map((tag) => ({ label: tag, value: tag })),
   ];
 
-  const emptyDescription = filtered
-    ? "调整搜索关键词、状态或标签筛选试试。"
-    : "还没有患者档案，先建立第一份档案。";
+  const emptyState = (() => {
+    if (!isAdmin) {
+      return {
+        description: filtered
+          ? "当前筛选下没有你建档的患者，换个条件或新建一份档案。"
+          : "你只能看到自己建档的患者；新建档案后即可在此管理，科室管理员可查看全科室。",
+        title: "你还没有建档的患者",
+      };
+    }
+
+    return {
+      description: filtered
+        ? "调整搜索关键词、状态或标签筛选试试。"
+        : "还没有患者档案，先建立第一份档案。",
+      title: filtered ? "没有符合条件的患者" : "还没有患者档案",
+    };
+  })();
 
   return (
     <DataTableShell
@@ -302,8 +320,8 @@ const PatientTable = ({
               新建患者
             </Button>
           }
-          description={emptyDescription}
-          title={filtered ? "没有符合条件的患者" : "还没有患者档案"}
+          description={emptyState.description}
+          title={emptyState.title}
         />
       }
       footer={
@@ -405,6 +423,7 @@ const PatientStats = () => {
 const PatientsPage = () => {
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
+  const viewer = useViewer();
   const [createOpen, setCreateOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -430,8 +449,16 @@ const PatientsPage = () => {
         title="患者档案"
       />
 
+      {viewer.isAdmin ? null : (
+        <p className="text-muted-foreground flex items-start gap-1.5 text-xs">
+          <InfoIcon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+          仅显示我建档的患者；科室管理员可查看全科室。
+        </p>
+      )}
+
       <Suspense fallback={<SkeletonTable />}>
         <PatientTable
+          isAdmin={viewer.isAdmin}
           onChange={updateSearch}
           onCreate={() => {
             setCreateOpen(true);

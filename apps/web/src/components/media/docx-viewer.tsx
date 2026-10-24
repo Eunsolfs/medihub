@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { PreviewFallback } from "./preview-fallback.tsx";
 import type { MediaAsset } from "./types.ts";
 import { useAssetArrayBuffer } from "./use-file-resource.ts";
+import { useIsMobile } from "./use-is-mobile.ts";
 
 export interface DocxViewerProps {
   asset: MediaAsset;
@@ -16,6 +17,7 @@ export interface DocxViewerProps {
  */
 export const DocxViewer = ({ asset, enabled }: DocxViewerProps) => {
   const buffer = useAssetArrayBuffer(asset.id, enabled);
+  const isMobile = useIsMobile();
   const containerRef = useRef<HTMLDivElement>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
   const [rendering, setRendering] = useState(true);
@@ -84,8 +86,14 @@ export const DocxViewer = ({ asset, enabled }: DocxViewerProps) => {
     return (
       <PreviewFallback
         asset={asset}
-        message={renderError}
-        hint="下载后用本地 Word 打开；也可以让管理员开启 OnlyOffice 在线编辑。"
+        message={
+          isMobile ? "暂不支持在线预览，可下载后在手机上查看" : renderError
+        }
+        hint={
+          isMobile
+            ? undefined
+            : "下载后用本地 Word 打开；也可以让管理员开启 OnlyOffice 在线编辑。"
+        }
       />
     );
   }

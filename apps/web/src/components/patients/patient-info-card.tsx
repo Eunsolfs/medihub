@@ -1,4 +1,4 @@
-import { EyeIcon, EyeOffIcon, LockIcon } from "lucide-react";
+import { EyeIcon, EyeOffIcon, LockIcon, Maximize2Icon } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@medihub/ui/components/button";
@@ -58,9 +58,10 @@ const IdCardItem = ({ idCardNo, canReveal }: IdCardItemProps) => {
             {shown ? <EyeOffIcon /> : <EyeIcon />}
             {shown ? "隐藏" : "显示"}
           </Button>
-        ) : (
+        ) : null}
+        {idCardNo && !canReveal ? (
           <span className="text-muted-foreground text-xs">仅管理员可见</span>
-        )}
+        ) : null}
       </dd>
     </div>
   );
@@ -68,14 +69,25 @@ const IdCardItem = ({ idCardNo, canReveal }: IdCardItemProps) => {
 
 interface PatientInfoCardProps {
   patient: PatientRecord;
+  /** 打开「患者完整档案」抽屉。 */
+  onViewAll: () => void;
 }
 
 /** 患者详情页顶部信息卡：基本资料、诊断摘要、标签与备注。 */
-export const PatientInfoCard = ({ patient }: PatientInfoCardProps) => {
+export const PatientInfoCard = ({
+  patient,
+  onViewAll,
+}: PatientInfoCardProps) => {
   const { canManageIdCard } = useViewer();
 
   return (
     <SectionCard
+      action={
+        <Button onClick={onViewAll} size="sm" variant="outline">
+          <Maximize2Icon />
+          查看完整档案
+        </Button>
+      }
       contentClassName="grid gap-4"
       description={
         <>

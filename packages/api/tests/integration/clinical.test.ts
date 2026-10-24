@@ -5,7 +5,13 @@ import { user } from "@medihub/db/schema/auth";
 import { asset } from "@medihub/db/schema/content";
 import { patient } from "@medihub/db/schema/patients";
 
-import { createClient, signUp, testDb } from "../support/api.ts";
+import {
+  clientForEmail,
+  createClient,
+  signUp,
+  signUpAccount,
+  testDb,
+} from "../support/api.ts";
 
 /**
  * 临床数据的组织隔离与权限。验收标准来自产品要求：
@@ -90,6 +96,95 @@ describe("患者与就诊", () => {
     await expect(owner.patients.remove({ id: created.id })).resolves.toEqual({
       id: created.id,
     });
+  });
+
+  it("同科室成员看不到别人建档的患者，管理员可以看到", async () => {
+    const ownerAccount = await signUpAccount();
+    const colleagueAccount = await signUpAccount();
+    const owner = ownerAccount.client;
+    const profile = await owner.me.profile();
+    const colleagueProfile = await colleagueAccount.client.me.profile();
+
+    if (!(profile?.viewer.organizationId && colleagueProfile)) {
+      throw new Error("缺少组织");
+    }
+
+    await testDb
+      .update(user)
+      .set({
+        organizationId: profile.viewer.organizationId,
+        role: "member",
+      })
+      .where(eq(user.id, colleagueProfile.viewer.id));
+
+    const created = await owner.patients.create({ name: "小王建档患者" });
+
+    // 同事看不到，也打不开（重新登录以拿到更新后的角色与科室）。
+    const colleague = await clientForEmail(colleagueAccount.email);
+
+    const colleagueList = await colleague.patients.list({
+      page: 1,
+      pageSize: 20,
+    });
+
+    expect(colleagueList.total).toBe(0);
+    await expect(colleague.patients.get({ id: created.id })).rejects.toThrow();
+
+    // 同一个人升成科室管理员后可见（需要重新登录，客户端会缓存会话里的角色）。
+    await testDb
+      .update(user)
+      .set({ role: "dept_admin" })
+      .where(eq(user.id, colleagueProfile.viewer.id));
+
+    const colleagueAdmin = await clientForEmail(colleagueAccount.email);
+
+    const adminList = await colleagueAdmin.patients.list({
+      page: 1,
+      pageSize: 20,
+    });
+
+    expect(adminList.total).toBe(1);
+    await expect(
+      colleagueAdmin.patients.get({ id: created.id })
+    ).resolves.toBeTruthy();
+  });
+
+  it("科室管理员可以把未分配科室的注册用户认领进科室", async () => {
+    const adminAccount = await signUpAccount();
+    const candidateAccount = await signUpAccount();
+    const adminProfile = await adminAccount.client.me.profile();
+    const candidateProfile = await candidateAccount.client.me.profile();
+
+    if (!(adminProfile?.viewer.organizationId && candidateProfile)) {
+      throw new Error("缺少组织");
+    }
+
+    await testDb
+      .update(user)
+      .set({
+        organizationId: adminProfile.viewer.organizationId,
+        role: "dept_admin",
+      })
+      .where(eq(user.id, adminProfile.viewer.id));
+
+    const admin = await clientForEmail(adminAccount.email);
+
+    const pending = await admin.users.candidates({ page: 1, pageSize: 20 });
+    expect(
+      pending.items.some((row) => row.id === candidateProfile.viewer.id)
+    ).toBe(true);
+
+    const claimed = await admin.users.claim({
+      userId: candidateProfile.viewer.id,
+    });
+
+    expect(claimed?.role).toBe("member");
+    expect(claimed?.organizationId).toBe(adminProfile.viewer.organizationId);
+
+    const after = await admin.users.candidates({ page: 1, pageSize: 20 });
+    expect(
+      after.items.some((row) => row.id === candidateProfile.viewer.id)
+    ).toBe(false);
   });
 });
 

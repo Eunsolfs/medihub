@@ -211,6 +211,12 @@ export const UserFormDialog = ({
           </DialogDescription>
         </DialogHeader>
 
+        {!isRoot && !editing ? (
+          <p className="bg-muted/50 text-muted-foreground rounded-lg px-3 py-2 text-xs">
+            科室管理员可直接为本科室成员创建账号
+          </p>
+        ) : null}
+
         <form
           className="grid gap-4"
           id="admin-user-form"

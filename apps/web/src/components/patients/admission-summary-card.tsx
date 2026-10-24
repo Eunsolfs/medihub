@@ -1,4 +1,9 @@
-import { ChevronDownIcon, ChevronUpIcon, PencilIcon } from "lucide-react";
+import {
+  ChevronDownIcon,
+  ChevronUpIcon,
+  Maximize2Icon,
+  PencilIcon,
+} from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@medihub/ui/components/button";
@@ -14,6 +19,8 @@ interface AdmissionSummaryCardProps {
   summary: string | null | undefined;
   isLoading?: boolean;
   onEdit: () => void;
+  /** 打开「就诊全部资料」抽屉，看完整摘要与其它字段。 */
+  onViewAll: () => void;
 }
 
 /** 就诊病历摘要：Markdown 渲染、超长折叠，右上角进入同一个就诊对话框编辑。 */
@@ -21,11 +28,13 @@ export const AdmissionSummaryCard = ({
   summary,
   isLoading = false,
   onEdit,
+  onViewAll,
 }: AdmissionSummaryCardProps) => {
   const [expanded, setExpanded] = useState(false);
   const content = summary?.trim() ?? "";
   const collapsible = content.length > collapseThreshold;
   const hasContent = content.length > 0;
+  const collapsed = collapsible && !expanded;
 
   const renderBody = () => {
     if (isLoading) {
@@ -48,17 +57,28 @@ export const AdmissionSummaryCard = ({
       <div className="grid gap-2">
         <div
           className={
-            collapsible && !expanded
-              ? "relative max-h-96 overflow-hidden"
-              : undefined
+            collapsed ? "relative max-h-96 overflow-hidden" : undefined
           }
         >
           <Markdown className="max-w-xl" content={content} />
-          {collapsible && !expanded ? (
-            <div
-              aria-hidden="true"
-              className="from-card pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-linear-to-t to-transparent"
-            />
+          {collapsed ? (
+            <>
+              <div
+                aria-hidden="true"
+                className="from-card pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-linear-to-t to-transparent"
+              />
+              <div className="absolute inset-x-0 bottom-2 flex justify-center">
+                <Button
+                  onClick={onViewAll}
+                  size="sm"
+                  type="button"
+                  variant="secondary"
+                >
+                  <Maximize2Icon />
+                  查看全部
+                </Button>
+              </div>
+            </>
           ) : null}
         </div>
         {collapsible ? (
@@ -68,6 +88,7 @@ export const AdmissionSummaryCard = ({
                 setExpanded((previous) => !previous);
               }}
               size="sm"
+              type="button"
               variant="ghost"
             >
               {expanded ? <ChevronUpIcon /> : <ChevronDownIcon />}
@@ -76,6 +97,15 @@ export const AdmissionSummaryCard = ({
             <span className="text-muted-foreground text-xs">
               共 {content.length} 字
             </span>
+            <Button
+              onClick={onViewAll}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <Maximize2Icon />
+              查看全部
+            </Button>
           </div>
         ) : null}
       </div>

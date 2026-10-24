@@ -80,6 +80,35 @@ export const canDelete = (
   viewer.role === "individual" ||
   createdBy === viewer.id;
 
+/**
+ * 患者档案的可见与可编辑范围。
+ *
+ * 「谁的患者归谁」：创建者本人与科室管理员（及以上）可见可编辑，
+ * 同科室的其他成员既看不到、也不能改，避免互相翻阅未授权的病历。
+ * 自然人的个人空间里所有档案都是自己创建的，因此不额外限制。
+ */
+export const canAccessPatient = (
+  viewer: Viewer,
+  record: { createdBy?: string | null; organizationId?: string }
+) => {
+  if (isAdminRole(viewer.role)) {
+    return true;
+  }
+
+  if (record.createdBy && record.createdBy === viewer.id) {
+    return true;
+  }
+
+  return (
+    viewer.role === "individual" &&
+    record.organizationId !== undefined &&
+    record.organizationId === viewer.organizationId
+  );
+};
+
+/** 患者档案列表的过滤条件：非管理员只能看到自己建档的患者。 */
+export const canSeeAllPatients = (viewer: Viewer) => isAdminRole(viewer.role);
+
 /** `organizationProcedure` 之后的上下文一定有组织，这里把类型收窄成非空。 */
 export const organizationIdOf = (context: { organizationId?: string }) => {
   if (!context.organizationId) {

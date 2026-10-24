@@ -41,14 +41,39 @@ export const createClient = (
   storage: StorageAccess = testStorage
 ) => createRouterClient(appRouter, { context: { db, session, storage } });
 
-/** Signs a new user up through Better Auth and returns a client that calls as them. */
-export const signUp = async () => {
+/** Same as `signUp`, but also hands back the email so the account can be re-signed-in. */
+export const signUpAccount = async (password = "correct-horse-battery") => {
+  const email = `${crypto.randomUUID()}@example.com`;
+
   const { headers } = await auth.api.signUpEmail({
-    body: {
-      email: `${crypto.randomUUID()}@example.com`,
-      name: "Test User",
-      password: "correct-horse-battery",
-    },
+    body: { email, name: "Test User", password },
+    returnHeaders: true,
+  });
+
+  const cookie = headers
+    .getSetCookie()
+    .map((header) => header.split(";")[0])
+    .join("; ");
+
+  return {
+    client: createClient(
+      await auth.api.getSession({ headers: new Headers({ cookie }) })
+    ),
+    email,
+    password,
+  };
+};
+
+/**
+ * Re-signs an existing account in. A client snapshots the session user, so a test
+ * that changes a user's role or organization in the database must build a new one.
+ */
+export const clientForEmail = async (
+  email: string,
+  password = "correct-horse-battery"
+) => {
+  const { headers } = await auth.api.signInEmail({
+    body: { email, password },
     returnHeaders: true,
   });
 
@@ -60,4 +85,11 @@ export const signUp = async () => {
   return createClient(
     await auth.api.getSession({ headers: new Headers({ cookie }) })
   );
+};
+
+/** Signs a new user up through Better Auth and returns a client that calls as them. */
+export const signUp = async () => {
+  const account = await signUpAccount();
+
+  return account.client;
 };

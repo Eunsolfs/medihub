@@ -6,6 +6,7 @@ import {
   desc,
   eq,
   inArray,
+  isNotNull,
   isNull,
   like,
   or,
@@ -13,6 +14,7 @@ import {
 import type { SQL } from "drizzle-orm";
 import { z } from "zod";
 
+import type { Database } from "@medihub/db";
 import { user } from "@medihub/db/schema/auth";
 import {
   asset,
@@ -20,8 +22,16 @@ import {
   assetVisibility,
   clinicalStage,
 } from "@medihub/db/schema/content";
+import { learningSession } from "@medihub/db/schema/learning";
+import { patient } from "@medihub/db/schema/patients";
 
-import { canDelete, organizationIdOf } from "#src/access.ts";
+import type { Viewer } from "#src/access.ts";
+import {
+  canAccessPatient,
+  canDelete,
+  canSeeAllPatients,
+  organizationIdOf,
+} from "#src/access.ts";
 import { organizationProcedure } from "#src/procedures.ts";
 
 const assetSummary = {
@@ -40,6 +50,8 @@ const assetSummary = {
   originalName: asset.originalName,
   ownerId: asset.ownerId,
   ownerName: user.name,
+  patientName: patient.name,
+  sessionTitle: learningSession.title,
   patientId: asset.patientId,
   postId: asset.postId,
   sessionId: asset.sessionId,
@@ -51,6 +63,10 @@ const assetSummary = {
 };
 
 const listInput = z.object({
+  /** 资料库的分类视图：患者记录 / 会议资料 / 资料库目录 / 文章附件。 */
+  source: z
+    .enum(["all", "patients", "sessions", "collections", "posts"])
+    .default("all"),
   admissionId: z.string().min(1).optional(),
   collectionId: z.string().min(1).optional(),
   kind: z.enum(assetKind).optional(),
@@ -74,16 +90,89 @@ const assetInput = z.object({
   visibility: z.enum(assetVisibility).optional(),
 });
 
+/**
+ * 校验一组素材所属的患者是否归当前用户：挂在他人的患者档案下时按不存在处理。
+ * 未挂患者的素材（资料库、会议、文章附件）沿用原有可见性规则。
+ */
+const assertAssetPatientAccess = async (
+  context: { db: Database },
+  rows: { patientId: string | null }[],
+  viewer: Viewer
+) => {
+  if (canSeeAllPatients(viewer)) {
+    return;
+  }
+
+  const patientIds = [
+    ...new Set(
+      rows.flatMap((row) =>
+        typeof row.patientId === "string" ? [row.patientId] : []
+      )
+    ),
+  ];
+
+  if (patientIds.length === 0) {
+    return;
+  }
+
+  const records = await context.db
+    .select({
+      createdBy: patient.createdBy,
+      id: patient.id,
+      organizationId: patient.organizationId,
+    })
+    .from(patient)
+    .where(inArray(patient.id, patientIds));
+
+  const byId = new Map(
+    records.map(
+      (record: {
+        createdBy: string | null;
+        id: string;
+        organizationId: string;
+      }) => [record.id, record]
+    )
+  );
+
+  for (const row of rows) {
+    if (!row.patientId) {
+      continue;
+    }
+
+    const record = byId.get(row.patientId);
+
+    if (!record || !canAccessPatient(viewer, record)) {
+      throw new ORPCError("NOT_FOUND", { message: "素材不存在" });
+    }
+  }
+};
+
 export const assetsRouter = {
   list: organizationProcedure
     .input(listInput)
     .handler(async ({ context, input }) => {
       const organizationId = organizationIdOf(context);
+      const { viewer } = context;
+
+      if (!viewer) {
+        throw new ORPCError("UNAUTHORIZED");
+      }
 
       const filters: SQL[] = [
         eq(asset.organizationId, organizationId),
         isNull(asset.deletedAt),
       ];
+
+      // 资料库按来源分类：患者记录 / 会议资料 / 资料库目录 / 文章附件。
+      if (input.source === "patients") {
+        filters.push(isNotNull(asset.patientId));
+      } else if (input.source === "sessions") {
+        filters.push(isNotNull(asset.sessionId));
+      } else if (input.source === "collections") {
+        filters.push(isNotNull(asset.collectionId));
+      } else if (input.source === "posts") {
+        filters.push(isNotNull(asset.postId));
+      }
 
       if (input.patientId) {
         filters.push(eq(asset.patientId, input.patientId));
@@ -128,19 +217,25 @@ export const assetsRouter = {
         }
       }
 
-      // 个人空间的素材只有本人可见；科室素材对全科室可见。
-      const viewerId = context.viewer?.id ?? "";
+      // 个人空间的素材只有本人可见；科室素材对全科室可见，
+      // 但挂在患者档案下的素材要服从「谁的患者归谁」。
+      const visibilityFilter =
+        viewer.role === "individual"
+          ? eq(asset.ownerId, viewer.id)
+          : or(eq(asset.visibility, "org"), eq(asset.ownerId, viewer.id));
 
-      if (context.viewer?.role === "individual") {
-        filters.push(eq(asset.ownerId, viewerId));
-      } else {
-        const visibleToMember = or(
-          eq(asset.visibility, "org"),
-          eq(asset.ownerId, viewerId)
+      if (visibilityFilter) {
+        filters.push(visibilityFilter);
+      }
+
+      if (!canSeeAllPatients(viewer)) {
+        const patientScope = or(
+          isNull(asset.patientId),
+          eq(patient.createdBy, viewer.id)
         );
 
-        if (visibleToMember) {
-          filters.push(visibleToMember);
+        if (patientScope) {
+          filters.push(patientScope);
         }
       }
 
@@ -162,11 +257,17 @@ export const assetsRouter = {
           .select(assetSummary)
           .from(asset)
           .leftJoin(user, eq(asset.ownerId, user.id))
+          .leftJoin(patient, eq(asset.patientId, patient.id))
+          .leftJoin(learningSession, eq(asset.sessionId, learningSession.id))
           .where(where)
           .orderBy(...orderBy)
           .limit(input.pageSize)
           .offset((input.page - 1) * input.pageSize),
-        context.db.select({ total: count() }).from(asset).where(where),
+        context.db
+          .select({ total: count() })
+          .from(asset)
+          .leftJoin(patient, eq(asset.patientId, patient.id))
+          .where(where),
       ]);
 
       return {
@@ -181,6 +282,11 @@ export const assetsRouter = {
     .input(z.object({ id: z.string().min(1) }))
     .handler(async ({ context, input }) => {
       const organizationId = organizationIdOf(context);
+      const { viewer } = context;
+
+      if (!viewer) {
+        throw new ORPCError("UNAUTHORIZED");
+      }
 
       const [row] = await context.db
         .select({
@@ -198,6 +304,8 @@ export const assetsRouter = {
         throw new ORPCError("NOT_FOUND", { message: "素材不存在" });
       }
 
+      await assertAssetPatientAccess(context, [row], viewer);
+
       return row;
     }),
 
@@ -206,6 +314,22 @@ export const assetsRouter = {
     .handler(async ({ context, input }) => {
       const organizationId = organizationIdOf(context);
       const { id, ...values } = input;
+      const { viewer } = context;
+
+      if (!viewer) {
+        throw new ORPCError("UNAUTHORIZED");
+      }
+
+      const [existing] = await context.db
+        .select({ patientId: asset.patientId })
+        .from(asset)
+        .where(and(eq(asset.id, id), eq(asset.organizationId, organizationId)));
+
+      if (!existing) {
+        throw new ORPCError("NOT_FOUND", { message: "素材不存在" });
+      }
+
+      await assertAssetPatientAccess(context, [existing], viewer);
 
       const [updated] = await context.db
         .update(asset)
@@ -243,8 +367,25 @@ export const assetsRouter = {
   /** 拖拽排序：按传入顺序重写 timelineOrder。 */
   reorder: organizationProcedure
     .input(z.object({ ids: z.array(z.string().min(1)).min(1).max(500) }))
-    .handler(({ context, input }) => {
+    .handler(async ({ context, input }) => {
       const organizationId = organizationIdOf(context);
+      const { viewer } = context;
+
+      if (!viewer) {
+        throw new ORPCError("UNAUTHORIZED");
+      }
+
+      const rows = await context.db
+        .select({ patientId: asset.patientId })
+        .from(asset)
+        .where(
+          and(
+            eq(asset.organizationId, organizationId),
+            inArray(asset.id, input.ids)
+          )
+        );
+
+      await assertAssetPatientAccess(context, rows, viewer);
 
       // node:sqlite 是同步驱动，事务回调同步执行完即提交。
       context.db.transaction((tx) => {
@@ -273,6 +414,23 @@ export const assetsRouter = {
     )
     .handler(async ({ context, input }) => {
       const organizationId = organizationIdOf(context);
+      const { viewer } = context;
+
+      if (!viewer) {
+        throw new ORPCError("UNAUTHORIZED");
+      }
+
+      const rows = await context.db
+        .select({ patientId: asset.patientId })
+        .from(asset)
+        .where(
+          and(
+            eq(asset.organizationId, organizationId),
+            inArray(asset.id, input.ids)
+          )
+        );
+
+      await assertAssetPatientAccess(context, rows, viewer);
 
       await context.db
         .update(asset)
@@ -312,7 +470,11 @@ export const assetsRouter = {
       }
 
       const rows = await context.db
-        .select({ id: asset.id, ownerId: asset.ownerId })
+        .select({
+          id: asset.id,
+          ownerId: asset.ownerId,
+          patientId: asset.patientId,
+        })
         .from(asset)
         .where(
           and(
@@ -320,6 +482,8 @@ export const assetsRouter = {
             inArray(asset.id, input.ids)
           )
         );
+
+      await assertAssetPatientAccess(context, rows, viewer);
 
       const deletable = rows
         .filter((row) => canDelete(viewer, row.ownerId))

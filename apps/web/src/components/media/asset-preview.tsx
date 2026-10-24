@@ -1,6 +1,7 @@
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
+  CropIcon,
   DownloadIcon,
   ExternalLinkIcon,
   PencilLineIcon,
@@ -28,6 +29,7 @@ import {
 import type { UploadedAsset } from "#src/lib/upload.ts";
 
 import { DocxViewer } from "./docx-viewer.tsx";
+import { ImageEditorDialog } from "./image-editor-dialog.tsx";
 import { ImagePreview } from "./image-preview.tsx";
 import { OnlyOfficeEditor } from "./office-editor.tsx";
 import { PptxViewer } from "./pptx-viewer.tsx";
@@ -50,6 +52,7 @@ import {
   isWordAsset,
 } from "./types.ts";
 import { useOfficeConfig } from "./use-file-resource.ts";
+import { useIsMobile } from "./use-is-mobile.ts";
 
 export interface AssetPreviewProps {
   asset: MediaAsset | null;
@@ -93,6 +96,8 @@ export const AssetPreview = ({
 }: AssetPreviewProps) => {
   const [navigation, setNavigation] = useState<NavigationState | null>(null);
   const [editing, setEditing] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const isMobile = useIsMobile();
 
   const current =
     navigation && navigation.fromId === (asset?.id ?? null)
@@ -100,7 +105,11 @@ export const AssetPreview = ({
       : asset;
 
   const officeEnabled = Boolean(current && isOfficeAsset(current));
-  const office = useOfficeConfig(current?.id ?? "", officeEnabled && open);
+
+  const office = useOfficeConfig(
+    current?.id ?? "",
+    officeEnabled && open && !isMobile
+  );
 
   const list = useMemo(() => {
     if (items && items.length > 0) {
@@ -248,131 +257,160 @@ export const AssetPreview = ({
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent
-        className="h-[100dvh] w-screen max-w-none sm:h-[min(92vh,1000px)] sm:w-[min(96vw,1600px)] sm:max-w-[min(96vw,1600px)]"
-        showCloseButton={false}
-        variant="flush"
-      >
-        <div
-          className="flex size-full min-h-0 flex-col overflow-hidden bg-black/95"
-          data-testid="asset-preview"
+    <>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        <DialogContent
+          className="h-[100dvh] w-screen max-w-none sm:h-[min(92vh,1000px)] sm:w-[min(96vw,1600px)] sm:max-w-[min(96vw,1600px)]"
+          showCloseButton={false}
+          variant="flush"
         >
-          <div className="border-border bg-popover flex min-h-12 shrink-0 items-center gap-2 border-b px-2 py-1.5 sm:px-3">
-            <div className="min-w-0 flex-1">
-              <DialogHeader>
-                <DialogTitle>
-                  <span className="block truncate">
-                    {current?.originalName ?? "素材预览"}
-                  </span>
-                </DialogTitle>
-                <DialogDescription>
-                  <span className="text-muted-foreground hidden truncate text-xs sm:block">
-                    {current ? metaOf(current) : ""}
-                    {current?.capturedAt
-                      ? ` · ${formatDateTime(current.capturedAt)}`
-                      : ""}
-                  </span>
-                </DialogDescription>
-              </DialogHeader>
-            </div>
+          <div
+            className="flex size-full min-h-0 flex-col overflow-hidden bg-black/95"
+            data-testid="asset-preview"
+          >
+            <div className="border-border bg-popover flex min-h-12 shrink-0 items-center gap-2 border-b px-2 py-1.5 sm:px-3">
+              <div className="min-w-0 flex-1">
+                <DialogHeader>
+                  <DialogTitle>
+                    <span className="block truncate">
+                      {current?.originalName ?? "素材预览"}
+                    </span>
+                  </DialogTitle>
+                  <DialogDescription>
+                    <span className="text-muted-foreground hidden truncate text-xs sm:block">
+                      {current ? metaOf(current) : ""}
+                      {current?.capturedAt
+                        ? ` · ${formatDateTime(current.capturedAt)}`
+                        : ""}
+                    </span>
+                  </DialogDescription>
+                </DialogHeader>
+              </div>
 
-            <div className="hidden shrink-0 items-center gap-1 sm:flex">
-              {list.length > 1 ? (
-                <>
+              <div className="hidden shrink-0 items-center gap-1 sm:flex">
+                {list.length > 1 ? (
+                  <>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      disabled={!previous}
+                      onClick={() => navigate(previous)}
+                      aria-label="上一张"
+                      title="上一张"
+                    >
+                      <ChevronLeftIcon />
+                    </Button>
+                    <span
+                      className="text-muted-foreground text-xs tabular-nums"
+                      data-testid="asset-preview-counter"
+                    >
+                      {index + 1}/{list.length}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      disabled={!next}
+                      onClick={() => navigate(next)}
+                      aria-label="下一张"
+                      title="下一张"
+                    >
+                      <ChevronRightIcon />
+                    </Button>
+                  </>
+                ) : null}
+
+                {office.status === "ready" && !isMobile ? (
                   <Button
                     type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    disabled={!previous}
-                    onClick={() => navigate(previous)}
-                    aria-label="上一张"
-                    title="上一张"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setEditing(true)}
+                    title="在 OnlyOffice 中编辑"
                   >
-                    <ChevronLeftIcon />
+                    <PencilLineIcon />
+                    <span className="hidden md:inline">在线编辑</span>
                   </Button>
-                  <span
-                    className="text-muted-foreground text-xs tabular-nums"
-                    data-testid="asset-preview-counter"
-                  >
-                    {index + 1}/{list.length}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    disabled={!next}
-                    onClick={() => navigate(next)}
-                    aria-label="下一张"
-                    title="下一张"
-                  >
-                    <ChevronRightIcon />
-                  </Button>
-                </>
-              ) : null}
+                ) : null}
 
-              {office.status === "ready" ? (
+                {current ? (
+                  <a
+                    href={assetDownloadUrl(current.id)}
+                    download={current.originalName}
+                    className={buttonVariants({
+                      size: "sm",
+                      variant: "outline",
+                    })}
+                    title="下载原文件"
+                  >
+                    <DownloadIcon />
+                    <span className="hidden md:inline">下载</span>
+                  </a>
+                ) : null}
+
+                {current &&
+                (isWordAsset(current) ||
+                  isPresentationAsset(current) ||
+                  isSpreadsheetAsset(current)) ? (
+                  <a
+                    href={`/api/office/${current.id}/pdf`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={cn(
+                      buttonVariants({ size: "sm", variant: "ghost" }),
+                      "hidden md:inline-flex"
+                    )}
+                    title="在新标签页打开 PDF 预览"
+                  >
+                    <ExternalLinkIcon />
+                  </a>
+                ) : null}
+              </div>
+
+              {current && isImageAsset(current) ? (
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => setEditing(true)}
-                  title="在 OnlyOffice 中编辑"
+                  className="h-11 shrink-0 sm:h-8"
+                  onClick={() => setEditorOpen(true)}
+                  aria-label="编辑图片"
+                  title="编辑图片（旋转 / 裁剪）"
                 >
-                  <PencilLineIcon />
-                  <span className="hidden md:inline">在线编辑</span>
+                  <CropIcon />
+                  <span>编辑</span>
                 </Button>
               ) : null}
 
-              {current ? (
-                <a
-                  href={assetDownloadUrl(current.id)}
-                  download={current.originalName}
-                  className={buttonVariants({ size: "sm", variant: "outline" })}
-                  title="下载原文件"
-                >
-                  <DownloadIcon />
-                  <span className="hidden md:inline">下载</span>
-                </a>
-              ) : null}
-
-              {current &&
-              (isWordAsset(current) ||
-                isPresentationAsset(current) ||
-                isSpreadsheetAsset(current)) ? (
-                <a
-                  href={`/api/office/${current.id}/pdf`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className={cn(
-                    buttonVariants({ size: "sm", variant: "ghost" }),
-                    "hidden md:inline-flex"
-                  )}
-                  title="在新标签页打开 PDF 预览"
-                >
-                  <ExternalLinkIcon />
-                </a>
-              ) : null}
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-11 shrink-0 sm:size-8"
+                onClick={() => handleOpenChange(false)}
+                aria-label="关闭预览"
+                title="关闭"
+              >
+                <XIcon />
+              </Button>
             </div>
 
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="size-11 shrink-0 sm:size-8"
-              onClick={() => handleOpenChange(false)}
-              aria-label="关闭预览"
-              title="关闭"
-            >
-              <XIcon />
-            </Button>
+            <div className="relative min-h-0 flex-1 overflow-hidden bg-black/95">
+              {body()}
+            </div>
           </div>
+        </DialogContent>
+      </Dialog>
 
-          <div className="relative min-h-0 flex-1 overflow-hidden bg-black/95">
-            {body()}
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+      <ImageEditorDialog
+        asset={current && isImageAsset(current) ? current : null}
+        open={editorOpen}
+        onOpenChange={setEditorOpen}
+        onUploaded={(uploaded) => {
+          onUploaded?.(uploaded);
+        }}
+      />
+    </>
   );
 };

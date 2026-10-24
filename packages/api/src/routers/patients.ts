@@ -11,7 +11,12 @@ import {
   patientStatus,
 } from "@medihub/db/schema/patients";
 
-import { canDelete, organizationIdOf } from "#src/access.ts";
+import {
+  canAccessPatient,
+  canDelete,
+  canSeeAllPatients,
+  organizationIdOf,
+} from "#src/access.ts";
 import { organizationProcedure } from "#src/procedures.ts";
 
 const patientInput = z.object({
@@ -45,6 +50,12 @@ export const patientsRouter = {
     .input(listInput)
     .handler(async ({ context, input }) => {
       const organizationId = organizationIdOf(context);
+      const { viewer } = context;
+
+      if (!viewer) {
+        throw new ORPCError("UNAUTHORIZED");
+      }
+
       const filters: SQL[] = [eq(patient.organizationId, organizationId)];
 
       if (input.q) {
@@ -68,6 +79,10 @@ export const patientsRouter = {
 
       if (input.tag) {
         filters.push(like(patient.tags, `%"${input.tag}"%`));
+      }
+
+      if (!canSeeAllPatients(viewer)) {
+        filters.push(eq(patient.createdBy, viewer.id));
       }
 
       const where = and(...filters);
@@ -112,6 +127,11 @@ export const patientsRouter = {
   /** 下拉选择用的轻量列表。 */
   options: organizationProcedure.handler(async ({ context }) => {
     const organizationId = organizationIdOf(context);
+    const { viewer } = context;
+
+    if (!viewer) {
+      throw new ORPCError("UNAUTHORIZED");
+    }
 
     return await context.db
       .select({
@@ -120,7 +140,14 @@ export const patientsRouter = {
         name: patient.name,
       })
       .from(patient)
-      .where(eq(patient.organizationId, organizationId))
+      .where(
+        and(
+          eq(patient.organizationId, organizationId),
+          canSeeAllPatients(viewer)
+            ? undefined
+            : eq(patient.createdBy, viewer.id)
+        )
+      )
       .orderBy(desc(patient.createdAt))
       .limit(200);
   }),
@@ -129,6 +156,11 @@ export const patientsRouter = {
     .input(patientId)
     .handler(async ({ context, input }) => {
       const organizationId = organizationIdOf(context);
+      const { viewer } = context;
+
+      if (!viewer) {
+        throw new ORPCError("UNAUTHORIZED");
+      }
 
       const [row] = await context.db
         .select()
@@ -140,7 +172,7 @@ export const patientsRouter = {
           )
         );
 
-      if (!row) {
+      if (!row || !canAccessPatient(viewer, row)) {
         throw new ORPCError("NOT_FOUND", { message: "患者不存在" });
       }
 
@@ -205,7 +237,26 @@ export const patientsRouter = {
     .input(patientInput.partial().extend({ id: z.string().min(1) }))
     .handler(async ({ context, input }) => {
       const organizationId = organizationIdOf(context);
+      const { viewer } = context;
       const { id, ...values } = input;
+
+      if (!viewer) {
+        throw new ORPCError("UNAUTHORIZED");
+      }
+
+      const [existing] = await context.db
+        .select({
+          createdBy: patient.createdBy,
+          organizationId: patient.organizationId,
+        })
+        .from(patient)
+        .where(
+          and(eq(patient.id, id), eq(patient.organizationId, organizationId))
+        );
+
+      if (!existing || !canAccessPatient(viewer, existing)) {
+        throw new ORPCError("NOT_FOUND", { message: "患者不存在" });
+      }
 
       const [updated] = await context.db
         .update(patient)
@@ -265,7 +316,7 @@ export const patientsRouter = {
           )
         );
 
-      if (!existing) {
+      if (!existing || !canAccessPatient(viewer, existing)) {
         throw new ORPCError("NOT_FOUND", { message: "患者不存在" });
       }
 

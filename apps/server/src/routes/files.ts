@@ -12,6 +12,7 @@ import {
   postMedia,
 } from "@medihub/db/schema/content";
 import { organization } from "@medihub/db/schema/organization";
+import { patient } from "@medihub/db/schema/patients";
 import { storageTarget } from "@medihub/db/schema/system";
 import { buildStorageKey, detectAssetKind } from "@medihub/storage";
 import type { StorageDriver, StorageTargetLike } from "@medihub/storage";
@@ -202,6 +203,20 @@ const canReadAsset = async (
 
   if (viewer.organizationId !== row.organizationId) {
     return false;
+  }
+
+  // 挂在患者档案下的素材服从「谁的患者归谁」：非创建者且非管理员不可读。
+  if (row.patientId) {
+    const [owner] = await db
+      .select({ createdBy: patient.createdBy })
+      .from(patient)
+      .where(eq(patient.id, row.patientId));
+
+    const isAdmin = viewer.role === "dept_admin";
+
+    if (!isAdmin && owner?.createdBy !== viewer.id) {
+      return false;
+    }
   }
 
   if (viewer.role === "individual") {

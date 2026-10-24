@@ -28,6 +28,7 @@ import {
 
 import { Pill } from "#src/components/admin/badges.tsx";
 import type { PillTone } from "#src/components/admin/badges.tsx";
+import { CandidatesPanel } from "#src/components/admin/candidates-panel.tsx";
 import {
   ALL,
   PAGE_SIZE,
@@ -472,6 +473,8 @@ export const UsersPanel = ({ viewer }: UsersPanelProps) => {
 
   return (
     <div className="grid gap-3">
+      <CandidatesPanel />
+
       {viewer.role === "dept_admin" ? (
         <p className="bg-muted/50 text-muted-foreground rounded-lg px-3 py-2 text-xs">
           科室管理员只能查看并管理本科室的普通成员账号；新建与编辑时角色固定为「科室成员」。

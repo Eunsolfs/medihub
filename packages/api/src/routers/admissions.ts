@@ -6,7 +6,8 @@ import type { Database } from "@medihub/db";
 import { asset } from "@medihub/db/schema/content";
 import { admission, admissionKind, patient } from "@medihub/db/schema/patients";
 
-import { canDelete, organizationIdOf } from "#src/access.ts";
+import type { Viewer } from "#src/access.ts";
+import { canAccessPatient, canDelete, organizationIdOf } from "#src/access.ts";
 import { organizationProcedure } from "#src/procedures.ts";
 
 const admissionInput = z.object({
@@ -29,19 +30,28 @@ const admissionId = z.object({ id: z.string().min(1) });
 
 const emptyToNull = (value: string | null | undefined) => value?.trim() || null;
 
+/**
+ * 取患者并校验「谁的患者归谁」：创建者本人与科室管理员可操作，
+ * 其他成员一律按不存在处理，不泄露档案是否存在。
+ */
 const requirePatient = async (
   context: { db: Database },
   organizationId: string,
-  patientId: string
+  patientId: string,
+  viewer: Viewer
 ) => {
   const [row] = await context.db
-    .select({ id: patient.id })
+    .select({
+      createdBy: patient.createdBy,
+      id: patient.id,
+      organizationId: patient.organizationId,
+    })
     .from(patient)
     .where(
       and(eq(patient.id, patientId), eq(patient.organizationId, organizationId))
     );
 
-  if (!row) {
+  if (!row || !canAccessPatient(viewer, row)) {
     throw new ORPCError("NOT_FOUND", { message: "患者不存在" });
   }
 
@@ -53,6 +63,13 @@ export const admissionsRouter = {
     .input(z.object({ patientId: z.string().min(1) }))
     .handler(async ({ context, input }) => {
       const organizationId = organizationIdOf(context);
+      const { viewer } = context;
+
+      if (!viewer) {
+        throw new ORPCError("UNAUTHORIZED");
+      }
+
+      await requirePatient(context, organizationId, input.patientId, viewer);
 
       return await context.db
         .select({
@@ -83,6 +100,11 @@ export const admissionsRouter = {
     .input(admissionId)
     .handler(async ({ context, input }) => {
       const organizationId = organizationIdOf(context);
+      const { viewer } = context;
+
+      if (!viewer) {
+        throw new ORPCError("UNAUTHORIZED");
+      }
 
       const [row] = await context.db
         .select()
@@ -103,6 +125,10 @@ export const admissionsRouter = {
         .from(patient)
         .where(eq(patient.id, row.patientId));
 
+      if (!patientRow || !canAccessPatient(viewer, patientRow)) {
+        throw new ORPCError("NOT_FOUND", { message: "就诊记录不存在" });
+      }
+
       const assets = await context.db
         .select()
         .from(asset)
@@ -122,7 +148,7 @@ export const admissionsRouter = {
         throw new ORPCError("UNAUTHORIZED");
       }
 
-      await requirePatient(context, organizationId, input.patientId);
+      await requirePatient(context, organizationId, input.patientId, viewer);
 
       const [created] = await context.db
         .insert(admission)
@@ -162,6 +188,27 @@ export const admissionsRouter = {
     .handler(async ({ context, input }) => {
       const organizationId = organizationIdOf(context);
       const { id, ...values } = input;
+      const { viewer } = context;
+
+      if (!viewer) {
+        throw new ORPCError("UNAUTHORIZED");
+      }
+
+      const [existing] = await context.db
+        .select({ patientId: admission.patientId })
+        .from(admission)
+        .where(
+          and(
+            eq(admission.id, id),
+            eq(admission.organizationId, organizationId)
+          )
+        );
+
+      if (!existing) {
+        throw new ORPCError("NOT_FOUND", { message: "就诊记录不存在" });
+      }
+
+      await requirePatient(context, organizationId, existing.patientId, viewer);
 
       const [updated] = await context.db
         .update(admission)
@@ -225,7 +272,10 @@ export const admissionsRouter = {
       }
 
       const [existing] = await context.db
-        .select({ createdBy: admission.createdBy })
+        .select({
+          createdBy: admission.createdBy,
+          patientId: admission.patientId,
+        })
         .from(admission)
         .where(
           and(
@@ -237,6 +287,8 @@ export const admissionsRouter = {
       if (!existing) {
         throw new ORPCError("NOT_FOUND", { message: "就诊记录不存在" });
       }
+
+      await requirePatient(context, organizationId, existing.patientId, viewer);
 
       if (!canDelete(viewer, existing.createdBy)) {
         throw new ORPCError("FORBIDDEN", {

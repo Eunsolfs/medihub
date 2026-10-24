@@ -24,6 +24,8 @@ export interface AssetGridProps {
   onDelete?: (asset: MediaAsset) => void;
   /** 内部预览里 xlsx「保存为新版本」成功后回调，用于刷新列表。 */
   onUploaded?: (asset: UploadedAsset) => void;
+  /** 卡片/行底部附加一行自定义内容（如归属患者链接），点击不会触发预览。 */
+  renderCaption?: (asset: MediaAsset) => ReactNode;
   className?: string;
   layout?: "grid" | "list";
 }
@@ -94,6 +96,7 @@ export const AssetGrid = ({
   selection,
   onDelete,
   onUploaded,
+  renderCaption,
   className,
   layout = "grid",
 }: AssetGridProps) => {
@@ -281,6 +284,19 @@ export const AssetGrid = ({
                   <p className="text-muted-foreground truncate text-xs">
                     {metaOf(asset) || "—"}
                   </p>
+                  {renderCaption ? (
+                    <span
+                      className="block"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                      }}
+                      onPointerDown={(event) => {
+                        event.stopPropagation();
+                      }}
+                    >
+                      {renderCaption(asset)}
+                    </span>
+                  ) : null}
                 </div>
                 <div
                   className="flex items-center gap-0.5 opacity-100 sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100"
@@ -384,6 +400,19 @@ export const AssetGrid = ({
                   <p className="text-muted-foreground truncate text-[11px]">
                     {metaOf(asset) || "—"}
                   </p>
+                  {renderCaption ? (
+                    <span
+                      className="block"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                      }}
+                      onPointerDown={(event) => {
+                        event.stopPropagation();
+                      }}
+                    >
+                      {renderCaption(asset)}
+                    </span>
+                  ) : null}
                 </div>
                 <div className="absolute top-2.5 right-2.5 z-10 opacity-100 transition-opacity sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
                   <AssetActions asset={asset} onDelete={onDelete} />

@@ -4,22 +4,28 @@ import { asset, post } from "@medihub/db/schema/content";
 import { learningSession } from "@medihub/db/schema/learning";
 import { admission, patient } from "@medihub/db/schema/patients";
 
-import { organizationIdOf } from "#src/access.ts";
+import { canSeeAllPatients, organizationIdOf } from "#src/access.ts";
 import { organizationProcedure } from "#src/procedures.ts";
 
 export const statsRouter = {
   /** 工作台概览：数量、存储占用、最近活动。 */
   overview: organizationProcedure.handler(async ({ context }) => {
     const organizationId = organizationIdOf(context);
-    const viewerId = context.viewer?.id ?? "";
-    const isIndividual = context.viewer?.role === "individual";
+    const { viewer } = context;
+    const viewerId = viewer?.id ?? "";
+    const isIndividual = viewer?.role === "individual";
+    // 科室成员只看得到自己建档患者名下的素材，统计口径与之保持一致。
+    const ownPatientsOnly = viewer !== undefined && !canSeeAllPatients(viewer);
 
     const assetWhere = and(
       eq(asset.organizationId, organizationId),
       isNull(asset.deletedAt),
       isIndividual
         ? eq(asset.ownerId, viewerId)
-        : or(eq(asset.visibility, "org"), eq(asset.ownerId, viewerId))
+        : or(eq(asset.visibility, "org"), eq(asset.ownerId, viewerId)),
+      ownPatientsOnly
+        ? or(isNull(asset.patientId), eq(patient.createdBy, viewerId))
+        : undefined
     );
 
     const [patientTotal, admissionTotal, assetTotal, postTotal, sessionTotal] =
@@ -27,7 +33,12 @@ export const statsRouter = {
         context.db
           .select({ total: count() })
           .from(patient)
-          .where(eq(patient.organizationId, organizationId)),
+          .where(
+            and(
+              eq(patient.organizationId, organizationId),
+              ownPatientsOnly ? eq(patient.createdBy, viewerId) : undefined
+            )
+          ),
         context.db
           .select({ total: count() })
           .from(admission)
@@ -39,6 +50,7 @@ export const statsRouter = {
             videos: sql<number>`sum(case when ${asset.kind} = 'video' then 1 else 0 end)`,
           })
           .from(asset)
+          .leftJoin(patient, eq(asset.patientId, patient.id))
           .where(assetWhere),
         context.db
           .select({ total: count() })
@@ -53,6 +65,7 @@ export const statsRouter = {
     const [usage] = await context.db
       .select({ bytes: sql<number>`coalesce(sum(${asset.byteSize}), 0)` })
       .from(asset)
+      .leftJoin(patient, eq(asset.patientId, patient.id))
       .where(assetWhere);
 
     const [recentAssets, recentPatients] = await Promise.all([
@@ -64,6 +77,7 @@ export const statsRouter = {
           originalName: asset.originalName,
         })
         .from(asset)
+        .leftJoin(patient, eq(asset.patientId, patient.id))
         .where(assetWhere)
         .orderBy(desc(asset.createdAt))
         .limit(8),

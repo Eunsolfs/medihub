@@ -118,6 +118,142 @@ export const usersRouter = {
       };
     }),
 
+  /**
+   * 待分配科室的注册用户：注册后自动落在个人空间里的「自然人」。
+   * 科室管理员可以在这里找到新注册的同事，把人认领进自己的科室。
+   */
+  candidates: adminProcedure
+    .input(
+      z.object({
+        page: z.int().positive().default(1),
+        pageSize: z.int().positive().max(50).default(20),
+        q: z.string().trim().max(80).optional(),
+      })
+    )
+    .handler(async ({ context, input }) => {
+      const filters: SQL[] = [
+        eq(user.role, "individual"),
+        eq(organization.kind, "personal"),
+      ];
+
+      if (input.q) {
+        const keyword = `%${input.q}%`;
+        const search = or(like(user.name, keyword), like(user.email, keyword));
+
+        if (search) {
+          filters.push(search);
+        }
+      }
+
+      const where = and(...filters);
+
+      const [items, totals] = await Promise.all([
+        context.db
+          .select({
+            createdAt: user.createdAt,
+            email: user.email,
+            id: user.id,
+            name: user.name,
+            organizationId: user.organizationId,
+            organizationName: organization.name,
+            title: user.title,
+          })
+          .from(user)
+          .leftJoin(organization, eq(user.organizationId, organization.id))
+          .where(where)
+          .orderBy(desc(user.createdAt))
+          .limit(input.pageSize)
+          .offset((input.page - 1) * input.pageSize),
+        context.db
+          .select({ total: count() })
+          .from(user)
+          .leftJoin(organization, eq(user.organizationId, organization.id))
+          .where(where),
+      ]);
+
+      return {
+        items,
+        page: input.page,
+        pageSize: input.pageSize,
+        total: totals[0]?.total ?? 0,
+      };
+    }),
+
+  /** 把待分配的注册用户认领进科室（root 可指定任意科室）。 */
+  claim: adminProcedure
+    .input(
+      z.object({
+        organizationId: z.string().min(1).optional(),
+        userId: z.string().min(1),
+      })
+    )
+    .handler(async ({ context, input }) => {
+      const { viewer } = context;
+
+      if (!viewer) {
+        throw new ORPCError("UNAUTHORIZED");
+      }
+
+      const targetOrganizationId =
+        viewer.role === "root"
+          ? (input.organizationId ?? context.scopeOrganizationId)
+          : scopedOrganizationId(viewer);
+
+      if (!targetOrganizationId) {
+        throw new ORPCError("BAD_REQUEST", { message: "请先选择要加入的科室" });
+      }
+
+      const [targetOrganization] = await context.db
+        .select({ id: organization.id })
+        .from(organization)
+        .where(eq(organization.id, targetOrganizationId));
+
+      if (!targetOrganization) {
+        throw new ORPCError("NOT_FOUND", { message: "科室不存在" });
+      }
+
+      const [candidate] = await context.db
+        .select({ id: user.id, role: user.role })
+        .from(user)
+        .where(eq(user.id, input.userId));
+
+      if (!candidate) {
+        throw new ORPCError("NOT_FOUND", { message: "用户不存在" });
+      }
+
+      if (candidate.role !== "individual") {
+        throw new ORPCError("BAD_REQUEST", {
+          message: "该账号已经归属某个科室，请在成员列表里调整",
+        });
+      }
+
+      const [updated] = await context.db
+        .update(user)
+        .set({ organizationId: targetOrganizationId, role: "member" })
+        .where(eq(user.id, input.userId))
+        .returning({ id: user.id });
+
+      if (!updated) {
+        throw new ORPCError("NOT_FOUND", { message: "用户不存在" });
+      }
+
+      await recordAudit(context.db, {
+        action: "user.claim",
+        actorId: viewer.id,
+        entityId: input.userId,
+        entityType: "user",
+        organizationId: targetOrganizationId,
+      });
+
+      const [row] = await context.db
+        .select(userSummary)
+        .from(user)
+        .leftJoin(organization, eq(user.organizationId, organization.id))
+        .where(eq(user.id, input.userId));
+
+      return row;
+    }),
+
   create: adminProcedure
     .input(
       z.object({

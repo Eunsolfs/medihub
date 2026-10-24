@@ -25,6 +25,9 @@ export interface MediaAsset {
   postId?: string | null;
   ownerId?: string | null;
   ownerName?: string | null;
+  /** 资料库列表会带上归属患者/学习会议标题，供 caption 插槽使用。 */
+  patientName?: string | null;
+  sessionTitle?: string | null;
   timelineOrder?: number | null;
   width?: number | null;
   height?: number | null;
@@ -46,7 +49,7 @@ export const assetFileUrl = (id: string) => `/api/files/${id}`;
 
 export const assetDownloadUrl = (id: string) => `/api/files/${id}/download`;
 
-const extensionOf = (name: string) => {
+export const extensionOf = (name: string) => {
   const index = name.lastIndexOf(".");
 
   return index > 0 ? name.slice(index + 1).toLowerCase() : "";

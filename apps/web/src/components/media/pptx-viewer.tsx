@@ -3,6 +3,7 @@ import { Loader2Icon } from "lucide-react";
 import { PreviewFallback } from "./preview-fallback.tsx";
 import type { MediaAsset } from "./types.ts";
 import { usePdfProbe } from "./use-file-resource.ts";
+import { useIsMobile } from "./use-is-mobile.ts";
 
 export interface PptxViewerProps {
   asset: MediaAsset;
@@ -15,6 +16,7 @@ export interface PptxViewerProps {
  */
 export const PptxViewer = ({ asset, enabled }: PptxViewerProps) => {
   const probe = usePdfProbe(asset.id, enabled);
+  const isMobile = useIsMobile();
 
   if (probe === "loading") {
     return (
@@ -31,6 +33,15 @@ export const PptxViewer = ({ asset, enabled }: PptxViewerProps) => {
         src={`/api/office/${asset.id}/pdf`}
         title={asset.originalName}
         className="bg-background size-full border-0"
+      />
+    );
+  }
+
+  if (isMobile) {
+    return (
+      <PreviewFallback
+        asset={asset}
+        message="暂不支持在线预览，可下载后在手机上查看"
       />
     );
   }

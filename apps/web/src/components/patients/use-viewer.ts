@@ -12,10 +12,12 @@ export const useViewer = () => {
   const { session } = useRouteContext({ from: "__root__" });
   const user: { role?: unknown } | undefined = session?.user;
   const role = ROLES.find((candidate) => candidate === user?.role);
+  const isAdmin = role === "root" || role === "dept_admin";
 
   return {
-    canManageIdCard: role === "root" || role === "dept_admin",
+    canManageIdCard: isAdmin,
     id: session?.user.id,
+    isAdmin,
     name: session?.user.name,
     role,
   };

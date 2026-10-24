@@ -27,11 +27,13 @@ import { PageHeader } from "#src/components/app-shell/ui/page-header.tsx";
 import { AdmissionFormDialog } from "#src/components/patients/admission-form-dialog.tsx";
 import { AdmissionHeader } from "#src/components/patients/admission-header.tsx";
 import { AdmissionList } from "#src/components/patients/admission-list.tsx";
+import { AdmissionRecordSheet } from "#src/components/patients/admission-record-sheet.tsx";
 import { AdmissionSummaryCard } from "#src/components/patients/admission-summary-card.tsx";
 import { describePatient } from "#src/components/patients/display.ts";
 import { PatientFormDialog } from "#src/components/patients/patient-form-dialog.tsx";
 import { PatientInfoCard } from "#src/components/patients/patient-info-card.tsx";
 import { PatientMediaPanel } from "#src/components/patients/patient-media-panel.tsx";
+import { PatientRecordSheet } from "#src/components/patients/patient-record-sheet.tsx";
 import { PatientStatusBadge } from "#src/components/patients/patient-status-badge.tsx";
 import { PatientsErrorState } from "#src/components/patients/patients-error-state.tsx";
 import {
@@ -47,6 +49,9 @@ interface AdmissionDialogState {
   focusField?: "summary";
   open: boolean;
 }
+
+/** 哪个「全量查看」抽屉处于打开状态。 */
+type RecordSheetKind = "admission" | "patient" | null;
 
 /** 回到列表时重置筛选：详情页不保存列表的搜索状态。 */
 const patientsListSearch = {
@@ -76,6 +81,7 @@ const PatientDetailPage = () => {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [removeAdmissionOpen, setRemoveAdmissionOpen] = useState(false);
+  const [recordSheet, setRecordSheet] = useState<RecordSheetKind>(null);
 
   const [admissionDialog, setAdmissionDialog] = useState<AdmissionDialogState>({
     admissionId: null,
@@ -202,7 +208,12 @@ const PatientDetailPage = () => {
         title={patient.name}
       />
 
-      <PatientInfoCard patient={patient} />
+      <PatientInfoCard
+        onViewAll={() => {
+          setRecordSheet("patient");
+        }}
+        patient={patient}
+      />
 
       <div className="grid gap-4 lg:grid-cols-[20rem_minmax(0,1fr)] lg:items-start">
         <div className="min-w-0 lg:sticky lg:top-20">
@@ -231,6 +242,9 @@ const PatientDetailPage = () => {
                   open: true,
                 });
               }}
+              onViewAll={() => {
+                setRecordSheet("admission");
+              }}
             />
           ) : null}
 
@@ -244,6 +258,9 @@ const PatientDetailPage = () => {
                   focusField: "summary",
                   open: true,
                 });
+              }}
+              onViewAll={() => {
+                setRecordSheet("admission");
               }}
               summary={admissionDetail?.summary}
             />
@@ -309,6 +326,35 @@ const PatientDetailPage = () => {
         open={removeAdmissionOpen}
         title="删除这次就诊记录？"
         tone="destructive"
+      />
+
+      <AdmissionRecordSheet
+        admission={selectedAdmission}
+        isLoading={Boolean(selectedAdmission) && admissionDetailQuery.isPending}
+        onEdit={() => {
+          setRecordSheet(null);
+          setAdmissionDialog({
+            admissionId: selectedAdmission?.id ?? null,
+            open: true,
+          });
+        }}
+        onOpenChange={(open) => {
+          setRecordSheet(open ? "admission" : null);
+        }}
+        open={recordSheet === "admission"}
+        record={admissionDetail}
+      />
+
+      <PatientRecordSheet
+        onEdit={() => {
+          setRecordSheet(null);
+          setEditOpen(true);
+        }}
+        onOpenChange={(open) => {
+          setRecordSheet(open ? "patient" : null);
+        }}
+        open={recordSheet === "patient"}
+        patient={patient}
       />
     </div>
   );
