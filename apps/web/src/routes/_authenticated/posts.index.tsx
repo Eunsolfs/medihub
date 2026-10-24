@@ -32,10 +32,12 @@ import {
   publicPostUrl,
   sessionRoleOf,
 } from "#src/components/posts/post-utils.ts";
-import type { PostSummary } from "#src/components/posts/post-utils.ts";
+import type {
+  PostSummary,
+  PostVisibility,
+} from "#src/components/posts/post-utils.ts";
 import { SharePostDialog } from "#src/components/posts/share-dialog.tsx";
 import { api } from "#src/lib/api.ts";
-import type { VisibilityKey } from "#src/lib/format.ts";
 
 const PAGE_SIZE = 9;
 
@@ -52,11 +54,12 @@ const statusFilterOf = (value: string): "draft" | "published" | undefined => {
   return undefined;
 };
 
-const visibilityFilterOf = (value: string): VisibilityKey | undefined => {
+const visibilityFilterOf = (value: string): PostVisibility | undefined => {
   if (
     value === "private" ||
     value === "org" ||
     value === "logged_in" ||
+    value === "selected" ||
     value === "public"
   ) {
     return value;
@@ -78,7 +81,6 @@ interface PostsResultsProps {
   onPageChange: (page: number) => void;
   page: number;
   query: string;
-  viewerName: string | undefined;
 }
 
 const PostsResults = ({
@@ -88,7 +90,6 @@ const PostsResults = ({
   onPageChange,
   page,
   query,
-  viewerName,
 }: PostsResultsProps) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -137,10 +138,6 @@ const PostsResults = ({
       },
     })
   );
-
-  const canManage = (item: PostSummary): boolean =>
-    canManageAll ||
-    (viewerName !== undefined && item.authorName === viewerName);
 
   const handleCopyLink = async (item: PostSummary) => {
     try {
@@ -197,7 +194,7 @@ const PostsResults = ({
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {items.map((item) => (
           <PostCard
-            canManage={canManage(item)}
+            canManage={canManageAll}
             isBusy={publishMutation.isPending || removeMutation.isPending}
             item={item}
             key={item.id}
@@ -292,11 +289,7 @@ const PostsPage = () => {
             新建文章
           </Button>
         }
-        description={
-          canManageAll
-            ? "科室教学文章的撰写、发布与分享：写完发布，用网址或二维码发给同事。"
-            : "只显示你撰写的文章；科室管理员可查看全科室的文章。"
-        }
+        description="这里能看到本科室同事与管理员分享的内容；只有作者与管理员可以编辑。"
         title="教学与分享"
       />
 
@@ -313,7 +306,6 @@ const PostsPage = () => {
           onPageChange={setPage}
           page={page}
           query={deferredQuery}
-          viewerName={session?.user.name}
         />
       </Suspense>
     </div>

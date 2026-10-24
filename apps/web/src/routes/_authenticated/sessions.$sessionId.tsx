@@ -8,6 +8,7 @@ import {
 import {
   ArrowLeftIcon,
   CalendarDaysIcon,
+  LockIcon,
   MapPinIcon,
   PaperclipIcon,
   PencilIcon,
@@ -37,6 +38,7 @@ import {
   learningKindLabel,
   learningKindTone,
 } from "#src/components/sessions/session-kind.ts";
+import { sessionVisibilityLabel } from "#src/components/sessions/visibility.ts";
 import { api } from "#src/lib/api.ts";
 import { formatDateTime } from "#src/lib/format.ts";
 
@@ -62,6 +64,7 @@ const SessionDetailPage = () => {
 
   const session = sessionQuery.data;
   const assets = assetsQuery.data?.items ?? [];
+  const canEdit = session?.canEdit === true;
 
   const removeMutation = useMutation(
     api.learning.remove.mutationOptions({
@@ -123,28 +126,37 @@ const SessionDetailPage = () => {
         </Button>
       </div>
 
+      {canEdit ? null : (
+        <div className="bg-info/10 text-info ring-info/20 flex items-start gap-2 rounded-lg px-3 py-2 text-sm ring-1">
+          <LockIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+          <span>只读：这场会议由其他成员创建，仅创建者与管理员可以编辑。</span>
+        </div>
+      )}
+
       <PageHeader
         actions={
-          <>
-            <Button
-              onClick={() => {
-                setFormOpen(true);
-              }}
-              variant="outline"
-            >
-              <PencilIcon />
-              编辑
-            </Button>
-            <Button
-              onClick={() => {
-                setDeleteOpen(true);
-              }}
-              variant="destructive"
-            >
-              <Trash2Icon />
-              删除
-            </Button>
-          </>
+          canEdit ? (
+            <>
+              <Button
+                onClick={() => {
+                  setFormOpen(true);
+                }}
+                variant="outline"
+              >
+                <PencilIcon />
+                编辑
+              </Button>
+              <Button
+                onClick={() => {
+                  setDeleteOpen(true);
+                }}
+                variant="destructive"
+              >
+                <Trash2Icon />
+                删除
+              </Button>
+            </>
+          ) : null
         }
         description={session.description ?? "还没有填写会议简介。"}
         meta={
@@ -186,6 +198,13 @@ const SessionDetailPage = () => {
             </div>
             <Separator />
             <div className="flex flex-wrap items-center justify-between gap-3">
+              <span className="text-muted-foreground">可见范围</span>
+              <span className="font-medium">
+                {sessionVisibilityLabel(session.visibility)}
+              </span>
+            </div>
+            <Separator />
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <span className="text-muted-foreground">标签</span>
               <TagList max={6} tags={session.tags ?? []} />
             </div>
@@ -205,15 +224,19 @@ const SessionDetailPage = () => {
           <div>
             <h2 className="text-base font-semibold tracking-tight">会议资料</h2>
             <p className="text-muted-foreground text-xs">
-              课件、照片、录音与视频都可以在会后上传归档。
+              {canEdit
+                ? "课件、照片、录音与视频都可以在会后上传归档。"
+                : "会议资料可预览与下载；如需补充资料，请联系创建者或管理员。"}
             </p>
           </div>
-          <UploadButton
-            onUploaded={() => {
-              void refreshAssets();
-            }}
-            target={{ sessionId }}
-          />
+          {canEdit ? (
+            <UploadButton
+              onUploaded={() => {
+                void refreshAssets();
+              }}
+              target={{ sessionId }}
+            />
+          ) : null}
         </div>
 
         {assetsQuery.isPending ? <LoadingRows rows={2} /> : null}
@@ -225,7 +248,9 @@ const SessionDetailPage = () => {
               <div className="grid place-items-center gap-1 py-10 text-center">
                 <p className="text-sm font-medium">还没有归档资料</p>
                 <p className="text-muted-foreground text-xs">
-                  点右上角「上传」，把这次会议的课件与影像归档到这里。
+                  {canEdit
+                    ? "点右上角「上传」，把这次会议的课件与影像归档到这里。"
+                    : "这场会议还没有上传资料。"}
                 </p>
               </div>
             }
@@ -233,11 +258,13 @@ const SessionDetailPage = () => {
         )}
       </section>
 
-      <SessionFormDialog
-        onOpenChange={setFormOpen}
-        open={formOpen}
-        session={session}
-      />
+      {canEdit ? (
+        <SessionFormDialog
+          onOpenChange={setFormOpen}
+          open={formOpen}
+          sessionId={session.id}
+        />
+      ) : null}
 
       <ConfirmDialog
         confirmLabel="删除"

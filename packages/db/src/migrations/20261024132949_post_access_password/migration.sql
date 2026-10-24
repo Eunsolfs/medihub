@@ -1,0 +1,1 @@
+ALTER TABLE `post` ADD `access_password_hash` text;

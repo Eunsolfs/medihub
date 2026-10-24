@@ -1,4 +1,10 @@
-import { GlobeIcon, LockIcon, LogInIcon, UsersIcon } from "lucide-react";
+import {
+  GlobeIcon,
+  LockIcon,
+  LogInIcon,
+  UserCheckIcon,
+  UsersIcon,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -75,6 +81,7 @@ const VISIBILITY_META = {
   org: { tone: "info", icon: UsersIcon },
   logged_in: { tone: "primary", icon: LogInIcon },
   private: { tone: "neutral", icon: LockIcon },
+  selected: { tone: "warning", icon: UserCheckIcon },
 } as const satisfies Record<
   VisibilityKey,
   { tone: BadgeTone; icon: LucideIcon }

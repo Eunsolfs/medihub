@@ -25,3 +25,15 @@ export const tagsColumn = () =>
     .$type<string[]>()
     .notNull()
     .default(sql`'[]'`);
+
+/**
+ * 内容可见范围（教学帖与学习会议共用）。
+ * 放在 common 里避免 content ↔ learning 的循环引用。
+ */
+export const shareVisibility = [
+  "private",
+  "org",
+  "logged_in",
+  "selected",
+  "public",
+] as const;

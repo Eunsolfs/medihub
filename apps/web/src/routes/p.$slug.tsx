@@ -1,4 +1,4 @@
-import { useSuspenseQuery } from "@tanstack/react-query";
+import { useMutation, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
 import {
@@ -7,16 +7,19 @@ import {
   CopyIcon,
   EyeIcon,
   HeartPulseIcon,
+  KeyRoundIcon,
+  Loader2Icon,
   LockIcon,
   PrinterIcon,
   QrCodeIcon,
   UserRoundIcon,
 } from "lucide-react";
-import { useState } from "react";
-import type { ReactNode } from "react";
+import { useMemo, useState } from "react";
+import type { ReactNode, SubmitEvent } from "react";
 import { toast } from "sonner";
 
 import { Button, buttonVariants } from "@medihub/ui/components/button";
+import { Input } from "@medihub/ui/components/input";
 import { Skeleton } from "@medihub/ui/components/skeleton";
 import { cn } from "@medihub/ui/lib/utils";
 
@@ -27,10 +30,14 @@ import {
   assetFileUrl,
   copyText,
   publicPostUrl,
+  withAccessToken,
+  withAccessTokenInMarkdown,
 } from "#src/components/posts/post-utils.ts";
 import type {
+  PostGateSummary,
   PostMediaRow,
   PublicPostRecord,
+  UnlockedPostResult,
 } from "#src/components/posts/post-utils.ts";
 import { SharePostDialog } from "#src/components/posts/share-dialog.tsx";
 import { api } from "#src/lib/api.ts";
@@ -147,7 +154,11 @@ const LoginGate = ({ slug }: { slug: string }) => (
   />
 );
 
-const DeniedGate = ({ reason }: { reason: "organization" | "owner" }) => (
+const DeniedGate = ({
+  reason,
+}: {
+  reason: "organization" | "owner" | "audience";
+}) => (
   <GateCard
     action={
       <Link
@@ -160,9 +171,11 @@ const DeniedGate = ({ reason }: { reason: "organization" | "owner" }) => (
     description={
       reason === "organization"
         ? "这篇文章的可见范围是「仅科室内部」：需要登录该科室的账号才能阅读。"
-        : "这篇内容的可见范围是「仅自己」，只有作者本人与管理员可以阅读。"
+        : reason === "audience"
+          ? "这篇文章只对指定的科室或用户可见，当前账号不在名单里。"
+          : "这篇内容的可见范围是「仅自己」，只有作者本人与管理员可以阅读。"
     }
-    title={reason === "organization" ? "没有访问权限" : "仅作者本人可见"}
+    title={reason === "owner" ? "仅作者本人可见" : "没有访问权限"}
   />
 );
 
@@ -200,7 +213,13 @@ const PublicImage = ({
   );
 };
 
-const MediaBlock = ({ item }: { item: PostMediaRow }) => {
+const MediaBlock = ({
+  accessToken,
+  item,
+}: {
+  accessToken: string | null;
+  item: PostMediaRow;
+}) => {
   if (item.provider === "bilibili" && item.url) {
     return (
       <figure className="grid gap-2">
@@ -221,7 +240,7 @@ const MediaBlock = ({ item }: { item: PostMediaRow }) => {
   }
 
   if (item.provider === "asset" && item.assetId) {
-    const url = assetFileUrl(item.assetId);
+    const url = withAccessToken(assetFileUrl(item.assetId), accessToken);
 
     if (item.kind === "image") {
       return (
@@ -307,16 +326,24 @@ const MediaBlock = ({ item }: { item: PostMediaRow }) => {
 };
 
 const ArticleView = ({
+  accessToken,
   media,
   post,
   slug,
 }: {
+  accessToken: string | null;
   media: PostMediaRow[];
   post: PublicPostRecord;
   slug: string;
 }) => {
   const [copied, setCopied] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+
+  // 密码帖的图片/附件都要带令牌：正文里的 /api/files/... 统一重写。
+  const content = useMemo(
+    () => withAccessTokenInMarkdown(post.content, accessToken),
+    [accessToken, post.content]
+  );
 
   const handleCopy = async () => {
     try {
@@ -372,19 +399,19 @@ const ArticleView = ({
               className="from-primary/10 via-muted to-accent aspect-[16/9] w-full rounded-xl bg-gradient-to-br"
             />
           }
-          src={assetFileUrl(post.coverAssetId)}
+          src={withAccessToken(assetFileUrl(post.coverAssetId), accessToken)}
         />
       ) : null}
 
       <div className={PROSE_CLASS}>
-        <Markdown content={post.content} />
+        <Markdown content={content} />
       </div>
 
       {media.length > 0 ? (
         <section className="grid gap-4 border-t pt-6 print:hidden">
           <h2 className="text-base font-semibold">附件与视频</h2>
           {media.map((item) => (
-            <MediaBlock item={item} key={item.id} />
+            <MediaBlock accessToken={accessToken} item={item} key={item.id} />
           ))}
         </section>
       ) : null}
@@ -449,6 +476,117 @@ const messageOfError = (error: unknown): string =>
     ? error.message
     : "这篇文章可能还没发布，或者链接已经失效。";
 
+const PasswordGate = ({
+  onUnlocked,
+  slug,
+  summary,
+}: {
+  onUnlocked: (result: UnlockedPostResult) => void;
+  slug: string;
+  summary: PostGateSummary;
+}) => {
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const unlockMutation = useMutation(
+    api.posts.bySlug.mutationOptions({
+      onError: (mutationError) => {
+        setError(messageOfError(mutationError));
+      },
+      onSuccess: (result) => {
+        if (result.gated) {
+          setError("密码不正确");
+
+          return;
+        }
+
+        setError(null);
+        onUnlocked(result);
+      },
+    })
+  );
+
+  const handleSubmit = (event: SubmitEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (unlockMutation.isPending) {
+      return;
+    }
+
+    const candidate = password.trim();
+
+    if (candidate.length === 0) {
+      setError("请输入访问密码");
+
+      return;
+    }
+
+    setError(null);
+    unlockMutation.mutate({ password: candidate, slug });
+  };
+
+  return (
+    <div className="mx-auto grid w-full max-w-md gap-6">
+      <header className="grid gap-2 text-center">
+        <span className="bg-muted text-muted-foreground mx-auto grid size-11 place-items-center rounded-full">
+          <KeyRoundIcon className="size-5" />
+        </span>
+        <h1 className="text-xl leading-tight font-semibold tracking-tight text-balance">
+          {summary.title}
+        </h1>
+        <p className="text-muted-foreground flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs">
+          <span>{summary.authorName ?? "未知作者"}</span>
+          <span aria-hidden="true">·</span>
+          <span>{formatDate(summary.publishedAt)}</span>
+        </p>
+        {summary.tags.length > 0 ? (
+          <TagList className="justify-center" max={6} tags={summary.tags} />
+        ) : null}
+      </header>
+
+      <form className="grid gap-3" onSubmit={handleSubmit}>
+        <p className="text-muted-foreground text-sm leading-relaxed">
+          这篇文章需要访问密码。作者或分享人应该已经把密码告诉你了。
+        </p>
+        <Input
+          aria-label="访问密码"
+          autoComplete="current-password"
+          autoFocus
+          className="h-11"
+          disabled={unlockMutation.isPending}
+          onChange={(event) => {
+            setPassword(event.target.value);
+            setError(null);
+          }}
+          placeholder="请输入访问密码"
+          type="password"
+          value={password}
+        />
+        {error ? (
+          <p className="text-destructive text-sm" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <Button
+          className="h-11 w-full"
+          disabled={unlockMutation.isPending}
+          type="submit"
+        >
+          {unlockMutation.isPending ? (
+            <Loader2Icon className="animate-spin" />
+          ) : (
+            <KeyRoundIcon />
+          )}
+          {unlockMutation.isPending ? "验证中…" : "查看内容"}
+        </Button>
+        <p className="text-muted-foreground text-center text-xs leading-relaxed">
+          密码只用于本次阅读，刷新页面后需要重新输入。
+        </p>
+      </form>
+    </div>
+  );
+};
+
 const PublicPostError = ({ error }: ErrorComponentProps) => (
   <PublicShell>
     <GateCard
@@ -467,8 +605,44 @@ const PublicPostPage = () => {
   const { slug } = Route.useParams();
   const { data } = useSuspenseQuery(bySlugQueryOptions(slug));
 
+  const [unlocked, setUnlocked] = useState<{
+    result: UnlockedPostResult;
+    slug: string;
+  } | null>(null);
+
+  // 切换文章时重置解锁状态，避免上一篇的令牌作用到下一篇。
+  const unlockedResult = unlocked?.slug === slug ? unlocked.result : null;
+
+  if (unlockedResult) {
+    return (
+      <PublicShell>
+        <ArticleView
+          accessToken={unlockedResult.accessToken}
+          media={unlockedResult.media}
+          post={unlockedResult.post}
+          slug={slug}
+        />
+      </PublicShell>
+    );
+  }
+
   // 可见范围由服务端判定：被拦下时只会拿到标题等摘要，不会下发正文与附件。
   if (data.gated) {
+    if (data.reason === "password") {
+      return (
+        <PublicShell>
+          <PasswordGate
+            key={slug}
+            onUnlocked={(result) => {
+              setUnlocked({ result, slug });
+            }}
+            slug={slug}
+            summary={data.summary}
+          />
+        </PublicShell>
+      );
+    }
+
     return (
       <PublicShell>
         {data.reason === "login" ? (
@@ -482,7 +656,12 @@ const PublicPostPage = () => {
 
   return (
     <PublicShell>
-      <ArticleView media={data.media} post={data.post} slug={slug} />
+      <ArticleView
+        accessToken={data.accessToken}
+        media={data.media}
+        post={data.post}
+        slug={slug}
+      />
     </PublicShell>
   );
 };

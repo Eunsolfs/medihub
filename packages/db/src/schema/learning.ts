@@ -4,6 +4,7 @@ import { check, index, snakeCase, text } from "drizzle-orm/sqlite-core";
 import { user } from "#src/schema/auth.ts";
 import {
   primaryId,
+  shareVisibility,
   tagsColumn,
   timestamp,
   timestamps,
@@ -33,6 +34,8 @@ export const learningSession = snakeCase.table(
     speaker: text(),
     description: text(),
     tags: tagsColumn(),
+    /** 可见范围与教学帖一致（private / org / logged_in / selected / public）。 */
+    visibility: text({ enum: shareVisibility }).notNull().default("org"),
     createdBy: text().references(() => user.id, { onDelete: "set null" }),
     ...timestamps,
   },

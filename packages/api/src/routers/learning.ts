@@ -1,9 +1,9 @@
 import { ORPCError } from "@orpc/server";
-import { and, count, desc, eq, like, or } from "drizzle-orm";
+import { and, count, desc, eq, inArray, like, or } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { z } from "zod";
 
-import { asset } from "@medihub/db/schema/content";
+import { asset, shareVisibility } from "@medihub/db/schema/content";
 import {
   learningSession,
   learningSessionKind,
@@ -13,7 +13,16 @@ import {
   canEditOwned,
   canSeeAllContent,
   organizationIdOf,
+  postViewGate,
 } from "#src/access.ts";
+import {
+  assertShareScope,
+  audienceMatches,
+  deleteAudience,
+  loadAudience,
+  replaceAudience,
+} from "#src/audience.ts";
+import type { AudienceTargets } from "#src/audience.ts";
 import { organizationProcedure } from "#src/procedures.ts";
 
 const sessionInput = z.object({
@@ -24,6 +33,9 @@ const sessionInput = z.object({
   speaker: z.string().trim().max(60).nullish(),
   tags: z.array(z.string().trim().min(1).max(20)).max(20).default([]),
   title: z.string().trim().min(1).max(200),
+  visibility: z.enum(shareVisibility).default("org"),
+  audienceOrganizations: z.array(z.string().min(1)).max(50).default([]),
+  audienceUsers: z.array(z.string().min(1)).max(200).default([]),
 });
 
 export const learningRouter = {
@@ -48,9 +60,24 @@ export const learningRouter = {
         eq(learningSession.organizationId, organizationId),
       ];
 
-      // 「谁创建的会议归谁」：普通成员只看自己的，管理员看全科室。
+      // 会议内容对本科室登录用户可见（只读）；编辑权另算。
       if (!canSeeAllContent(viewer)) {
-        filters.push(eq(learningSession.createdBy, viewer.id));
+        const audienceMatch = audienceMatches(
+          context.db,
+          "session",
+          learningSession.id,
+          viewer
+        );
+
+        const readable = or(
+          eq(learningSession.createdBy, viewer.id),
+          inArray(learningSession.visibility, ["org", "logged_in", "public"]),
+          and(eq(learningSession.visibility, "selected"), audienceMatch)
+        );
+
+        if (readable) {
+          filters.push(readable);
+        }
       }
 
       if (input.kind) {
@@ -80,6 +107,7 @@ export const learningRouter = {
               asset,
               eq(asset.sessionId, learningSession.id)
             ),
+            createdBy: learningSession.createdBy,
             heldAt: learningSession.heldAt,
             id: learningSession.id,
             kind: learningSession.kind,
@@ -87,6 +115,7 @@ export const learningRouter = {
             speaker: learningSession.speaker,
             tags: learningSession.tags,
             title: learningSession.title,
+            visibility: learningSession.visibility,
           })
           .from(learningSession)
           .where(where)
@@ -100,7 +129,10 @@ export const learningRouter = {
       ]);
 
       return {
-        items,
+        items: items.map((row) => ({
+          ...row,
+          canEdit: canEditOwned(viewer, row.createdBy),
+        })),
         page: input.page,
         pageSize: input.pageSize,
         total: totals[0]?.total ?? 0,
@@ -111,6 +143,11 @@ export const learningRouter = {
     .input(z.object({ id: z.string().min(1) }))
     .handler(async ({ context, input }) => {
       const organizationId = organizationIdOf(context);
+      const { viewer } = context;
+
+      if (!viewer) {
+        throw new ORPCError("UNAUTHORIZED");
+      }
 
       const [row] = await context.db
         .select()
@@ -122,28 +159,54 @@ export const learningRouter = {
           )
         );
 
-      const { viewer } = context;
-
-      if (!viewer) {
-        throw new ORPCError("UNAUTHORIZED");
-      }
-
-      if (!row || !canEditOwned(viewer, row.createdBy)) {
+      if (!row) {
         throw new ORPCError("NOT_FOUND", { message: "学习会议不存在" });
       }
 
-      return row;
+      const audience = await loadAudience(context.db, "session", row.id);
+
+      const gate = postViewGate(
+        {
+          authorId: row.createdBy ?? "",
+          organizationId: row.organizationId,
+          visibility: row.visibility,
+        },
+        viewer,
+        audience
+      );
+
+      if (!gate.allowed) {
+        throw new ORPCError("NOT_FOUND", { message: "学习会议不存在" });
+      }
+
+      return {
+        ...row,
+        audience,
+        canEdit: canEditOwned(viewer, row.createdBy),
+      };
     }),
 
   create: organizationProcedure
     .input(sessionInput)
     .handler(async ({ context, input }) => {
       const organizationId = organizationIdOf(context);
+      const { viewer } = context;
+
+      if (!viewer) {
+        throw new ORPCError("UNAUTHORIZED");
+      }
+
+      const targets: AudienceTargets = {
+        organizations: input.audienceOrganizations,
+        users: input.audienceUsers,
+      };
+
+      await assertShareScope(context.db, viewer, input.visibility, targets);
 
       const [created] = await context.db
         .insert(learningSession)
         .values({
-          createdBy: context.viewer?.id ?? null,
+          createdBy: viewer.id,
           description: input.description?.trim() || null,
           heldAt: input.heldAt,
           kind: input.kind,
@@ -152,11 +215,16 @@ export const learningRouter = {
           speaker: input.speaker?.trim() || null,
           tags: input.tags,
           title: input.title,
+          visibility: input.visibility,
         })
         .returning();
 
       if (!created) {
         throw new ORPCError("NOT_FOUND", { message: "创建学习会议失败" });
+      }
+
+      if (input.visibility === "selected") {
+        await replaceAudience(context.db, "session", created.id, targets);
       }
 
       return created;
@@ -187,6 +255,15 @@ export const learningRouter = {
         throw new ORPCError("NOT_FOUND", { message: "学习会议不存在" });
       }
 
+      const targets: AudienceTargets = {
+        organizations: values.audienceOrganizations ?? [],
+        users: values.audienceUsers ?? [],
+      };
+
+      if (values.visibility !== undefined) {
+        await assertShareScope(context.db, viewer, values.visibility, targets);
+      }
+
       const [updated] = await context.db
         .update(learningSession)
         .set({
@@ -203,6 +280,9 @@ export const learningRouter = {
             : { speaker: values.speaker?.trim() || null }),
           ...(values.tags === undefined ? {} : { tags: values.tags }),
           ...(values.title === undefined ? {} : { title: values.title }),
+          ...(values.visibility === undefined
+            ? {}
+            : { visibility: values.visibility }),
         })
         .where(
           and(
@@ -214,6 +294,17 @@ export const learningRouter = {
 
       if (!updated) {
         throw new ORPCError("NOT_FOUND", { message: "学习会议不存在" });
+      }
+
+      if (values.visibility !== undefined) {
+        await replaceAudience(
+          context.db,
+          "session",
+          id,
+          values.visibility === "selected"
+            ? targets
+            : { organizations: [], users: [] }
+        );
       }
 
       return updated;
@@ -239,14 +330,11 @@ export const learningRouter = {
           )
         );
 
-      if (!existing) {
+      if (!existing || !canEditOwned(viewer, existing.createdBy)) {
         throw new ORPCError("NOT_FOUND", { message: "学习会议不存在" });
       }
 
-      if (!canEditOwned(viewer, existing.createdBy)) {
-        throw new ORPCError("NOT_FOUND", { message: "学习会议不存在" });
-      }
-
+      await deleteAudience(context.db, "session", input.id);
       await context.db
         .delete(learningSession)
         .where(eq(learningSession.id, input.id));

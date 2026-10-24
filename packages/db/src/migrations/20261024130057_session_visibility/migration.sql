@@ -1,0 +1,1 @@
+ALTER TABLE `learning_session` ADD `visibility` text DEFAULT 'org' NOT NULL;

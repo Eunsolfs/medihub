@@ -4,15 +4,14 @@ import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import { Hono } from "hono";
 import type { Context } from "hono";
 
-import { postViewGate } from "@medihub/api";
-import type { Viewer } from "@medihub/api";
+import { loadAudience, postViewGate, verifyShareAccess } from "@medihub/api";
+import type { ShareAudience, Viewer } from "@medihub/api";
 import {
   asset,
   clinicalStage,
   post,
   postMedia,
 } from "@medihub/db/schema/content";
-import { learningSession } from "@medihub/db/schema/learning";
 import { organization } from "@medihub/db/schema/organization";
 import { patient } from "@medihub/db/schema/patients";
 import { storageTarget } from "@medihub/db/schema/system";
@@ -129,16 +128,47 @@ const driverOf = (row: StorageTargetLike) => storage.driverFor(row);
 type PostRow = typeof post.$inferSelect;
 
 /** 帖子素材的可见性完全跟随帖子的可见范围（与 posts.bySlug 同一套判定）。 */
-const postAllowsViewer = (parent: PostRow, viewer: Viewer | null) =>
-  parent.status === "published" &&
-  postViewGate(
+const postAllowsViewer = (
+  parent: PostRow,
+  viewer: Viewer | null,
+  audience?: ShareAudience,
+  accessToken?: string
+) => {
+  if (parent.status !== "published") {
+    return false;
+  }
+
+  // 「任何人 + 访问密码」的帖子：素材必须带有效令牌才能读；
+  // 作者与管理员在后台预览/编辑时直接放行，否则缩略图会变成破图。
+  if (parent.visibility === "public" && parent.accessPasswordHash) {
+    const canEdit =
+      viewer !== null &&
+      (viewer.role === "root" ||
+        parent.authorId === viewer.id ||
+        (viewer.role === "dept_admin" &&
+          viewer.organizationId === parent.organizationId));
+
+    if (canEdit) {
+      return true;
+    }
+
+    return verifyShareAccess(
+      (payload) => storage.decrypt<never>(payload),
+      accessToken,
+      parent.id
+    );
+  }
+
+  return postViewGate(
     {
       authorId: parent.authorId,
       organizationId: parent.organizationId,
       visibility: parent.visibility,
     },
-    viewer
+    viewer,
+    audience
   ).allowed;
+};
 
 /**
  * 素材能否被当前访问者读取。
@@ -149,7 +179,8 @@ const postAllowsViewer = (parent: PostRow, viewer: Viewer | null) =>
  */
 const canReadAsset = async (
   row: typeof asset.$inferSelect,
-  viewer: Viewer | null
+  viewer: Viewer | null,
+  accessToken?: string
 ) => {
   if (row.deletedAt) {
     return false;
@@ -177,7 +208,18 @@ const canReadAsset = async (
       .from(post)
       .where(inArray(post.id, [...postIds]));
 
-    if (parents.some((parent) => postAllowsViewer(parent, viewer))) {
+    if (
+      await asyncSome(parents, async (parent) =>
+        postAllowsViewer(
+          parent,
+          viewer,
+          parent.visibility === "selected"
+            ? await loadAudience(db, "post", parent.id)
+            : undefined,
+          accessToken
+        )
+      )
+    ) {
       return true;
     }
 
@@ -211,23 +253,26 @@ const canReadAsset = async (
     }
   }
 
-  // 学习会议资料同理：成员只能读自己创建的会议下的文件。
-  if (row.sessionId && viewer.role !== "dept_admin") {
-    const [sessionOwner] = await db
-      .select({ createdBy: learningSession.createdBy })
-      .from(learningSession)
-      .where(eq(learningSession.id, row.sessionId));
-
-    if (sessionOwner?.createdBy !== viewer.id) {
-      return false;
-    }
-  }
+  // 学习会议资料与科室素材一致：本科室登录用户可读（只读），编辑权另算。
 
   if (viewer.role === "individual") {
     return row.ownerId === viewer.id;
   }
 
   return row.visibility === "org" || row.ownerId === viewer.id;
+};
+
+const asyncSome = async <T>(
+  items: T[],
+  predicate: (item: T) => Promise<boolean>
+) => {
+  for (const item of items) {
+    if (await predicate(item)) {
+      return true;
+    }
+  }
+
+  return false;
 };
 
 const contentDisposition = (type: "inline" | "attachment", name: string) => {
@@ -282,7 +327,7 @@ const sendAsset = async (
 
   const viewer = await viewerOf(c.req.raw);
 
-  if (!(await canReadAsset(row, viewer))) {
+  if (!(await canReadAsset(row, viewer, c.req.query("access")))) {
     return c.json({ error: "没有访问该文件的权限" }, 403);
   }
 
@@ -460,5 +505,127 @@ export const filesRoute = new Hono()
       stage: created.stage,
       url: `/api/files/${created.id}`,
       visibility: created.visibility,
+    });
+  })
+  .post("/:id/replace", async (c) => {
+    const viewer = await viewerOf(c.req.raw);
+
+    if (!viewer) {
+      return c.json({ error: "请先登录" }, 401);
+    }
+
+    const [row] = await db
+      .select()
+      .from(asset)
+      .where(eq(asset.id, c.req.param("id")));
+
+    if (!row || row.deletedAt) {
+      return c.json({ error: "素材不存在" }, 404);
+    }
+
+    const isAdmin = viewer.role === "dept_admin";
+    const isOwner = row.ownerId === viewer.id;
+
+    if (viewer.role !== "root" && !isAdmin && !isOwner) {
+      return c.json({ error: "只能替换自己上传的素材" }, 403);
+    }
+
+    // 患者素材还要求患者归属一致。
+    if (row.patientId && viewer.role !== "root" && !isAdmin) {
+      const [owner] = await db
+        .select({ createdBy: patient.createdBy })
+        .from(patient)
+        .where(eq(patient.id, row.patientId));
+
+      if (owner?.createdBy !== viewer.id) {
+        return c.json({ error: "没有替换该素材的权限" }, 403);
+      }
+    }
+
+    const declaredSize = Number(c.req.header("content-length") ?? 0);
+
+    if (declaredSize > env.UPLOAD_MAX_BYTES) {
+      return c.json(
+        {
+          error: `文件超过上限 ${Math.round(env.UPLOAD_MAX_BYTES / 1024 / 1024)}MB`,
+        },
+        413
+      );
+    }
+
+    const fileName = decodeURIComponent(
+      c.req.header("x-file-name") ?? row.originalName
+    );
+
+    const body = new Uint8Array(await c.req.arrayBuffer());
+
+    if (body.byteLength === 0) {
+      return c.json({ error: "文件内容为空" }, 400);
+    }
+
+    if (body.byteLength > env.UPLOAD_MAX_BYTES) {
+      return c.json(
+        {
+          error: `文件超过上限 ${Math.round(env.UPLOAD_MAX_BYTES / 1024 / 1024)}MB`,
+        },
+        413
+      );
+    }
+
+    const mimeType = c.req.header("content-type") || row.mimeType;
+    const widthHeader = Number(c.req.header("x-asset-width") ?? 0);
+    const heightHeader = Number(c.req.header("x-asset-height") ?? 0);
+
+    const [target] = await db
+      .select()
+      .from(storageTarget)
+      .where(eq(storageTarget.id, row.storageTargetId));
+
+    if (!target) {
+      return c.json({ error: "素材的存储目标已被删除" }, 410);
+    }
+
+    const driver = driverOf(target);
+    const storageKey = buildStorageKey(row.organizationId, mimeType, fileName);
+
+    await driver.put(storageKey, body);
+
+    const checksum = createHash("sha256").update(body).digest("hex");
+
+    const [updated] = await db
+      .update(asset)
+      .set({
+        byteSize: body.byteLength,
+        checksum,
+        height: heightHeader > 0 ? heightHeader : row.height,
+        kind: detectAssetKind(mimeType, fileName),
+        mimeType,
+        originalName: fileName,
+        storageKey,
+        width: widthHeader > 0 ? widthHeader : row.width,
+      })
+      .where(eq(asset.id, row.id))
+      .returning();
+
+    if (!updated) {
+      return c.json({ error: "保存素材失败" }, 500);
+    }
+
+    // 旧文件尽力清理；失败不影响替换结果。
+    if (row.storageKey !== storageKey) {
+      try {
+        await driver.delete(row.storageKey);
+      } catch {
+        // 保留旧对象最多多占一份空间，不阻塞用户。
+      }
+    }
+
+    return c.json({
+      byteSize: updated.byteSize,
+      id: updated.id,
+      kind: updated.kind,
+      mimeType: updated.mimeType,
+      originalName: updated.originalName,
+      url: `/api/files/${updated.id}`,
     });
   });

@@ -237,16 +237,6 @@ export const assetsRouter = {
         if (patientScope) {
           filters.push(patientScope);
         }
-
-        // 学习会议资料同样「谁创建的会议归谁」。
-        const sessionScope = or(
-          isNull(asset.sessionId),
-          eq(learningSession.createdBy, viewer.id)
-        );
-
-        if (sessionScope) {
-          filters.push(sessionScope);
-        }
       }
 
       const where = and(...filters);

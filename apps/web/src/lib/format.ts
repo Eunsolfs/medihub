@@ -110,6 +110,7 @@ export const visibilityLabels = {
   org: "仅科室内部",
   private: "仅自己",
   public: "任何人",
+  selected: "指定对象",
 } as const;
 
 export type VisibilityKey = keyof typeof visibilityLabels;

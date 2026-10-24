@@ -1,10 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouteContext } from "@tanstack/react-router";
 import { DownloadIcon, FolderTreeIcon, Trash2Icon, XIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@medihub/ui/components/button";
 
+import {
+  getSessionRole,
+  isAdminRole,
+} from "#src/components/app-shell/roles.ts";
 import { ConfirmDialog } from "#src/components/app-shell/ui/confirm-dialog.tsx";
 import { PaginationBar } from "#src/components/app-shell/ui/pagination-bar.tsx";
 import { LoadingRows } from "#src/components/app-shell/ui/skeletons.tsx";
@@ -77,6 +82,9 @@ export const LibraryBrowser = ({
   source,
 }: LibraryBrowserProps) => {
   const queryClient = useQueryClient();
+  const { session } = useRouteContext({ from: "/_authenticated" });
+  const viewerId = session?.user.id;
+  const viewerRole = getSessionRole(session);
   const [q, setQ] = useState("");
   const [keyword, setKeyword] = useState("");
   const [kind, setKind] = useState<LibraryKindFilter>("all");
@@ -119,6 +127,16 @@ export const LibraryBrowser = ({
 
   const assets = assetsQuery.data?.items ?? [];
   const total = assetsQuery.data?.total ?? 0;
+
+  // 科室素材共享可读，但整理（移动/删除）只属于上传者与管理员。
+  const selectedAssets = assets.filter((asset) =>
+    selectedIds.includes(asset.id)
+  );
+
+  const canManageSelected =
+    isAdminRole(viewerRole) ||
+    (selectedAssets.length > 0 &&
+      selectedAssets.every((asset) => asset.ownerId === viewerId));
 
   const refreshAssets = async () => {
     await queryClient.invalidateQueries({
@@ -209,13 +227,17 @@ export const LibraryBrowser = ({
         ) : null}
       </div>
 
+      <p className="text-muted-foreground -mt-1 text-xs">
+        本科室共享资料，只有上传者与管理员可以整理。
+      </p>
+
       {selectedIds.length > 0 ? (
         <div className="bg-accent/40 ring-foreground/10 flex flex-wrap items-center gap-2 rounded-xl px-3 py-2 ring-1">
           <span className="text-sm font-medium tabular-nums">
             已选 {selectedIds.length} 个素材
           </span>
           <div className="ml-auto flex flex-wrap items-center gap-1.5">
-            {canMove ? (
+            {canMove && canManageSelected ? (
               <Button
                 onClick={() => {
                   setMoveOpen(true);
@@ -241,16 +263,22 @@ export const LibraryBrowser = ({
               <DownloadIcon />
               打包下载
             </Button>
-            <Button
-              onClick={() => {
-                setDeleteOpen(true);
-              }}
-              size="sm"
-              variant="destructive"
-            >
-              <Trash2Icon />
-              删除
-            </Button>
+            {canManageSelected ? (
+              <Button
+                onClick={() => {
+                  setDeleteOpen(true);
+                }}
+                size="sm"
+                variant="destructive"
+              >
+                <Trash2Icon />
+                删除
+              </Button>
+            ) : (
+              <span className="text-muted-foreground text-xs">
+                只有上传者与管理员可以整理
+              </span>
+            )}
             <Button
               aria-label="取消选择"
               onClick={() => {

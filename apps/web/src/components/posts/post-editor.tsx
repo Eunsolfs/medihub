@@ -3,14 +3,11 @@ import {
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
-import {
-  useBlocker,
-  useNavigate,
-  useRouteContext,
-} from "@tanstack/react-router";
+import { useBlocker, useNavigate } from "@tanstack/react-router";
 import {
   EyeIcon,
   FileEditIcon,
+  KeyRoundIcon,
   Loader2Icon,
   LockIcon,
   SaveIcon,
@@ -23,55 +20,66 @@ import type { ReactNode } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@medihub/ui/components/button";
+import { Checkbox } from "@medihub/ui/components/checkbox";
 import { Input } from "@medihub/ui/components/input";
 import { Label } from "@medihub/ui/components/label";
 import { Skeleton } from "@medihub/ui/components/skeleton";
 import { Textarea } from "@medihub/ui/components/textarea";
 
-import { isAdminRole } from "#src/components/app-shell/roles.ts";
 import { ConfirmDialog } from "#src/components/app-shell/ui/confirm-dialog.tsx";
-import { EmptyState } from "#src/components/app-shell/ui/empty-state.tsx";
 import { PageHeader } from "#src/components/app-shell/ui/page-header.tsx";
-import { VisibilityBadge } from "#src/components/app-shell/ui/status-badges.tsx";
-import { MarkdownEditor } from "#src/components/media/index.ts";
+import { Markdown, MarkdownEditor } from "#src/components/media/index.ts";
 import { api } from "#src/lib/api.ts";
 import { formatDateTime } from "#src/lib/format.ts";
-import type { VisibilityKey } from "#src/lib/format.ts";
 
+import { AudienceSelector } from "./audience-selector.tsx";
 import { CoverPicker } from "./cover-picker.tsx";
 import { MediaAttachmentEditor } from "./media-attachment-editor.tsx";
+import { PostPasswordBadge } from "./post-password-badge.tsx";
 import {
+  ACCESS_PASSWORD_MAX,
   defaultVisibility,
   postMediaToDraft,
-  sessionRoleOf,
   statusLabelOf,
+  validateAccessPassword,
   validateMedia,
   visibilityOptionOf,
 } from "./post-utils.ts";
 import type {
   MediaDraft,
+  MeProfile,
   PostDetail,
   PostRow,
   PostStatus,
+  PostVisibility,
 } from "./post-utils.ts";
+import { PostVisibilityBadge } from "./post-visibility-badge.tsx";
 import { TagInput } from "./tag-input.tsx";
 import { VisibilityPicker } from "./visibility-picker.tsx";
 
 interface EditorDraft {
+  accessPassword: string;
+  audienceOrganizations: string[];
+  audienceUsers: string[];
   content: string;
   coverAssetId: string | null;
   excerpt: string;
   media: MediaDraft[];
+  removePassword: boolean;
   tags: string[];
   title: string;
-  visibility: VisibilityKey;
+  visibility: PostVisibility;
 }
 
 const draftOf = (detail?: PostDetail): EditorDraft => ({
+  accessPassword: "",
+  audienceOrganizations: detail?.audience.organizations ?? [],
+  audienceUsers: detail?.audience.users ?? [],
   content: detail?.post.content ?? "",
   coverAssetId: detail?.post.coverAssetId ?? null,
   excerpt: detail?.post.excerpt ?? "",
   media: detail?.media.map(postMediaToDraft) ?? [],
+  removePassword: false,
   tags: detail?.post.tags ?? [],
   title: detail?.post.title ?? "",
   visibility:
@@ -125,69 +133,32 @@ const EditorSkeleton = () => (
   </div>
 );
 
-const NoEditPermission = ({
-  authorName,
-  title,
+const PostEditorLoader = ({
+  postId,
+  profile,
 }: {
-  authorName: string | null;
-  title: string;
+  postId: string;
+  profile: MeProfile;
 }) => {
-  const navigate = useNavigate();
-
-  return (
-    <div className="grid gap-4">
-      <PageHeader
-        description="只有作者本人或科室管理员可以修改这篇内容。"
-        title="无法编辑"
-      />
-      <EmptyState
-        action={
-          <Button
-            onClick={() => {
-              void navigate({ to: "/posts" });
-            }}
-            variant="outline"
-          >
-            返回文章列表
-          </Button>
-        }
-        description={`《${title}》由 ${authorName ?? "其他成员"} 撰写，你可以直接在阅读页查看完整内容。`}
-        icon={LockIcon}
-        title="没有编辑权限"
-      />
-    </div>
-  );
-};
-
-const PostEditorLoader = ({ postId }: { postId: string }) => {
   const { data } = useSuspenseQuery(
     api.posts.get.queryOptions({ input: { id: postId } })
   );
 
-  const { session } = useRouteContext({ from: "/_authenticated" });
-  const viewerId = session?.user.id;
-
-  const canEdit =
-    viewerId === data.post.authorId || isAdminRole(sessionRoleOf(session));
-
-  if (!canEdit) {
-    return (
-      <NoEditPermission
-        authorName={data.post.authorName}
-        title={data.post.title}
-      />
-    );
-  }
-
-  return <PostEditorForm initial={data} postId={postId} />;
+  return <PostEditorForm initial={data} postId={postId} profile={profile} />;
 };
 
 interface PostEditorFormProps {
   initial?: PostDetail;
   postId?: string;
+  profile: MeProfile;
 }
 
-const PostEditorForm = ({ initial, postId }: PostEditorFormProps) => {
+interface PersistResult {
+  accessPassword: string | null | undefined;
+  row: PostRow;
+}
+
+const PostEditorForm = ({ initial, postId, profile }: PostEditorFormProps) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [initialDraft] = useState<EditorDraft>(() => draftOf(initial));
@@ -203,6 +174,20 @@ const PostEditorForm = ({ initial, postId }: PostEditorFormProps) => {
   );
 
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [hasPassword, setHasPassword] = useState(initial?.hasPassword ?? false);
+
+  const viewer = profile?.viewer ?? null;
+  const role = viewer?.role ?? null;
+  const viewerOrganizationId = viewer?.organizationId ?? null;
+  const viewerOrganizationName = profile?.organization?.name ?? null;
+  /** 阅读权与编辑权解耦：非作者/非管理员打开详情时整页只读。 */
+  const readOnly = initial !== undefined && !initial.canEdit;
+
+  /** 公开范围 + 已有密码或本次输入了密码时展示「密码」徽标。 */
+  const passwordSet =
+    draft.visibility === "public" &&
+    !draft.removePassword &&
+    (hasPassword || draft.accessPassword.trim().length > 0);
 
   const dirty = JSON.stringify(draft) !== baseline;
   const slug = initial?.post.slug ?? null;
@@ -228,6 +213,37 @@ const PostEditorForm = ({ initial, postId }: PostEditorFormProps) => {
     setDraft((previous) => ({ ...previous, ...next }));
   };
 
+  /** 切换可见范围：离开「任何人」时清空密码字段，「指定对象」预置本科室。 */
+  const handleVisibilityChange = (visibility: PostVisibility) => {
+    const leavesPublic = visibility !== "public";
+
+    if (visibility === "selected") {
+      const organizations =
+        draft.audienceOrganizations.length > 0
+          ? draft.audienceOrganizations
+          : role !== "root" && viewerOrganizationId !== null
+            ? [viewerOrganizationId]
+            : [];
+
+      patch({
+        accessPassword: leavesPublic ? "" : draft.accessPassword,
+        audienceOrganizations: organizations,
+        removePassword: leavesPublic ? false : draft.removePassword,
+        visibility,
+      });
+
+      return;
+    }
+
+    patch({
+      accessPassword: leavesPublic ? "" : draft.accessPassword,
+      audienceOrganizations: [],
+      audienceUsers: [],
+      removePassword: leavesPublic ? false : draft.removePassword,
+      visibility,
+    });
+  };
+
   const refreshQueries = (id: string) => {
     void queryClient.invalidateQueries({
       queryKey: api.posts.get.key({ input: { id } }),
@@ -238,7 +254,9 @@ const PostEditorForm = ({ initial, postId }: PostEditorFormProps) => {
   const markSaved = () => {
     const normalized: EditorDraft = {
       ...draft,
+      accessPassword: "",
       excerpt: draft.excerpt.trim(),
+      removePassword: false,
       title: draft.title.trim(),
     };
 
@@ -246,7 +264,28 @@ const PostEditorForm = ({ initial, postId }: PostEditorFormProps) => {
     setBaseline(JSON.stringify(normalized));
   };
 
-  const persist = async (): Promise<PostRow | null> => {
+  /**
+   * 提交给后端的密码字段：
+   * - 非「任何人」→ null（后端会顺手清空旧密码）
+   * - 勾选「移除密码」→ null
+   * - 输入了新密码 → 明文（后端哈希）
+   * - 留空且原来有密码 → undefined（保持原密码不变）
+   */
+  const passwordPayload = (): string | null | undefined => {
+    if (draft.visibility !== "public" || draft.removePassword) {
+      return null;
+    }
+
+    const password = draft.accessPassword.trim();
+
+    if (password.length > 0) {
+      return password;
+    }
+
+    return postId !== undefined && hasPassword ? undefined : null;
+  };
+
+  const persist = async (): Promise<PersistResult | null> => {
     if (draft.title.trim().length === 0) {
       toast.error("请先填写文章标题");
 
@@ -261,7 +300,41 @@ const PostEditorForm = ({ initial, postId }: PostEditorFormProps) => {
       return null;
     }
 
+    if (
+      draft.visibility === "selected" &&
+      draft.audienceOrganizations.length === 0 &&
+      draft.audienceUsers.length === 0
+    ) {
+      toast.error("「指定对象」至少要选择一个科室或一位成员");
+
+      return null;
+    }
+
+    const accessPassword = passwordPayload();
+
+    const passwordError =
+      accessPassword === null || accessPassword === undefined
+        ? null
+        : validateAccessPassword(accessPassword);
+
+    if (passwordError) {
+      toast.error(passwordError);
+
+      return null;
+    }
+
+    // 科室管理员只能指定本科室；root 可以指定任意科室与成员。
+    const audienceOrganizations =
+      draft.visibility === "selected"
+        ? role === "dept_admin" && viewerOrganizationId !== null
+          ? [viewerOrganizationId]
+          : draft.audienceOrganizations
+        : [];
+
     const values = {
+      accessPassword,
+      audienceOrganizations,
+      audienceUsers: draft.visibility === "selected" ? draft.audienceUsers : [],
       content: draft.content,
       coverAssetId: draft.coverAssetId,
       excerpt: draft.excerpt.trim() || null,
@@ -275,7 +348,7 @@ const PostEditorForm = ({ initial, postId }: PostEditorFormProps) => {
       ? await updateMutation.mutateAsync({ ...values, id: postId })
       : await createMutation.mutateAsync(values);
 
-    return row ?? null;
+    return row ? { accessPassword, row } : null;
   };
 
   const handleSave = async () => {
@@ -286,14 +359,19 @@ const PostEditorForm = ({ initial, postId }: PostEditorFormProps) => {
         return;
       }
 
+      setHasPassword(
+        saved.accessPassword === undefined
+          ? hasPassword
+          : saved.accessPassword !== null
+      );
       markSaved();
-      refreshQueries(saved.id);
+      refreshQueries(saved.row.id);
       toast.success(status === "published" ? "更改已保存" : "草稿已保存");
 
       if (!postId) {
         await navigate({
           ignoreBlocker: true,
-          params: { postId: saved.id },
+          params: { postId: saved.row.id },
           replace: true,
           to: "/posts/$postId",
         });
@@ -311,8 +389,14 @@ const PostEditorForm = ({ initial, postId }: PostEditorFormProps) => {
         return;
       }
 
+      setHasPassword(
+        saved.accessPassword === undefined
+          ? hasPassword
+          : saved.accessPassword !== null
+      );
+
       const published = await publishMutation.mutateAsync({
-        id: saved.id,
+        id: saved.row.id,
         published: true,
       });
 
@@ -325,7 +409,7 @@ const PostEditorForm = ({ initial, postId }: PostEditorFormProps) => {
       setStatus("published");
       setPublishedAt(published.publishedAt ?? new Date());
       markSaved();
-      refreshQueries(saved.id);
+      refreshQueries(saved.row.id);
       toast.success("已发布，正在打开阅读页");
 
       await navigate({
@@ -385,28 +469,56 @@ const PostEditorForm = ({ initial, postId }: PostEditorFormProps) => {
     <div className="grid gap-6">
       <PageHeader
         actions={
-          <Button
-            onClick={() => {
-              void navigate({ to: "/posts" });
-            }}
-            size="sm"
-            variant="outline"
-          >
-            返回列表
-          </Button>
+          <span className="flex flex-wrap items-center gap-2">
+            {readOnly && status === "published" && slug ? (
+              <a
+                className="text-primary inline-flex h-8 items-center gap-1 rounded-lg px-2 text-sm underline-offset-4 hover:underline"
+                href={`/p/${slug}`}
+                rel="noreferrer"
+                target="_blank"
+              >
+                <EyeIcon className="size-4" />
+                打开阅读页
+              </a>
+            ) : null}
+            <Button
+              onClick={() => {
+                void navigate({ to: "/posts" });
+              }}
+              size="sm"
+              variant="outline"
+            >
+              返回列表
+            </Button>
+          </span>
         }
-        description="正文用 Markdown 撰写，可以插入科室上传的视频、B 站视频和外部链接；发布后通过网址或二维码分享。"
+        description={
+          readOnly
+            ? "你可以阅读、下载这篇文章；只有作者与管理员可以编辑。"
+            : "正文用 Markdown 撰写，可以插入科室上传的视频、B 站视频和外部链接；发布后通过网址或二维码分享。"
+        }
         meta={
           <span className="flex flex-wrap items-center gap-2">
             <span>状态：{statusLabelOf(status)}</span>
-            <VisibilityBadge visibility={draft.visibility} />
+            <PostVisibilityBadge visibility={draft.visibility} />
+            {draft.visibility === "public" &&
+            (readOnly ? hasPassword : passwordSet) ? (
+              <PostPasswordBadge />
+            ) : null}
             {publishedAt ? (
               <span>发布于 {formatDateTime(publishedAt)}</span>
             ) : null}
           </span>
         }
-        title={postId ? "编辑教学文章" : "写教学文章"}
+        title={readOnly ? "文章详情" : postId ? "编辑教学文章" : "写教学文章"}
       />
+
+      {readOnly ? (
+        <p className="bg-warning/10 text-warning border-warning/20 flex items-start gap-2 rounded-lg border px-3 py-2 text-xs">
+          <LockIcon className="mt-0.5 size-3.5 shrink-0" />
+          只读：仅作者与管理员可编辑。
+        </p>
+      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="grid content-start gap-4">
@@ -414,6 +526,7 @@ const PostEditorForm = ({ initial, postId }: PostEditorFormProps) => {
             <Label htmlFor="post-title">标题</Label>
             <Input
               className="h-10 text-base md:text-base"
+              disabled={readOnly}
               id="post-title"
               maxLength={200}
               onChange={(event) => {
@@ -422,14 +535,17 @@ const PostEditorForm = ({ initial, postId }: PostEditorFormProps) => {
               placeholder="例如：游离皮瓣移植术后皮瓣危象的早期识别"
               value={draft.title}
             />
-            <p className="text-muted-foreground text-right text-xs tabular-nums">
-              {draft.title.length}/200
-            </p>
+            {readOnly ? null : (
+              <p className="text-muted-foreground text-right text-xs tabular-nums">
+                {draft.title.length}/200
+              </p>
+            )}
           </div>
 
           <div className="grid gap-1.5">
             <Label htmlFor="post-excerpt">摘要</Label>
             <Textarea
+              disabled={readOnly}
               id="post-excerpt"
               maxLength={500}
               onChange={(event) => {
@@ -439,9 +555,11 @@ const PostEditorForm = ({ initial, postId }: PostEditorFormProps) => {
               rows={3}
               value={draft.excerpt}
             />
-            <p className="text-muted-foreground text-right text-xs tabular-nums">
-              {draft.excerpt.length}/500
-            </p>
+            {readOnly ? null : (
+              <p className="text-muted-foreground text-right text-xs tabular-nums">
+                {draft.excerpt.length}/500
+              </p>
+            )}
           </div>
 
           <div className="grid gap-1.5">
@@ -449,21 +567,29 @@ const PostEditorForm = ({ initial, postId }: PostEditorFormProps) => {
               <span className="text-sm leading-none font-medium">
                 正文（Markdown）
               </span>
-              <span className="text-muted-foreground inline-flex items-center gap-1 text-xs">
-                <FileEditIcon className="size-3.5" />
-                支持标题、列表、表格、图片
-              </span>
+              {readOnly ? null : (
+                <span className="text-muted-foreground inline-flex items-center gap-1 text-xs">
+                  <FileEditIcon className="size-3.5" />
+                  支持标题、列表、表格、图片
+                </span>
+              )}
             </div>
-            <MarkdownEditor
-              minHeight={460}
-              onChange={(content) => {
-                patch({ content });
-              }}
-              placeholder={
-                "## 病例回顾\n\n患者，男，56 岁……\n\n## 手术要点\n\n1. ……"
-              }
-              value={draft.content}
-            />
+            {readOnly ? (
+              <div className="bg-card ring-foreground/10 min-h-40 rounded-xl px-4 py-3 text-sm ring-1">
+                <Markdown content={draft.content} />
+              </div>
+            ) : (
+              <MarkdownEditor
+                minHeight={460}
+                onChange={(content) => {
+                  patch({ content });
+                }}
+                placeholder={
+                  "## 病例回顾\n\n患者，男，56 岁……\n\n## 手术要点\n\n1. ……"
+                }
+                value={draft.content}
+              />
+            )}
           </div>
         </div>
 
@@ -480,7 +606,7 @@ const PostEditorForm = ({ initial, postId }: PostEditorFormProps) => {
               <span className="text-sm font-medium">
                 {statusLabelOf(status)}
               </span>
-              <VisibilityBadge visibility={draft.visibility} />
+              <PostVisibilityBadge visibility={draft.visibility} />
             </div>
             {status === "published" && slug ? (
               <a
@@ -496,21 +622,112 @@ const PostEditorForm = ({ initial, postId }: PostEditorFormProps) => {
           </Section>
 
           <Section
-            description="决定谁可以通过链接看到这篇文章。"
-            title="可见范围"
+            description="决定谁可以在列表与链接里看到这篇文章。"
+            title="发布设置"
           >
-            <VisibilityPicker
-              disabled={isBusy}
-              onChange={(visibility) => {
-                patch({ visibility });
-              }}
-              value={draft.visibility}
-            />
+            {readOnly ? (
+              <div className="grid gap-2">
+                <PostVisibilityBadge visibility={draft.visibility} />
+                <p className="text-muted-foreground text-xs leading-relaxed">
+                  {visibilityOptionOf(draft.visibility)?.description ?? "—"}
+                </p>
+                {draft.visibility === "selected" ? (
+                  <p className="text-muted-foreground bg-muted/40 rounded-lg px-2.5 py-2 text-xs leading-relaxed">
+                    指定科室 {draft.audienceOrganizations.length} 个 · 指定用户{" "}
+                    {draft.audienceUsers.length} 位
+                  </p>
+                ) : null}
+                {draft.visibility === "public" ? (
+                  <p className="text-muted-foreground inline-flex items-center gap-1.5 text-xs">
+                    <KeyRoundIcon className="size-3.5" />
+                    {hasPassword ? "访问密码：已设置" : "访问密码：未设置"}
+                  </p>
+                ) : null}
+              </div>
+            ) : (
+              <>
+                <VisibilityPicker
+                  disabled={isBusy}
+                  onChange={handleVisibilityChange}
+                  role={role}
+                  value={draft.visibility}
+                />
+
+                {draft.visibility === "selected" ? (
+                  <AudienceSelector
+                    disabled={isBusy}
+                    onChangeOrganizations={(audienceOrganizations) => {
+                      patch({ audienceOrganizations });
+                    }}
+                    onChangeUsers={(audienceUsers) => {
+                      patch({ audienceUsers });
+                    }}
+                    organizationId={viewerOrganizationId}
+                    organizationName={viewerOrganizationName}
+                    organizations={draft.audienceOrganizations}
+                    role={role}
+                    users={draft.audienceUsers}
+                  />
+                ) : null}
+
+                {draft.visibility === "public" ? (
+                  <div className="grid gap-2 border-t pt-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1.5">
+                        <KeyRoundIcon className="text-muted-foreground size-3.5" />
+                        <Label
+                          className="text-xs"
+                          htmlFor="post-access-password"
+                        >
+                          访问密码（可选）
+                        </Label>
+                      </span>
+                      {passwordSet ? <PostPasswordBadge /> : null}
+                    </div>
+                    <Input
+                      autoComplete="new-password"
+                      className="h-11"
+                      disabled={isBusy || draft.removePassword}
+                      id="post-access-password"
+                      maxLength={ACCESS_PASSWORD_MAX}
+                      onChange={(event) => {
+                        patch({ accessPassword: event.target.value });
+                      }}
+                      placeholder={
+                        hasPassword
+                          ? "已设置（留空保持不变）"
+                          : "4–64 位，可留空"
+                      }
+                      type="password"
+                      value={draft.accessPassword}
+                    />
+                    {hasPassword ? (
+                      <label className="text-muted-foreground flex items-center gap-2 text-xs">
+                        <Checkbox
+                          checked={draft.removePassword}
+                          disabled={isBusy}
+                          onCheckedChange={(checked) => {
+                            patch({
+                              accessPassword: "",
+                              removePassword: checked,
+                            });
+                          }}
+                        />
+                        移除密码
+                      </label>
+                    ) : null}
+                    <p className="text-muted-foreground text-xs leading-relaxed">
+                      设置后，只有知道密码的人才能查看，适合发给未注册的实习生。
+                    </p>
+                  </div>
+                ) : null}
+              </>
+            )}
           </Section>
 
           <Section description="最多 20 个，每个不超过 20 字。" title="标签">
             <TagInput
-              disabled={isBusy}
+              disabled={readOnly || isBusy}
               onChange={(tags) => {
                 patch({ tags });
               }}
@@ -521,7 +738,7 @@ const PostEditorForm = ({ initial, postId }: PostEditorFormProps) => {
           <Section description="不选封面时用渐变占位。" title="封面">
             <CoverPicker
               assetId={draft.coverAssetId}
-              disabled={isBusy}
+              disabled={readOnly || isBusy}
               onChange={(coverAssetId) => {
                 patch({ coverAssetId });
               }}
@@ -534,7 +751,7 @@ const PostEditorForm = ({ initial, postId }: PostEditorFormProps) => {
             title="媒体附件"
           >
             <MediaAttachmentEditor
-              disabled={isBusy}
+              disabled={readOnly || isBusy}
               media={draft.media}
               onChange={(media) => {
                 patch({ media });
@@ -547,56 +764,76 @@ const PostEditorForm = ({ initial, postId }: PostEditorFormProps) => {
 
       <div className="bg-background/95 sticky bottom-[4.5rem] z-10 -mx-4 flex flex-wrap items-center justify-between gap-2 border-t px-4 py-3 backdrop-blur md:bottom-0 md:-mx-6 md:px-6 lg:-mx-8 lg:px-8">
         <p className="text-muted-foreground text-xs">
-          {dirty ? "有未保存的改动" : "所有改动已保存"}
+          {readOnly
+            ? "只读：仅作者与管理员可编辑"
+            : dirty
+              ? "有未保存的改动"
+              : "所有改动已保存"}
           {initial
             ? ` · 最后更新 ${formatDateTime(initial.post.updatedAt)}`
             : ""}
         </p>
-        <div className="flex flex-wrap items-center gap-2">
-          {postId ? (
-            <Button
-              disabled={isBusy}
-              onClick={() => {
-                setConfirmOpen(true);
-              }}
-              size="sm"
-              variant="ghost"
-            >
-              <Trash2Icon />
-              删除
-            </Button>
-          ) : null}
-          {status === "published" ? (
-            <Button
-              disabled={isBusy}
-              onClick={handleUnpublish}
-              size="sm"
-              variant="outline"
-            >
-              <Undo2Icon />
-              取消发布
-            </Button>
-          ) : null}
+        {readOnly ? (
           <Button
-            disabled={isBusy}
-            onClick={handleSave}
+            onClick={() => {
+              void navigate({ to: "/posts" });
+            }}
             size="sm"
             variant="outline"
           >
-            {isSaving ? <Loader2Icon className="animate-spin" /> : <SaveIcon />}
-            {status === "published" ? "保存更改" : "保存草稿"}
+            返回列表
           </Button>
-          {status === "published" ? null : (
-            <Button disabled={isBusy} onClick={handlePublish} size="sm">
-              {publishMutation.isPending ? (
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            {postId ? (
+              <Button
+                disabled={isBusy}
+                onClick={() => {
+                  setConfirmOpen(true);
+                }}
+                size="sm"
+                variant="ghost"
+              >
+                <Trash2Icon />
+                删除
+              </Button>
+            ) : null}
+            {status === "published" ? (
+              <Button
+                disabled={isBusy}
+                onClick={handleUnpublish}
+                size="sm"
+                variant="outline"
+              >
+                <Undo2Icon />
+                取消发布
+              </Button>
+            ) : null}
+            <Button
+              disabled={isBusy}
+              onClick={handleSave}
+              size="sm"
+              variant="outline"
+            >
+              {isSaving ? (
                 <Loader2Icon className="animate-spin" />
               ) : (
-                <SendIcon />
+                <SaveIcon />
               )}
-              发布
+              {status === "published" ? "保存更改" : "保存草稿"}
             </Button>
-          )}
-        </div>
+            {status === "published" ? null : (
+              <Button disabled={isBusy} onClick={handlePublish} size="sm">
+                {publishMutation.isPending ? (
+                  <Loader2Icon className="animate-spin" />
+                ) : (
+                  <SendIcon />
+                )}
+                发布
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       <ConfirmDialog
@@ -633,15 +870,19 @@ interface PostEditorProps {
   postId?: string;
 }
 
-/** 新建与编辑共用同一个编辑器：/posts/new 与 /posts/$postId 都渲染它。 */
-export const PostEditor = ({ postId }: PostEditorProps) => {
-  if (!postId) {
-    return <PostEditorForm />;
+const PostEditorContent = ({ postId }: PostEditorProps) => {
+  const { data: profile } = useSuspenseQuery(api.me.profile.queryOptions());
+
+  if (postId) {
+    return <PostEditorLoader postId={postId} profile={profile} />;
   }
 
-  return (
-    <Suspense fallback={<EditorSkeleton />}>
-      <PostEditorLoader postId={postId} />
-    </Suspense>
-  );
+  return <PostEditorForm profile={profile} />;
 };
+
+/** 新建与编辑共用同一个编辑器：/posts/new 与 /posts/$postId 都渲染它。 */
+export const PostEditor = ({ postId }: PostEditorProps) => (
+  <Suspense fallback={<EditorSkeleton />}>
+    <PostEditorContent postId={postId} />
+  </Suspense>
+);

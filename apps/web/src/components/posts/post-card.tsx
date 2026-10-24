@@ -22,13 +22,14 @@ import {
 } from "@medihub/ui/components/dropdown-menu";
 import { cn } from "@medihub/ui/lib/utils";
 
-import { VisibilityBadge } from "#src/components/app-shell/ui/status-badges.tsx";
 import { TagList } from "#src/components/app-shell/ui/tag-list.tsx";
 import { formatRelative } from "#src/lib/format.ts";
 
 import { PostCover } from "./post-cover.tsx";
+import { PostPasswordBadge } from "./post-password-badge.tsx";
 import { statusLabelOf } from "./post-utils.ts";
 import type { PostSummary } from "./post-utils.ts";
+import { PostVisibilityBadge } from "./post-visibility-badge.tsx";
 
 interface PostCardProps {
   canManage: boolean;
@@ -77,7 +78,10 @@ export const PostCard = ({
             {published ? <CheckCircle2Icon className="size-3" /> : null}
             {statusLabelOf(item.status)}
           </span>
-          <VisibilityBadge visibility={item.visibility} />
+          <PostVisibilityBadge visibility={item.visibility} />
+          {item.visibility === "public" && item.hasPassword ? (
+            <PostPasswordBadge />
+          ) : null}
         </div>
       </Link>
 
@@ -137,19 +141,17 @@ export const PostCard = ({
               <MoreHorizontalIcon />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-40">
-              {canManage ? (
-                <DropdownMenuItem
-                  onClick={() => {
-                    void navigate({
-                      params: { postId: item.id },
-                      to: "/posts/$postId",
-                    });
-                  }}
-                >
-                  <PencilIcon />
-                  编辑
-                </DropdownMenuItem>
-              ) : null}
+              <DropdownMenuItem
+                onClick={() => {
+                  void navigate({
+                    params: { postId: item.id },
+                    to: "/posts/$postId",
+                  });
+                }}
+              >
+                {canManage ? <PencilIcon /> : <EyeIcon />}
+                {canManage ? "编辑" : "查看详情"}
+              </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => {
                   onCopyLink(item);

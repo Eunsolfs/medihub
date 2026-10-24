@@ -27,6 +27,27 @@ export interface UploadedAsset {
   visibility: string;
   capturedAt: string | null;
   admissionId: string | null;
+  /** 覆盖原素材后回传的新尺寸；普通上传不填。 */
+  width?: number | null;
+  height?: number | null;
+}
+
+/** 覆盖原素材接口的返回：不产生新记录，id 保持不变。 */
+export interface ReplacedAsset {
+  id: string;
+  url: string;
+  byteSize: number;
+  mimeType: string;
+  originalName: string;
+  kind: string;
+}
+
+export interface ReplaceFileOptions {
+  /** 编辑导出后的像素尺寸，便于服务端同步宽高。 */
+  width?: number;
+  height?: number;
+  onProgress?: (percent: number) => void;
+  signal?: AbortSignal;
 }
 
 const UPLOAD_ENDPOINT = "/api/files/upload";
@@ -227,6 +248,133 @@ export const uploadFile = async (
     xhr.addEventListener("timeout", () => {
       cleanup();
       reject(new Error("上传超时，请稍后重试"));
+    });
+
+    xhr.addEventListener("abort", () => {
+      cleanup();
+      reject(abortError());
+    });
+
+    signal?.addEventListener("abort", handleAbort, { once: true });
+    xhr.send(file);
+  });
+
+const parseReplacedAsset = (value: unknown): ReplacedAsset | null => {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const { id, url, byteSize, mimeType, originalName, kind } = value;
+
+  if (
+    typeof id !== "string" ||
+    typeof url !== "string" ||
+    typeof byteSize !== "number" ||
+    typeof mimeType !== "string" ||
+    typeof originalName !== "string" ||
+    typeof kind !== "string"
+  ) {
+    return null;
+  }
+
+  return { byteSize, id, kind, mimeType, originalName, url };
+};
+
+/**
+ * 覆盖已有图片素材：POST 原始 body 到 `/api/files/:id/replace`。
+ * 归属（患者/就诊/分期）沿用原素材，不产生新记录。
+ */
+export const replaceFile = async (
+  file: File,
+  assetId: string,
+  options: ReplaceFileOptions = {}
+): Promise<ReplacedAsset> =>
+  await new Promise<ReplacedAsset>((resolve, reject) => {
+    const { height, onProgress, signal, width } = options;
+
+    if (signal?.aborted) {
+      reject(abortError());
+
+      return;
+    }
+
+    const xhr = new XMLHttpRequest();
+
+    const cleanup = () => {
+      signal?.removeEventListener("abort", handleAbort);
+    };
+
+    function handleAbort() {
+      xhr.abort();
+    }
+
+    xhr.open("POST", `/api/files/${encodeURIComponent(assetId)}/replace`);
+    xhr.setRequestHeader("x-file-name", encodeURIComponent(file.name));
+    xhr.setRequestHeader(
+      "content-type",
+      file.type || "application/octet-stream"
+    );
+
+    if (typeof width === "number" && width > 0) {
+      xhr.setRequestHeader("x-asset-width", String(Math.round(width)));
+    }
+
+    if (typeof height === "number" && height > 0) {
+      xhr.setRequestHeader("x-asset-height", String(Math.round(height)));
+    }
+
+    // root 切换科室后，覆盖请求也要落到当前科室。
+    for (const [key, value] of Object.entries(scopeHeaders())) {
+      xhr.setRequestHeader(key, value);
+    }
+
+    xhr.upload.addEventListener("progress", (event) => {
+      if (onProgress && event.lengthComputable && event.total > 0) {
+        onProgress(
+          Math.min(99, Math.round((event.loaded / event.total) * 100))
+        );
+      }
+    });
+
+    xhr.addEventListener("load", () => {
+      cleanup();
+
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new Error(messageOf(xhr.status, xhr.responseText)));
+
+        return;
+      }
+
+      let parsed: unknown;
+
+      try {
+        parsed = JSON.parse(xhr.responseText);
+      } catch {
+        reject(new Error("服务器返回格式异常，无法确认覆盖结果"));
+
+        return;
+      }
+
+      const replaced = parseReplacedAsset(parsed);
+
+      if (!replaced) {
+        reject(new Error("服务器返回格式异常，无法确认覆盖结果"));
+
+        return;
+      }
+
+      onProgress?.(100);
+      resolve(replaced);
+    });
+
+    xhr.addEventListener("error", () => {
+      cleanup();
+      reject(new Error("网络异常，覆盖失败，请检查网络后重试"));
+    });
+
+    xhr.addEventListener("timeout", () => {
+      cleanup();
+      reject(new Error("覆盖超时，请稍后重试"));
     });
 
     xhr.addEventListener("abort", () => {

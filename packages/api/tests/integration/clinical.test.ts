@@ -284,27 +284,40 @@ describe("匿名访问", () => {
     const authorAccount = await signUpAccount();
     const outsiderAccount = await signUpAccount();
     const outsider = outsiderAccount.client;
+    const authorProfile = await authorAccount.client.me.profile();
 
-    const orgPost = await authorAccount.client.posts.create({
+    if (!authorProfile) {
+      throw new Error("缺少组织");
+    }
+
+    // 「全系统登录用户」是管理员的发布档位，先把作者提到科室管理员。
+    await testDb
+      .update(user)
+      .set({ role: "dept_admin" })
+      .where(eq(user.id, authorProfile.viewer.id));
+
+    const author = await clientForEmail(authorAccount.email);
+
+    const orgPost = await author.posts.create({
       content: "# 科室内部内容",
       title: "仅科室内部",
       visibility: "org",
     });
 
-    const loginPost = await authorAccount.client.posts.create({
+    const loginPost = await author.posts.create({
       content: "# 任意登录用户可见",
       title: "任意登录用户",
       visibility: "logged_in",
     });
 
-    const privatePost = await authorAccount.client.posts.create({
+    const privatePost = await author.posts.create({
       content: "# 仅作者",
       title: "仅作者可见",
       visibility: "private",
     });
 
     for (const item of [orgPost, loginPost, privatePost]) {
-      await authorAccount.client.posts.publish({
+      await author.posts.publish({
         id: item.id,
         published: true,
       });
@@ -340,14 +353,14 @@ describe("匿名访问", () => {
 
     // 作者本人三种都能读。
     for (const item of [orgPost, loginPost, privatePost]) {
-      const own = await authorAccount.client.posts.bySlug({ slug: item.slug });
+      const own = await author.posts.bySlug({ slug: item.slug });
       expect(own.gated).toBe(false);
     }
   });
 });
 
 describe("帖子与学习会议的归属", () => {
-  it("同科室成员只能看到并编辑自己撰写的帖子", async () => {
+  it("同科室成员能看到同事的帖子但不能编辑", async () => {
     const authorAccount = await signUpAccount();
     const otherAccount = await signUpAccount();
     const authorProfile = await authorAccount.client.me.profile();
@@ -371,10 +384,13 @@ describe("帖子与学习会议的归属", () => {
       visibility: "org",
     });
 
+    // 同事能读到（本科室范围），但编辑被拒绝。
     const other = await clientForEmail(otherAccount.email);
     const otherList = await other.posts.list({ page: 1, pageSize: 20 });
-    expect(otherList.total).toBe(0);
-    await expect(other.posts.get({ id: created.id })).rejects.toThrow();
+    expect(otherList.total).toBe(1);
+    await expect(other.posts.get({ id: created.id })).resolves.toMatchObject({
+      canEdit: false,
+    });
     await expect(
       other.posts.update({ id: created.id, title: "改标题" })
     ).rejects.toThrow();
@@ -393,7 +409,74 @@ describe("帖子与学习会议的归属", () => {
     ).resolves.toBeTruthy();
   });
 
-  it("同科室成员只能看到自己创建的学习会议", async () => {
+  it("公开帖可以设置访问密码，密码错误拿不到正文", async () => {
+    const author = await signUp();
+
+    const created = await author.posts.create({
+      accessPassword: "intern-2026",
+      content: "# 科室制度\n\n仅供实习同学阅读。",
+      title: "实习生制度",
+      visibility: "public",
+    });
+
+    await author.posts.publish({ id: created.id, published: true });
+
+    const anonymous = createClient(null);
+    const locked = await anonymous.posts.bySlug({ slug: created.slug });
+    expect(locked.gated).toBe(true);
+    expect(locked.summary).toBeDefined();
+
+    if (locked.gated) {
+      expect(locked.reason).toBe("password");
+    }
+
+    const wrong = await anonymous.posts.bySlug({
+      password: "wrong-password",
+      slug: created.slug,
+    });
+
+    expect(wrong.gated).toBe(true);
+
+    const unlocked = await anonymous.posts.bySlug({
+      password: "intern-2026",
+      slug: created.slug,
+    });
+
+    expect(unlocked.gated).toBe(false);
+
+    if (!unlocked.gated) {
+      expect(unlocked.post.title).toBe("实习生制度");
+      expect(unlocked.accessToken).toBeTruthy();
+    }
+  });
+
+  it("成员不能设置指定对象或全系统可见范围", async () => {
+    const author = await signUp();
+    const profile = await author.me.profile();
+
+    if (!profile?.viewer.organizationId) {
+      throw new Error("缺少组织");
+    }
+
+    await expect(
+      author.posts.create({
+        content: "",
+        title: "越权指定对象",
+        visibility: "selected",
+        audienceOrganizations: [profile.viewer.organizationId],
+      })
+    ).rejects.toThrow();
+
+    await expect(
+      author.posts.create({
+        content: "",
+        title: "越权全系统",
+        visibility: "logged_in",
+      })
+    ).rejects.toThrow();
+  });
+
+  it("同科室成员能看到同事创建的学习会议但不能编辑", async () => {
     const authorAccount = await signUpAccount();
     const otherAccount = await signUpAccount();
     const authorProfile = await authorAccount.client.me.profile();
@@ -418,8 +501,16 @@ describe("帖子与学习会议的归属", () => {
 
     const other = await clientForEmail(otherAccount.email);
     const otherList = await other.learning.list({ page: 1, pageSize: 20 });
-    expect(otherList.total).toBe(0);
-    await expect(other.learning.get({ id: created.id })).rejects.toThrow();
+    expect(otherList.total).toBe(1);
+    expect(otherList.items[0]?.canEdit).toBe(false);
+    await expect(other.learning.get({ id: created.id })).resolves.toMatchObject(
+      {
+        canEdit: false,
+      }
+    );
+    await expect(
+      other.learning.update({ id: created.id, title: "同事改的会议" })
+    ).rejects.toThrow();
 
     await testDb
       .update(user)
@@ -434,6 +525,9 @@ describe("帖子与学习会议的归属", () => {
     });
 
     expect(adminList.total).toBe(1);
+    await expect(
+      otherAdmin.learning.update({ id: created.id, title: "管理员改的会议" })
+    ).resolves.toBeTruthy();
   });
 });
 

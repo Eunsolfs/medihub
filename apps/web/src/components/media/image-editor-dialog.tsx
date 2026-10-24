@@ -22,11 +22,15 @@ import { Progress } from "@medihub/ui/components/progress";
 import { cn } from "@medihub/ui/lib/utils";
 
 import { formatBytes } from "#src/lib/format.ts";
-import { uploadFile } from "#src/lib/upload.ts";
+import { replaceFile, uploadFile } from "#src/lib/upload.ts";
 import type { UploadedAsset } from "#src/lib/upload.ts";
 
 import type { MediaAsset } from "./types.ts";
-import { assetFileUrl, uploadTargetFromAsset } from "./types.ts";
+import {
+  assetFileUrl,
+  bumpAssetVersion,
+  uploadTargetFromAsset,
+} from "./types.ts";
 
 export interface ImageEditorDialogProps {
   asset: MediaAsset | null;
@@ -173,7 +177,8 @@ const EditorBody = ({ asset, onOpenChange, onUploaded }: EditorBodyProps) => {
   const [crop, setCrop] = useState<CropRect>({ ...FULL_CROP });
   const [aspect, setAspect] = useState<AspectKey>("free");
   const [history, setHistory] = useState<EditorSnapshot[]>([]);
-  const [saving, setSaving] = useState(false);
+  const [busy, setBusy] = useState<"create" | "replace" | null>(null);
+  const [confirmReplace, setConfirmReplace] = useState(false);
   const [savePercent, setSavePercent] = useState(0);
   const [viewport, setViewport] = useState({ height: 0, width: 0 });
   const [dragging, setDragging] = useState(false);
@@ -498,8 +503,16 @@ const EditorBody = ({ asset, onOpenChange, onUploaded }: EditorBodyProps) => {
     }
   };
 
-  const handleSave = () => {
-    if (!image || size.width <= 0 || saving) {
+  interface ExportMeta {
+    mime: string;
+    extension: string;
+    baseName: string;
+    width: number;
+    height: number;
+  }
+
+  const exportBlob = (onBlob: (blob: Blob, meta: ExportMeta) => void) => {
+    if (!image || size.width <= 0 || busy) {
       return;
     }
 
@@ -542,34 +555,12 @@ const EditorBody = ({ asset, onOpenChange, onUploaded }: EditorBodyProps) => {
     const extension = mime === "image/jpeg" ? "jpg" : "png";
     const baseName = asset.originalName.replace(/\.[^.]+$/u, "") || "图片";
 
-    const persist = async (blob: Blob) => {
-      setSaving(true);
-      setSavePercent(0);
-
-      try {
-        const file = new File([blob], `${baseName}-已编辑.${extension}`, {
-          type: mime,
-        });
-
-        const uploaded = await uploadFile(
-          file,
-          uploadTargetFromAsset(asset),
-          (percent) => {
-            setSavePercent(percent);
-          }
-        );
-
-        toast.success("已保存为新素材");
-        onUploaded?.(uploaded);
-        onOpenChange(false);
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : "保存新素材失败，请重试"
-        );
-      } finally {
-        setSaving(false);
-        setSavePercent(0);
-      }
+    const meta: ExportMeta = {
+      baseName,
+      extension,
+      height: sourceHeight,
+      mime,
+      width: sourceWidth,
     };
 
     output.toBlob(
@@ -580,11 +571,108 @@ const EditorBody = ({ asset, onOpenChange, onUploaded }: EditorBodyProps) => {
           return;
         }
 
-        void persist(blob);
+        onBlob(blob, meta);
       },
       mime,
       0.92
     );
+  };
+
+  const persistNewAsset = async (blob: Blob, meta: ExportMeta) => {
+    setBusy("create");
+    setSavePercent(0);
+
+    try {
+      const file = new File(
+        [blob],
+        `${meta.baseName}-已编辑.${meta.extension}`,
+        {
+          type: meta.mime,
+        }
+      );
+
+      const uploaded = await uploadFile(
+        file,
+        uploadTargetFromAsset(asset),
+        (percent) => {
+          setSavePercent(percent);
+        }
+      );
+
+      toast.success("已保存为新素材");
+      onUploaded?.(uploaded);
+      onOpenChange(false);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "保存新素材失败，请重试"
+      );
+    } finally {
+      setBusy(null);
+      setSavePercent(0);
+    }
+  };
+
+  const persistReplace = async (blob: Blob, meta: ExportMeta) => {
+    setBusy("replace");
+    setSavePercent(0);
+
+    try {
+      const file = new File([blob], asset.originalName, { type: meta.mime });
+
+      const replaced = await replaceFile(file, asset.id, {
+        height: meta.height,
+        onProgress: (percent) => {
+          setSavePercent(percent);
+        },
+        width: meta.width,
+      });
+
+      bumpAssetVersion(asset.id);
+      toast.success("已覆盖原素材");
+
+      const capturedAt =
+        asset.capturedAt instanceof Date
+          ? asset.capturedAt.toISOString()
+          : typeof asset.capturedAt === "string"
+            ? asset.capturedAt
+            : null;
+
+      onUploaded?.({
+        admissionId: asset.admissionId ?? null,
+        byteSize: replaced.byteSize,
+        capturedAt,
+        height: meta.height,
+        id: replaced.id,
+        kind: replaced.kind,
+        mimeType: replaced.mimeType,
+        originalName: replaced.originalName,
+        stage: asset.stage ?? null,
+        url: replaced.url,
+        visibility: asset.visibility === "private" ? "private" : "org",
+        width: meta.width,
+      });
+      onOpenChange(false);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "覆盖原素材失败，请重试"
+      );
+    } finally {
+      setBusy(null);
+      setSavePercent(0);
+    }
+  };
+
+  const handleCreate = () => {
+    exportBlob((blob, meta) => {
+      void persistNewAsset(blob, meta);
+    });
+  };
+
+  const handleReplace = () => {
+    setConfirmReplace(false);
+    exportBlob((blob, meta) => {
+      void persistReplace(blob, meta);
+    });
   };
 
   const activeAspect = ASPECTS.find((item) => item.key === aspect);
@@ -774,37 +862,81 @@ const EditorBody = ({ asset, onOpenChange, onUploaded }: EditorBodyProps) => {
           </p>
         </div>
 
-        <div className="mt-auto grid gap-2">
-          {saving ? (
+        <div className="mt-auto grid gap-2" data-testid="image-save-area">
+          {busy ? (
             <div className="grid gap-1">
               <Progress value={savePercent} />
               <span className="text-muted-foreground text-xs">
-                正在保存 {savePercent}%
+                {busy === "replace" ? "正在覆盖" : "正在保存"} {savePercent}%
               </span>
             </div>
           ) : null}
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="h-11 flex-1 sm:h-8"
-              onClick={() => onOpenChange(false)}
-              disabled={saving}
+
+          {confirmReplace ? (
+            <div className="border-destructive/40 bg-destructive/5 grid gap-2 rounded-lg border p-2">
+              <p className="text-xs">覆盖后原图不可恢复，确认覆盖？</p>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-11 sm:h-8"
+                  onClick={() => setConfirmReplace(false)}
+                  disabled={busy !== null}
+                >
+                  取消
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  className="h-11 sm:h-8"
+                  onClick={handleReplace}
+                  disabled={busy !== null}
+                >
+                  确认覆盖
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div
+              className="grid grid-cols-2 gap-2"
+              data-testid="image-save-actions"
             >
-              取消
-            </Button>
-            <Button
-              type="button"
-              className="h-11 flex-1 sm:h-8"
-              onClick={handleSave}
-              disabled={saving || !image}
-            >
-              {saving ? <Loader2Icon className="animate-spin" /> : <SaveIcon />}
-              保存新素材
-            </Button>
-          </div>
+              <Button
+                type="button"
+                className="h-11 sm:h-8"
+                onClick={handleCreate}
+                disabled={busy !== null || !image}
+              >
+                {busy === "create" ? (
+                  <Loader2Icon className="animate-spin" />
+                ) : (
+                  <SaveIcon />
+                )}
+                保存为新素材
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-11 sm:h-8"
+                onClick={() => setConfirmReplace(true)}
+                disabled={busy !== null || !image}
+              >
+                覆盖原素材
+              </Button>
+            </div>
+          )}
+
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-11 sm:h-8"
+            onClick={() => onOpenChange(false)}
+            disabled={busy !== null}
+          >
+            取消
+          </Button>
           <p className="text-muted-foreground text-xs">
-            保存为新的素材，原图保留。
+            「保存为新素材」保留原图；「覆盖原素材」直接替换当前素材。
             {asset.byteSize ? ` 原图 ${formatBytes(asset.byteSize)}。` : ""}
           </p>
         </div>

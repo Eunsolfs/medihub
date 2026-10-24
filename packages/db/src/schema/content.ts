@@ -11,6 +11,7 @@ import {
 import { user } from "#src/schema/auth.ts";
 import {
   primaryId,
+  shareVisibility,
   tagsColumn,
   timestamp,
   timestamps,
@@ -42,13 +43,9 @@ export const clinicalStage = [
   "other",
 ] as const;
 
-/** 教学帖子的可见范围。 */
-export const postVisibility = [
-  "private",
-  "org",
-  "logged_in",
-  "public",
-] as const;
+export { shareVisibility };
+
+export const postVisibility = shareVisibility;
 
 /** 资料库中的文件夹 / 专题。 */
 export const collection = snakeCase.table(
@@ -78,6 +75,32 @@ export const collection = snakeCase.table(
   ]
 );
 
+/** 指定可见范围的受众：某个/某些科室，或某个/某些用户。 */
+export const contentAudience = snakeCase.table(
+  "content_audience",
+  {
+    id: primaryId(),
+    /** post | session */
+    contentType: text({ enum: ["post", "session"] as const }).notNull(),
+    contentId: text().notNull(),
+    /** organization | user */
+    targetType: text({ enum: ["organization", "user"] as const }).notNull(),
+    targetId: text().notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    index("content_audience_content_idx").on(
+      table.contentType,
+      table.contentId
+    ),
+    index("content_audience_target_idx").on(table.targetType, table.targetId),
+    check(
+      "content_audience_target_distinct",
+      sql`length(${table.targetId}) > 0`
+    ),
+  ]
+);
+
 /** 教学 / 分享帖子，类似 WordPress：草稿 → 发布，按可见范围对外分享。 */
 export const post = snakeCase.table(
   "post",
@@ -98,6 +121,11 @@ export const post = snakeCase.table(
     /** 封面图指向一个 asset，不设外键以免与 asset.postId 形成环。 */
     coverAssetId: text(),
     visibility: text({ enum: postVisibility }).notNull().default("org"),
+    /**
+     * 「任何人」可见时可选访问密码（scrypt 哈希）。
+     * 只有 `visibility = public` 且设置了密码时才会拦截阅读与素材下载。
+     */
+    accessPasswordHash: text(),
     status: text({ enum: ["draft", "published"] as const })
       .notNull()
       .default("draft"),

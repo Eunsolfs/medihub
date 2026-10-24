@@ -45,7 +45,21 @@ export interface AssetSelection {
   onChange: (ids: string[]) => void;
 }
 
-export const assetFileUrl = (id: string) => `/api/files/${id}`;
+/**
+ * 覆盖原素材后浏览器仍缓存同一 URL 的旧图，所以给该素材的读取地址加一个版本参数，
+ * 让缩略图/预览在列表刷新后立刻换成新图。
+ */
+const assetVersions = new Map<string, number>();
+
+export const bumpAssetVersion = (id: string) => {
+  assetVersions.set(id, Date.now());
+};
+
+export const assetFileUrl = (id: string) => {
+  const version = assetVersions.get(id);
+
+  return `/api/files/${id}${version ? `?v=${version}` : ""}`;
+};
 
 export const assetDownloadUrl = (id: string) => `/api/files/${id}/download`;
 

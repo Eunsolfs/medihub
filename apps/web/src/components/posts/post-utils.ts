@@ -1,11 +1,16 @@
 /** 教学帖子的共用类型与工具：列表、编辑器、公开页都从这里取。 */
-import { GlobeIcon, LockIcon, LogInIcon, UsersIcon } from "lucide-react";
+import {
+  GlobeIcon,
+  LockIcon,
+  LogInIcon,
+  UserCheckIcon,
+  UsersIcon,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { assetFileUrl } from "#src/components/media/index.ts";
 import type { ThumbAsset } from "#src/components/media/index.ts";
 import type { api } from "#src/lib/api.ts";
-import type { VisibilityKey } from "#src/lib/format.ts";
 
 type ApiUtils = typeof api;
 
@@ -17,16 +22,96 @@ export type PostDetail = Awaited<ReturnType<ApiUtils["posts"]["get"]["call"]>>;
 
 export type PostMediaRow = PostDetail["media"][number];
 
+/** 当前登录用户与所属科室：可见范围选项按角色收敛用。 */
+export type MeProfile = Awaited<ReturnType<ApiUtils["me"]["profile"]["call"]>>;
+
 /** create / update / publish 直接返回 post 表的原始行（没有 join 作者名）。 */
 export type PostRow = NonNullable<
   Awaited<ReturnType<ApiUtils["posts"]["create"]["call"]>>
 >;
 
 /** bySlug 的返回是「放行」与「门禁」的联合类型；这里取放行分支的记录。 */
-type BySlugResult = Awaited<ReturnType<ApiUtils["posts"]["bySlug"]["call"]>>;
+export type BySlugResult = Awaited<
+  ReturnType<ApiUtils["posts"]["bySlug"]["call"]>
+>;
 
 /** 公开页正文记录：不含 authorId、createdAt、updatedAt。 */
 export type PublicPostRecord = Extract<BySlugResult, { gated: false }>["post"];
+
+/** 被门禁拦下时只回标题、作者、日期等摘要，不含正文与附件。 */
+export type PostGateSummary = Extract<BySlugResult, { gated: true }>["summary"];
+
+/** 通过密码（或本来就不需要密码）后的完整结果，含素材访问令牌。 */
+export type UnlockedPostResult = Extract<BySlugResult, { gated: false }>;
+
+export const ACCESS_PASSWORD_MIN = 4;
+
+export const ACCESS_PASSWORD_MAX = 64;
+
+/** 访问密码只在「任何人」可见时使用；返回第一条中文错误。 */
+export const validateAccessPassword = (value: string): string | null => {
+  const password = value.trim();
+
+  if (password.length === 0) {
+    return null;
+  }
+
+  if (password.length < ACCESS_PASSWORD_MIN) {
+    return `访问密码至少 ${ACCESS_PASSWORD_MIN} 位`;
+  }
+
+  if (password.length > ACCESS_PASSWORD_MAX) {
+    return `访问密码最多 ${ACCESS_PASSWORD_MAX} 位`;
+  }
+
+  return null;
+};
+
+/**
+ * 密码帖的素材文件必须带令牌：`/api/files/<id>?access=<token>`。
+ * token 由 bySlug 在密码正确后签发，带过期时间且由服务端密钥加密。
+ */
+export const withAccessToken = (
+  url: string,
+  token: string | null | undefined
+): string => {
+  if (!token) {
+    return url;
+  }
+
+  const separator = url.includes("?") ? "&" : "?";
+
+  return `${url}${separator}access=${encodeURIComponent(token)}`;
+};
+
+/**
+ * 正文是 Markdown 字符串，图片/附件可能写成 `![](/api/files/x)` 或内联 HTML。
+ * 解锁后统一替换成带 access 令牌的地址，避免正文图片 403。
+ */
+export const withAccessTokenInMarkdown = (
+  content: string,
+  token: string | null | undefined
+): string => {
+  if (!token) {
+    return content;
+  }
+
+  const encoded = encodeURIComponent(token);
+
+  return content.replaceAll(
+    /\/api\/files\/([A-Za-z0-9-]+)(\?[^)"'\s<>]*)?/gu,
+    (match, assetId: string, query: string | undefined) => {
+      if (match.includes("access=")) {
+        return match;
+      }
+
+      const base = `/api/files/${assetId}`;
+      const search = query ?? "";
+
+      return `${base}${search ? `${search}&` : "?"}access=${encoded}`;
+    }
+  );
+};
 
 export type PostStatus = "draft" | "published";
 
@@ -126,38 +211,52 @@ export const mediaProviderLabels: Record<MediaProvider, string> = {
   external: "外部链接",
 };
 
+/** 后端帖子的五档可见范围（含「指定对象」）。 */
+export type PostVisibility =
+  | "private"
+  | "org"
+  | "logged_in"
+  | "selected"
+  | "public";
+
 interface VisibilityOption {
   description: string;
   icon: LucideIcon;
   label: string;
-  value: VisibilityKey;
+  value: PostVisibility;
 }
 
-/** 四种可见范围与各自的一句话说明，编辑器与公开页共用。 */
+/** 五档可见范围与各自的一句话说明，按「范围从窄到宽」排列。 */
 export const visibilityOptions: readonly VisibilityOption[] = [
   {
-    description: "任何人拿到链接都能阅读，适合对外分享。",
-    icon: GlobeIcon,
-    label: "任何人",
-    value: "public",
-  },
-  {
-    description: "拿到链接的人需要先登录医档通账号。",
-    icon: LogInIcon,
-    label: "仅登录用户",
-    value: "logged_in",
-  },
-  {
-    description: "只有本科室的成员可以阅读，未登录或外院账号看不到正文。",
-    icon: UsersIcon,
-    label: "仅科室内部",
-    value: "org",
-  },
-  {
-    description: "只有你自己能看到，适合还没想好的草稿内容。",
+    description: "只有你自己与管理员能看到，适合还没想好的内容。",
     icon: LockIcon,
     label: "仅自己",
     value: "private",
+  },
+  {
+    description: "本科室的同事登录后可以阅读。",
+    icon: UsersIcon,
+    label: "本科室",
+    value: "org",
+  },
+  {
+    description: "全系统所有登录用户都可以阅读。",
+    icon: LogInIcon,
+    label: "全系统登录用户",
+    value: "logged_in",
+  },
+  {
+    description: "只对指定的科室或用户可见，名单会在下方展开选择。",
+    icon: UserCheckIcon,
+    label: "指定对象",
+    value: "selected",
+  },
+  {
+    description: "任何人拿到链接都能阅读，无需登录。",
+    icon: GlobeIcon,
+    label: "任何人",
+    value: "public",
   },
 ];
 
@@ -166,7 +265,27 @@ export const visibilityOptionOf = (
 ): VisibilityOption | undefined =>
   visibilityOptions.find((option) => option.value === value);
 
-export const defaultVisibility: VisibilityKey = "org";
+/** 可见范围的中文标签（含「指定对象」），卡片与编辑器共用。 */
+export const visibilityLabelOf = (value: string | null | undefined): string =>
+  visibilityOptionOf(value)?.label ?? "未设置";
+
+/**
+ * 角色能选的可见范围：成员只能最基础的三档，科室管理员增加「全系统 / 指定对象」，
+ * root 可选全部（后端还会再校验一次，前端只负责不展示越权选项）。
+ */
+export const visibilityOptionsForRole = (
+  role: string | null | undefined
+): readonly VisibilityOption[] => {
+  if (role === "root" || role === "dept_admin") {
+    return visibilityOptions;
+  }
+
+  return visibilityOptions.filter(
+    (option) => option.value !== "logged_in" && option.value !== "selected"
+  );
+};
+
+export const defaultVisibility: PostVisibility = "org";
 
 const mediaProviderOf = (value: string | null | undefined): MediaProvider =>
   value === "bilibili" || value === "external" ? value : "asset";

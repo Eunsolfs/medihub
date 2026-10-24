@@ -17,11 +17,20 @@ import { usersRouter } from "#src/routers/users.ts";
 
 export { isAdminRole, postViewGate, toViewer } from "#src/access.ts";
 
+export { loadAudience } from "#src/audience.ts";
+
+export {
+  signShareAccess,
+  verifyShareAccess,
+  verifySharePassword,
+} from "#src/share-password.ts";
+
 export type {
   PostGateReason,
   PostShareRecord,
   PostShareVisibility,
   Role,
+  ShareAudience,
   Viewer,
 } from "#src/access.ts";
 

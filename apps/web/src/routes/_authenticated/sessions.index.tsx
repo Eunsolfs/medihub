@@ -1,12 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  createFileRoute,
-  Link,
-  useNavigate,
-  useRouteContext,
-} from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
   CalendarDaysIcon,
+  DownloadIcon,
   MapPinIcon,
   MoreHorizontalIcon,
   PaperclipIcon,
@@ -34,10 +30,6 @@ import {
   SelectValue,
 } from "@medihub/ui/components/select";
 
-import {
-  getSessionRole,
-  isAdminRole,
-} from "#src/components/app-shell/roles.ts";
 import { ConfirmDialog } from "#src/components/app-shell/ui/confirm-dialog.tsx";
 import { EmptyState } from "#src/components/app-shell/ui/empty-state.tsx";
 import { PageHeader } from "#src/components/app-shell/ui/page-header.tsx";
@@ -45,7 +37,6 @@ import { PaginationBar } from "#src/components/app-shell/ui/pagination-bar.tsx";
 import { LoadingRows } from "#src/components/app-shell/ui/skeletons.tsx";
 import { TagList } from "#src/components/app-shell/ui/tag-list.tsx";
 import { SessionFormDialog } from "#src/components/sessions/session-form-dialog.tsx";
-import type { SessionRecord } from "#src/components/sessions/session-form-dialog.tsx";
 import {
   isLearningKind,
   LEARNING_KIND_OPTIONS,
@@ -54,6 +45,7 @@ import {
   toDateTimeInput,
 } from "#src/components/sessions/session-kind.ts";
 import type { LearningKind } from "#src/components/sessions/session-kind.ts";
+import { sessionVisibilityLabel } from "#src/components/sessions/visibility.ts";
 import { api } from "#src/lib/api.ts";
 import { formatDateTime } from "#src/lib/format.ts";
 
@@ -64,20 +56,19 @@ type KindFilter = LearningKind | typeof ALL_KINDS;
 
 const SessionsPage = () => {
   const queryClient = useQueryClient();
-  const { session } = useRouteContext({ from: "/_authenticated" });
-  const canSeeAll = isAdminRole(getSessionRole(session));
   const navigate = useNavigate();
   const [q, setQ] = useState("");
   const [keyword, setKeyword] = useState("");
   const [kind, setKind] = useState<KindFilter>(ALL_KINDS);
   const [page, setPage] = useState(1);
   const [formOpen, setFormOpen] = useState(false);
-  const [editing, setEditing] = useState<SessionRecord | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [defaultHeldAt, setDefaultHeldAt] = useState("");
 
-  const [pendingDelete, setPendingDelete] = useState<SessionRecord | null>(
-    null
-  );
+  const [pendingDelete, setPendingDelete] = useState<{
+    id: string;
+    title: string;
+  } | null>(null);
 
   const listQuery = useQuery(
     api.learning.list.queryOptions({
@@ -105,14 +96,30 @@ const SessionsPage = () => {
     })
   );
 
+  const downloadMutation = useMutation(
+    api.exports.create.mutationOptions({
+      onSuccess: async () => {
+        toast.success("已创建下载任务，可在导出中心下载");
+        await queryClient.invalidateQueries({
+          queryKey: api.exports.list.key({ type: "query" }),
+        });
+      },
+    })
+  );
+
   const submitSearch = () => {
     setPage(1);
     setKeyword(q.trim());
   };
 
   const openCreate = () => {
-    setEditing(null);
+    setEditingId(null);
     setDefaultHeldAt(toDateTimeInput(new Date()));
+    setFormOpen(true);
+  };
+
+  const openEdit = (id: string) => {
+    setEditingId(id);
     setFormOpen(true);
   };
 
@@ -125,11 +132,7 @@ const SessionsPage = () => {
             新建会议
           </Button>
         }
-        description={
-          canSeeAll
-            ? "科室讲课、学习会议、培训与病例讨论的资料归档，会后统一上传课件与影像。"
-            : "只显示你创建的学习会议；科室管理员可查看全科室的会议。"
-        }
+        description="本科室的学习会议与资料；只有创建者与管理员可以编辑。"
         meta={<span>共 {total} 场</span>}
         title="学习会议"
       />
@@ -214,44 +217,50 @@ const SessionsPage = () => {
               key={item.id}
             >
               <div className="flex items-start justify-between gap-2">
-                <span
-                  className={`inline-flex h-5 w-fit items-center rounded-4xl px-2 text-xs font-medium ${learningKindTone(item.kind)}`}
-                >
-                  {learningKindLabel(item.kind)}
-                </span>
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    render={
-                      <Button
-                        aria-label={`${item.title} 的操作`}
-                        size="icon-sm"
-                        variant="ghost"
-                      />
-                    }
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span
+                    className={`inline-flex h-5 w-fit items-center rounded-4xl px-2 text-xs font-medium ${learningKindTone(item.kind)}`}
                   >
-                    <MoreHorizontalIcon />
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-36">
-                    <DropdownMenuItem
-                      onClick={() => {
-                        setEditing(item);
-                        setFormOpen(true);
-                      }}
+                    {learningKindLabel(item.kind)}
+                  </span>
+                  <span className="bg-muted text-muted-foreground inline-flex h-5 w-fit items-center rounded-4xl px-2 text-xs">
+                    {sessionVisibilityLabel(item.visibility)}
+                  </span>
+                </div>
+                {item.canEdit ? (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button
+                          aria-label={`${item.title} 的操作`}
+                          size="icon-sm"
+                          variant="ghost"
+                        />
+                      }
                     >
-                      <PencilIcon />
-                      编辑
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => {
-                        setPendingDelete(item);
-                      }}
-                      variant="destructive"
-                    >
-                      <Trash2Icon />
-                      删除
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                      <MoreHorizontalIcon />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-36">
+                      <DropdownMenuItem
+                        onClick={() => {
+                          openEdit(item.id);
+                        }}
+                      >
+                        <PencilIcon />
+                        编辑
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => {
+                          setPendingDelete({ id: item.id, title: item.title });
+                        }}
+                        variant="destructive"
+                      >
+                        <Trash2Icon />
+                        删除
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                ) : null}
               </div>
 
               <Link
@@ -286,6 +295,39 @@ const SessionsPage = () => {
                   {item.assetCount} 份资料
                 </span>
               </div>
+
+              {item.canEdit ? null : (
+                <div className="flex flex-wrap items-center gap-1.5 border-t pt-2">
+                  <Button
+                    nativeButton={false}
+                    render={
+                      <Link
+                        params={{ sessionId: item.id }}
+                        to="/sessions/$sessionId"
+                      />
+                    }
+                    size="sm"
+                    variant="outline"
+                  >
+                    查看
+                  </Button>
+                  <Button
+                    disabled={downloadMutation.isPending}
+                    onClick={() => {
+                      downloadMutation.mutate({
+                        includeFiles: true,
+                        kind: "session",
+                        sessionId: item.id,
+                      });
+                    }}
+                    size="sm"
+                    variant="ghost"
+                  >
+                    <DownloadIcon />
+                    下载资料
+                  </Button>
+                </div>
+              )}
             </li>
           ))}
         </ul>
@@ -312,11 +354,11 @@ const SessionsPage = () => {
           setFormOpen(open);
 
           if (!open) {
-            setEditing(null);
+            setEditingId(null);
           }
         }}
         open={formOpen}
-        session={editing}
+        sessionId={editingId}
       />
 
       <ConfirmDialog

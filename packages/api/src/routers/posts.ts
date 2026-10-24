@@ -1,5 +1,5 @@
 import { ORPCError } from "@orpc/server";
-import { and, asc, count, desc, eq, like, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, like, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { z } from "zod";
 
@@ -20,7 +20,16 @@ import {
   postViewGate,
   toViewer,
 } from "#src/access.ts";
+import {
+  assertShareScope,
+  audienceMatches,
+  deleteAudience,
+  loadAudience,
+  replaceAudience,
+} from "#src/audience.ts";
+import type { AudienceTargets } from "#src/audience.ts";
 import { organizationProcedure, publicProcedure } from "#src/procedures.ts";
+import { hashSharePassword, verifySharePassword } from "#src/share-password.ts";
 
 const slugify = (title: string) => {
   const base = title
@@ -49,6 +58,11 @@ const postInput = z.object({
   tags: z.array(z.string().trim().min(1).max(20)).max(20).default([]),
   title: z.string().trim().min(1).max(200),
   visibility: z.enum(postVisibility).default("org"),
+  /** visibility=selected 时生效：指定可见的科室与用户。 */
+  /** 「任何人」可见时可选的访问密码；null 表示清除。 */
+  accessPassword: z.string().trim().min(4).max(64).nullish(),
+  audienceOrganizations: z.array(z.string().min(1)).max(50).default([]),
+  audienceUsers: z.array(z.string().min(1)).max(200).default([]),
 });
 
 /** 生成全站唯一的 slug：保留中英文，冲突时追加序号。 */
@@ -101,9 +115,27 @@ export const postsRouter = {
         throw new ORPCError("UNAUTHORIZED");
       }
 
-      // 「谁的帖子归谁」：普通成员只看自己写的，管理员看全科室。
-      if (input.mine || !canSeeAllContent(viewer)) {
+      // 列表默认展示「本科室可读范围内的全部文章」（只读），管理员看全部；
+      // `mine` 只看自己。
+      if (input.mine) {
         filters.push(eq(post.authorId, viewer.id));
+      } else if (!canSeeAllContent(viewer)) {
+        const audienceMatch = audienceMatches(
+          context.db,
+          "post",
+          post.id,
+          viewer
+        );
+
+        const readable = or(
+          eq(post.authorId, viewer.id),
+          inArray(post.visibility, ["org", "logged_in", "public"]),
+          and(eq(post.visibility, "selected"), audienceMatch)
+        );
+
+        if (readable) {
+          filters.push(readable);
+        }
       }
 
       if (input.q) {
@@ -128,6 +160,7 @@ export const postsRouter = {
             coverAssetId: post.coverAssetId,
             createdAt: post.createdAt,
             excerpt: post.excerpt,
+            hasPassword: sql<number>`case when ${post.accessPasswordHash} is null then 0 else 1 end`,
             id: post.id,
             mediaCount: context.db.$count(
               postMedia,
@@ -152,7 +185,10 @@ export const postsRouter = {
       ]);
 
       return {
-        items,
+        items: items.map((item) => ({
+          ...item,
+          hasPassword: item.hasPassword === 1,
+        })),
         page: input.page,
         pageSize: input.pageSize,
         total: totals[0]?.total ?? 0,
@@ -166,6 +202,7 @@ export const postsRouter = {
 
       const [row] = await context.db
         .select({
+          accessPasswordHash: post.accessPasswordHash,
           authorId: post.authorId,
           authorName: user.name,
           content: post.content,
@@ -173,6 +210,7 @@ export const postsRouter = {
           createdAt: post.createdAt,
           excerpt: post.excerpt,
           id: post.id,
+          organizationId: post.organizationId,
           publishedAt: post.publishedAt,
           slug: post.slug,
           status: post.status,
@@ -194,7 +232,14 @@ export const postsRouter = {
         throw new ORPCError("UNAUTHORIZED");
       }
 
-      if (!row || !canEditOwned(viewer, row.authorId)) {
+      if (!row) {
+        throw new ORPCError("NOT_FOUND", { message: "帖子不存在" });
+      }
+
+      const audience = await loadAudience(context.db, "post", row.id);
+      const gate = postViewGate(row, viewer, audience);
+
+      if (!gate.allowed) {
         throw new ORPCError("NOT_FOUND", { message: "帖子不存在" });
       }
 
@@ -204,7 +249,15 @@ export const postsRouter = {
         .where(eq(postMedia.postId, row.id))
         .orderBy(asc(postMedia.sortOrder));
 
-      return { media, post: row };
+      const { accessPasswordHash, ...postRow } = row;
+
+      return {
+        audience,
+        canEdit: canEditOwned(viewer, row.authorId),
+        hasPassword: accessPasswordHash !== null,
+        media,
+        post: postRow,
+      };
     }),
 
   create: organizationProcedure
@@ -219,9 +272,22 @@ export const postsRouter = {
 
       const slug = await uniqueSlug(context, input.title);
 
+      const targets: AudienceTargets = {
+        organizations: input.audienceOrganizations,
+        users: input.audienceUsers,
+      };
+
+      await assertShareScope(context.db, viewer, input.visibility, targets);
+
+      const accessPasswordHash =
+        input.visibility === "public" && input.accessPassword
+          ? hashSharePassword(input.accessPassword)
+          : null;
+
       const [created] = await context.db
         .insert(post)
         .values({
+          accessPasswordHash,
           authorId: viewer.id,
           content: input.content,
           coverAssetId: input.coverAssetId ?? null,
@@ -251,6 +317,10 @@ export const postsRouter = {
             url: media.url ?? null,
           }))
         );
+      }
+
+      if (input.visibility === "selected") {
+        await replaceAudience(context.db, "post", created.id, targets);
       }
 
       return created;
@@ -288,9 +358,26 @@ export const postsRouter = {
         throw new ORPCError("NOT_FOUND", { message: "帖子不存在" });
       }
 
+      const targets: AudienceTargets = {
+        organizations: values.audienceOrganizations ?? [],
+        users: values.audienceUsers ?? [],
+      };
+
+      if (values.visibility !== undefined) {
+        await assertShareScope(context.db, viewer, values.visibility, targets);
+      }
+
+      const accessPasswordHash =
+        values.accessPassword === undefined
+          ? undefined
+          : values.visibility === "public" && values.accessPassword
+            ? hashSharePassword(values.accessPassword)
+            : null;
+
       const [updated] = await context.db
         .update(post)
         .set({
+          ...(accessPasswordHash === undefined ? {} : { accessPasswordHash }),
           ...(values.content === undefined ? {} : { content: values.content }),
           ...(values.coverAssetId === undefined
             ? {}
@@ -324,6 +411,17 @@ export const postsRouter = {
             }))
           );
         }
+      }
+
+      if (values.visibility !== undefined) {
+        await replaceAudience(
+          context.db,
+          "post",
+          id,
+          values.visibility === "selected"
+            ? targets
+            : { organizations: [], users: [] }
+        );
       }
 
       return updated;
@@ -377,6 +475,7 @@ export const postsRouter = {
         throw new ORPCError("NOT_FOUND", { message: "帖子不存在" });
       }
 
+      await deleteAudience(context.db, "post", input.id);
       await context.db.delete(post).where(eq(post.id, input.id));
 
       return { id: input.id };
@@ -388,10 +487,16 @@ export const postsRouter = {
    * 内容不会因为「页面没渲染」而通过网络泄露出去。
    */
   bySlug: publicProcedure
-    .input(z.object({ slug: z.string().min(1).max(120) }))
+    .input(
+      z.object({
+        password: z.string().max(64).optional(),
+        slug: z.string().min(1).max(120),
+      })
+    )
     .handler(async ({ context, input }) => {
       const [row] = await context.db
         .select({
+          accessPasswordHash: post.accessPasswordHash,
           authorId: post.authorId,
           authorName: user.name,
           content: post.content,
@@ -416,21 +521,48 @@ export const postsRouter = {
       }
 
       const viewer = context.session ? toViewer(context.session.user) : null;
-      const gate = postViewGate(row, viewer);
+
+      const audience =
+        row.visibility === "selected"
+          ? await loadAudience(context.db, "post", row.id)
+          : undefined;
+
+      const gate = postViewGate(row, viewer, audience);
+
+      const expectsPassword =
+        row.visibility === "public" && row.accessPasswordHash !== null;
+
+      const blockedSummary = {
+        authorName: row.authorName,
+        hasPassword: expectsPassword,
+        publishedAt: row.publishedAt,
+        slug: row.slug,
+        tags: row.tags,
+        title: row.title,
+        visibility: row.visibility,
+      };
 
       if (!gate.allowed) {
         return {
           gated: true as const,
           reason: gate.reason ?? "login",
-          summary: {
-            authorName: row.authorName,
-            publishedAt: row.publishedAt,
-            slug: row.slug,
-            tags: row.tags,
-            title: row.title,
-            visibility: row.visibility,
-          },
+          summary: blockedSummary,
         };
+      }
+
+      if (expectsPassword) {
+        const passwordAccepted =
+          input.password !== undefined &&
+          row.accessPasswordHash !== null &&
+          verifySharePassword(input.password, row.accessPasswordHash);
+
+        if (!passwordAccepted) {
+          return {
+            gated: true as const,
+            reason: "password" as const,
+            summary: blockedSummary,
+          };
+        }
       }
 
       const media = await context.db
@@ -444,10 +576,23 @@ export const postsRouter = {
         .set({ viewCount: row.viewCount + 1 })
         .where(eq(post.id, row.id));
 
+      const { accessPasswordHash, ...publicPost } = row;
+
       return {
+        accessToken:
+          expectsPassword && context.storage
+            ? context.storage.encrypt({
+                exp: Date.now() + 43_200_000,
+                postId: row.id,
+              })
+            : null,
         gated: false as const,
         media,
-        post: { ...row, viewCount: row.viewCount + 1 },
+        post: {
+          ...publicPost,
+          hasPassword: accessPasswordHash !== null,
+          viewCount: row.viewCount + 1,
+        },
       };
     }),
 };

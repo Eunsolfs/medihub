@@ -81,11 +81,7 @@ export const canDelete = (
   createdBy === viewer.id;
 
 /**
- * 患者档案的可见与可编辑范围。
- *
- * 「谁的患者归谁」：创建者本人与科室管理员（及以上）可见可编辑，
- * 同科室的其他成员既看不到、也不能改，避免互相翻阅未授权的病历。
- * 自然人的个人空间里所有档案都是自己创建的，因此不额外限制。
+ * 患者档案的可见与可编辑范围（「谁的患者归谁」）。
  */
 export const canAccessPatient = (
   viewer: Viewer,
@@ -110,21 +106,45 @@ export const canAccessPatient = (
 export const canSeeAllPatients = (viewer: Viewer) => isAdminRole(viewer.role);
 
 /**
- * 科室内的「有主内容」（帖子、学习会议、患者档案）统一口径：
- * 管理员看全部，普通成员只看自己创建的那些。
+ * 科室内的「有主内容」（帖子、学习会议）统一口径：
+ * 管理员看全部，普通成员看到本科室公开范围内的内容（只读）+ 自己创建的内容。
  */
 export const canSeeAllContent = (viewer: Viewer) => isAdminRole(viewer.role);
 
-/** 有主内容的编辑权：创建者本人或管理员。 */
+/** 有主内容的编辑权：创建者本人或管理员（与阅读权解耦）。 */
 export const canEditOwned = (
   viewer: Viewer,
   ownerId: string | null | undefined
 ) => isAdminRole(viewer.role) || ownerId === viewer.id;
 
-export type PostShareVisibility = "private" | "org" | "logged_in" | "public";
+/**
+ * 内容的可见范围（教学帖与学习会议共用）：
+ * - private   仅自己（管理员可读）
+ * - org       本科室登录用户
+ * - logged_in 全系统登录用户
+ * - selected  指定科室 / 指定用户（对象存 content_audience）
+ * - public    任何人（带链接即可）
+ */
+export type PostShareVisibility =
+  | "private"
+  | "org"
+  | "logged_in"
+  | "selected"
+  | "public";
 
-/** 帖子的公开阅读为什么被拦下：未登录 / 非本科室 / 仅作者。 */
-export type PostGateReason = "login" | "organization" | "owner";
+/** 被拦下的原因：未登录 / 非本科室 / 仅作者 / 不在指定受众里。 */
+export type PostGateReason =
+  | "login"
+  | "organization"
+  | "owner"
+  | "audience"
+  | "password";
+
+/** 指定受众（与 content_audience 表对应）。 */
+export interface ShareAudience {
+  organizations: string[];
+  users: string[];
+}
 
 export interface PostShareRecord {
   authorId: string;
@@ -133,18 +153,12 @@ export interface PostShareRecord {
 }
 
 /**
- * 教学帖的阅读范围（作者在编辑器里选择的可见范围）：
- *
- * - `public`    任何人拿到链接都能读（无需登录）；
- * - `logged_in` 任何登录用户都能读（跨科室也可以）；
- * - `org`       仅该科室成员读，且必须登录；其它科室的管理员同样不行；
- * - `private`   仅作者本人（`root` 与该科室管理员也可读，与「内容归属」一致）。
- *
- * 阅读权与编辑权是两件事：能读不等于能改，编辑权始终只归作者与管理员。
+ * 阅读范围判定：能读不等于能改，编辑权始终只归作者与管理员。
  */
 export const postViewGate = (
   record: PostShareRecord,
-  viewer: Viewer | null
+  viewer: Viewer | null,
+  audience?: ShareAudience
 ): { allowed: boolean; reason?: PostGateReason } => {
   if (record.visibility === "public") {
     return { allowed: true };
@@ -159,9 +173,10 @@ export const postViewGate = (
   }
 
   const sameOrganization = viewer.organizationId === record.organizationId;
+  const isOwner = record.authorId === viewer.id;
 
   if (record.visibility === "private") {
-    if (record.authorId === viewer.id || viewer.role === "root") {
+    if (isOwner || viewer.role === "root") {
       return { allowed: true };
     }
 
@@ -170,6 +185,26 @@ export const postViewGate = (
     }
 
     return { allowed: false, reason: "owner" };
+  }
+
+  if (record.visibility === "selected") {
+    if (isOwner || viewer.role === "root") {
+      return { allowed: true };
+    }
+
+    if (viewer.role === "dept_admin" && sameOrganization) {
+      return { allowed: true };
+    }
+
+    const inAudience =
+      audience !== undefined &&
+      ((viewer.organizationId !== null &&
+        audience.organizations.includes(viewer.organizationId)) ||
+        audience.users.includes(viewer.id));
+
+    return inAudience
+      ? { allowed: true }
+      : { allowed: false, reason: "audience" };
   }
 
   if (viewer.role === "root" || sameOrganization) {

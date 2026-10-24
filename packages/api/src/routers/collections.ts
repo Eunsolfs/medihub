@@ -4,7 +4,7 @@ import { z } from "zod";
 
 import { asset, assetVisibility, collection } from "@medihub/db/schema/content";
 
-import { organizationIdOf } from "#src/access.ts";
+import { canEditOwned, organizationIdOf } from "#src/access.ts";
 import { organizationProcedure } from "#src/procedures.ts";
 
 const collectionInput = z.object({
@@ -24,6 +24,7 @@ export const collectionsRouter = {
       .select({
         _count: context.db.$count(asset, eq(asset.collectionId, collection.id)),
         createdAt: collection.createdAt,
+        createdBy: collection.createdBy,
         description: collection.description,
         id: collection.id,
         name: collection.name,
@@ -67,6 +68,26 @@ export const collectionsRouter = {
       const organizationId = organizationIdOf(context);
       const { id, ...values } = input;
 
+      const { viewer } = context;
+
+      if (!viewer) {
+        throw new ORPCError("UNAUTHORIZED");
+      }
+
+      const [existing] = await context.db
+        .select({ createdBy: collection.createdBy })
+        .from(collection)
+        .where(
+          and(
+            eq(collection.id, id),
+            eq(collection.organizationId, organizationId)
+          )
+        );
+
+      if (!existing || !canEditOwned(viewer, existing.createdBy)) {
+        throw new ORPCError("NOT_FOUND", { message: "文件夹不存在" });
+      }
+
       if (values.parentId === id) {
         throw new ORPCError("BAD_REQUEST", {
           message: "文件夹不能作为自己的上级",
@@ -109,6 +130,25 @@ export const collectionsRouter = {
     .input(z.object({ id: z.string().min(1) }))
     .handler(async ({ context, input }) => {
       const organizationId = organizationIdOf(context);
+      const { viewer } = context;
+
+      if (!viewer) {
+        throw new ORPCError("UNAUTHORIZED");
+      }
+
+      const [existing] = await context.db
+        .select({ createdBy: collection.createdBy })
+        .from(collection)
+        .where(
+          and(
+            eq(collection.id, input.id),
+            eq(collection.organizationId, organizationId)
+          )
+        );
+
+      if (!existing || !canEditOwned(viewer, existing.createdBy)) {
+        throw new ORPCError("NOT_FOUND", { message: "文件夹不存在" });
+      }
 
       await context.db
         .update(collection)
