@@ -104,13 +104,13 @@
 
 右侧「刷新」按钮重新拉一遍用量。
 
-### 2.2 GB ↔ 字节
+### 2.2 MB ↔ 字节
 
-界面上填 **GB**，接口与数据库存**字节**：
+界面上填 **MB**，接口与数据库存**字节**：
 
 ```
-1 GB = 1024 × 1024 × 1024 = 1073741824 字节
-上限（字节） = 输入的 GB × 1073741824，四舍五入到整数
+1 MB = 1024 × 1024 = 1048576 字节（例：填 1024 = 1 GB，填 5120 = 5 GB）
+上限（字节） = 输入的 MB × 1048576，四舍五入到整数
 显示值      = 已用字节 / 1073741824，保留 2 位小数
 ```
 
@@ -144,7 +144,7 @@ where deleted_at is null and archived_at is null;
 | 状态码 | 消息关键字                                                       | 原因                                                         | 处理                                                                                                                                                   |
 | ------ | ---------------------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | 413    | `文件超过上限 N MB`                                              | **单文件**超过 `UPLOAD_MAX_BYTES`（默认 256 MB），与配额无关 | 改 `.env` 的 `UPLOAD_MAX_BYTES` 并重启；同时确认 Nginx 的 `client_max_body_size` 更大（见 [DEPLOY-1PANEL.md §9](./DEPLOY-1PANEL.md#9-nginx-反向代理)） |
-| 413    | `科室存储空间不足：已用 X GB / 上限 Y GB`                        | 科室配额被打满                                               | 归档该科室旧素材，或调高科室上限                                                                                                                       |
+| 413    | `科室存储空间不足：已用 X MB / 上限 Y MB`                        | 科室配额被打满                                               | 归档该科室旧素材，或调高科室上限                                                                                                                       |
 | 413    | `全站存储空间不足：已用 X / 上限 Y`                              | 全站配额被打满                                               | 归档，或换更大磁盘/调高全站上限                                                                                                                        |
 | 507    | `存储磁盘剩余空间不足：剩余 X GB，本次需要 Y MB，并需预留 512MB` | 目标磁盘物理空间不够                                         | 归档 + 勾选删除源文件，或换目标/加盘                                                                                                                   |
 | 500    | `无法读取存储磁盘剩余空间，请检查挂载路径是否可访问`             | NAS 没挂载、路径写错、权限不足                               | 检查挂载点与目标配置（存储目标卡片里的 `rootPath`）                                                                                                    |
@@ -157,16 +157,16 @@ where deleted_at is null and archived_at is null;
 ```bash
 # 已用（全站）
 sqlite3 /data/medihub/local.db \
-  "select printf('%.2f GB', coalesce(sum(byte_size),0)/1073741824.0) from asset
+  "select printf('%.0f MB', coalesce(sum(byte_size),0)/1048576.0) from asset
    where deleted_at is null and archived_at is null;"
 
 # 科室上限（字节 → GB）
 sqlite3 /data/medihub/local.db \
-  "select name, printf('%.2f GB', quota_bytes/1073741824.0) from organization where quota_bytes is not null;"
+  "select name, printf('%.2f GB', quota_bytes/1048576.0) from organization where quota_bytes is not null;"
 
 # 全站上限（存在 app_setting 表里）
 sqlite3 /data/medihub/local.db \
-  "select key, printf('%.2f GB', value/1073741824.0) from app_setting where key='storage.globalQuotaBytes';"
+  "select key, printf('%.2f GB', value/1048576.0) from app_setting where key='storage.globalQuotaBytes';"
 
 # 目标磁盘剩余
 df -h /data/medihub/storage
@@ -862,13 +862,13 @@ df -h /data/medihub/storage /tmp
 
 # 最近的归档任务
 sqlite3 /data/medihub/local.db \
-  "select id, status, asset_count, printf('%.2f GB', byte_size/1073741824.0), chunk_count,
+  "select id, status, asset_count, printf('%.2f GB', byte_size/1048576.0), chunk_count,
           datetime(created_at/1000,'unixepoch','localtime')
    from archive_job order by created_at desc limit 10;"
 
 # 归档总量
 sqlite3 /data/medihub/local.db \
-  "select printf('%.2f GB', coalesce(sum(byte_size),0)/1073741824.0) from asset where archived_at is not null;"
+  "select printf('%.0f MB', coalesce(sum(byte_size),0)/1048576.0) from asset where archived_at is not null;"
 
 # 定时计划健康度：谁没跑成功
 sqlite3 /data/medihub/local.db \
@@ -880,7 +880,7 @@ sqlite3 /data/medihub/local.db \
 # 镜像备份最近的几次
 sqlite3 /data/medihub/local.db \
   "select id, status, include_assets, asset_count,
-          printf('%.2f GB', byte_size/1073741824.0),
+          printf('%.2f GB', byte_size/1048576.0),
           datetime(created_at/1000,'unixepoch','localtime')
    from mirror_job order by created_at desc limit 10;"
 ```

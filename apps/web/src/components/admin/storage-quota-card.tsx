@@ -18,15 +18,17 @@ import type {
 import { api } from "#src/lib/api.ts";
 import { formatBytes } from "#src/lib/format.ts";
 
-const GB = 1024 ** 3;
+const MB = 1024 ** 2;
 
-const bytesToGbInput = (bytes: number | null) => {
+const bytesToMbInput = (bytes: number | null) => {
   if (bytes === null) {
     return "";
   }
 
-  return String(Math.round((bytes / GB) * 100) / 100);
+  return String(Math.round((bytes / MB) * 100) / 100);
 };
+
+const formatMb = (bytes: number) => `${Math.round(bytes / MB)} MB`;
 
 const usageTone = (percent: number | null) => {
   if (percent === null) {
@@ -86,7 +88,7 @@ const QuotaEditor = ({
   pending,
   onSave,
 }: QuotaEditorProps) => {
-  const [value, setValue] = useState(() => bytesToGbInput(quotaBytes));
+  const [value, setValue] = useState(() => bytesToMbInput(quotaBytes));
   const [error, setError] = useState<string | null>(null);
 
   const percent =
@@ -108,15 +110,15 @@ const QuotaEditor = ({
       return;
     }
 
-    const gb = Number(raw);
+    const mb = Number(raw);
 
-    if (!Number.isFinite(gb) || gb < 0) {
-      setError("请输入不小于 0 的 GB 数值");
+    if (!Number.isFinite(mb) || mb < 0) {
+      setError("请输入不小于 0 的 MB 数值");
 
       return;
     }
 
-    const bytes = Math.round(gb * GB);
+    const bytes = Math.round(mb * MB);
 
     if (!Number.isSafeInteger(bytes)) {
       setError("配额数值过大，请重新输入");
@@ -133,8 +135,8 @@ const QuotaEditor = ({
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <span className="text-sm font-medium">{label}</span>
         <span className="text-muted-foreground text-xs tabular-nums">
-          已用 {formatBytes(usedBytes)} /{" "}
-          {quotaBytes === null ? "不限制" : formatBytes(quotaBytes)}
+          已用 {formatMb(usedBytes)} /{" "}
+          {quotaBytes === null ? "不限制" : formatMb(quotaBytes)}
         </span>
       </div>
 
@@ -143,7 +145,7 @@ const QuotaEditor = ({
       <div className="flex flex-wrap items-end gap-2">
         <div className="grid gap-1">
           <Label className="text-xs" htmlFor={`quota-${id}`}>
-            上限（GB）
+            上限（MB）
           </Label>
           <div className="flex items-center gap-1.5">
             <Input
@@ -158,7 +160,7 @@ const QuotaEditor = ({
               type="number"
               value={value}
             />
-            <span className="text-muted-foreground text-xs">GB</span>
+            <span className="text-muted-foreground text-xs">MB</span>
           </div>
         </div>
         <Button

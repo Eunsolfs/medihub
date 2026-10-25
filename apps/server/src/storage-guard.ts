@@ -42,7 +42,7 @@ export const checkUploadQuota = async (input: {
 
     if (used + byteSize > department.quotaBytes) {
       return {
-        message: `科室存储空间不足：已用 ${gb(used)} / 上限 ${gb(department.quotaBytes)}。请联系管理员清理旧素材，或在系统管理里调整存储上限`,
+        message: `科室存储空间不足：已用 ${mb(used)} / 上限 ${mb(department.quotaBytes)}。请联系管理员清理旧素材，或在系统管理里调整存储上限`,
         ok: false,
         status: 413,
       };
@@ -56,7 +56,7 @@ export const checkUploadQuota = async (input: {
 
     if (used + byteSize > globalQuota) {
       return {
-        message: `全站存储空间不足：已用 ${gb(used)} / 上限 ${gb(globalQuota)}。请联系管理员扩容或归档旧数据`,
+        message: `全站存储空间不足：已用 ${mb(used)} / 上限 ${mb(globalQuota)}。请联系管理员扩容或归档旧数据`,
         ok: false,
         status: 413,
       };
