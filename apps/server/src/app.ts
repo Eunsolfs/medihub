@@ -5,6 +5,7 @@ import { secureHeaders } from "hono/secure-headers";
 
 import { auth } from "#src/context.ts";
 import { openApi, rpc } from "#src/orpc.ts";
+import { archiveRoute } from "#src/routes/archive.ts";
 import { exportsRoute } from "#src/routes/exports.ts";
 import { filesRoute } from "#src/routes/files.ts";
 import { installRoute } from "#src/routes/install.ts";
@@ -20,5 +21,6 @@ export const app = new Hono()
   .route("/api/office", officeRoute)
   .route("/api/exports", exportsRoute)
   .route("/api/install", installRoute)
+  .route("/api/archive", archiveRoute)
   .all("/rpc/*", rpc)
   .all("/api/*", openApi);

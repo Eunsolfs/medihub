@@ -13,6 +13,8 @@ export interface MediaAsset {
   byteSize?: number | null;
   createdAt?: DateInput;
   capturedAt?: DateInput;
+  /** 已归档的素材：原文件可能已移出服务器，缩略图显示归档占位。 */
+  archivedAt?: DateInput;
   stage?: string | null;
   visibility?: string | null;
   tags?: string[] | null;
@@ -37,7 +39,10 @@ export interface MediaAsset {
 /** 缩略图只需要这几项，工作台「最近上传」的统计对象可以直接传。 */
 export type ThumbAsset = Pick<MediaAsset, "id" | "originalName"> &
   Partial<
-    Pick<MediaAsset, "kind" | "mimeType" | "capturedAt" | "createdAt" | "stage">
+    Pick<
+      MediaAsset,
+      "kind" | "mimeType" | "capturedAt" | "createdAt" | "stage" | "archivedAt"
+    >
   >;
 
 export interface AssetSelection {

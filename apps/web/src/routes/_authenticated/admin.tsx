@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
 import {
+  ArchiveIcon,
   Building2Icon,
   HardDriveIcon,
   ScrollTextIcon,
@@ -22,6 +23,7 @@ import {
   TabsTrigger,
 } from "@medihub/ui/components/tabs";
 
+import { ArchivePanel } from "#src/components/admin/archive-panel.tsx";
 import { AuditPanel } from "#src/components/admin/audit-panel.tsx";
 import { OfficeStatusCard } from "#src/components/admin/office-status-card.tsx";
 import { OrgsPanel } from "#src/components/admin/orgs-panel.tsx";
@@ -162,6 +164,10 @@ const AdminPage = () => {
             <HardDriveIcon />
             存储
           </TabsTrigger>
+          <TabsTrigger value="archive">
+            <ArchiveIcon />
+            归档
+          </TabsTrigger>
           <TabsTrigger value="audit">
             <ScrollTextIcon />
             审计
@@ -180,6 +186,10 @@ const AdminPage = () => {
 
         <TabsContent value="storage">
           <StoragePanel viewer={viewer} />
+        </TabsContent>
+
+        <TabsContent value="archive">
+          <ArchivePanel viewer={viewer} />
         </TabsContent>
 
         <TabsContent value="audit">

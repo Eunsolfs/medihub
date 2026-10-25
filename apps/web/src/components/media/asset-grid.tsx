@@ -1,6 +1,7 @@
 import { DownloadIcon, EyeIcon, ImageOffIcon, Trash2Icon } from "lucide-react";
 import { useRef, useState } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
+import { toast } from "sonner";
 
 import { buttonVariants } from "@medihub/ui/components/button";
 import { Checkbox } from "@medihub/ui/components/checkbox";
@@ -152,6 +153,12 @@ export const AssetGrid = ({
   };
 
   const handleActivate = (asset: MediaAsset) => {
+    if (asset.archivedAt) {
+      toast.info("该素材已归档，请到「系统管理 → 归档」下载对应分片后离线查看");
+
+      return;
+    }
+
     if (suppressClick.current) {
       suppressClick.current = false;
 
@@ -278,8 +285,13 @@ export const AssetGrid = ({
                   className="aspect-square w-12 shrink-0 rounded-md"
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">
-                    {asset.originalName}
+                  <p className="flex items-center gap-1.5 text-sm font-medium">
+                    <span className="truncate">{asset.originalName}</span>
+                    {asset.archivedAt ? (
+                      <span className="bg-muted text-muted-foreground shrink-0 rounded px-1 py-0.5 text-[10px]">
+                        已归档
+                      </span>
+                    ) : null}
                   </p>
                   <p className="text-muted-foreground truncate text-xs">
                     {metaOf(asset) || "—"}
@@ -389,6 +401,11 @@ export const AssetGrid = ({
                 onPointerCancel={cancelPress}
               >
                 {checkbox(asset)}
+                {asset.archivedAt ? (
+                  <span className="bg-background/90 text-muted-foreground absolute top-2.5 left-2.5 z-10 rounded px-1.5 py-0.5 text-[10px] font-medium">
+                    已归档
+                  </span>
+                ) : null}
                 <AssetThumb asset={asset} />
                 <div className="px-1 pt-1.5 pb-0.5">
                   <p

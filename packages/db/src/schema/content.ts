@@ -219,6 +219,10 @@ export const asset = snakeCase.table(
     /** 时间线内的手工顺序，同一天的照片可拖拽调整。 */
     timelineOrder: integer().notNull().default(0),
     deletedAt: timestamp(),
+    /** 归档时间；归档后文件可能已从服务器移走，行保留用于检索与 provenance。 */
+    archivedAt: timestamp(),
+    /** 所属归档任务 id（archive_job.id），便于定位数据包。 */
+    archiveId: text(),
     ...timestamps,
   },
   (table) => [

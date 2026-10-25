@@ -16,6 +16,8 @@ type OrgsClient = AppRouterClient["orgs"];
 
 type StorageClient = AppRouterClient["storage"];
 
+type ArchiveClient = AppRouterClient["archive"];
+
 type AuditClient = AppRouterClient["audit"];
 
 type UsersList = ProcedureOutput<UserClient["list"]>;
@@ -37,6 +39,20 @@ export type StorageTargetRow = ProcedureOutput<StorageClient["list"]>[number];
 export type StorageDriver = StorageTargetRow["driver"];
 
 export type StorageScope = StorageTargetRow["scope"];
+
+export type StorageUsage = ProcedureOutput<StorageClient["usage"]>;
+
+export type OrganizationUsage = StorageUsage["organizations"][number];
+
+export type DiskUsage = StorageUsage["disks"][number];
+
+type ArchiveList = ProcedureOutput<ArchiveClient["list"]>;
+
+export type ArchiveJobRow = ArchiveList["items"][number];
+
+export type ArchiveDetail = ProcedureOutput<ArchiveClient["get"]>;
+
+export type ArchiveChunkRow = ArchiveDetail["chunks"][number];
 
 type AuditList = ProcedureOutput<AuditClient["list"]>;
 

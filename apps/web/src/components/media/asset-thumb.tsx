@@ -7,6 +7,7 @@ import {
   ImageIcon,
   MusicIcon,
   VideoIcon,
+  ArchiveIcon,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -93,10 +94,16 @@ export const AssetThumb = ({
   eager = false,
 }: AssetThumbProps) => {
   const [brokenId, setBrokenId] = useState<string | null>(null);
-  const image = isImageAsset(asset) && brokenId !== asset.id;
+  const archived = asset.archivedAt !== undefined && asset.archivedAt !== null;
+  const image = !archived && isImageAsset(asset) && brokenId !== asset.id;
   const { Icon, tone } = tileOf(asset);
 
-  const body = image ? (
+  const body = archived ? (
+    <span className="text-muted-foreground flex size-full flex-col items-center justify-center gap-1.5 p-2 text-center">
+      <ArchiveIcon aria-hidden className="size-7" />
+      <span className="text-[10px] font-medium tracking-wide">已归档</span>
+    </span>
+  ) : image ? (
     <img
       src={assetFileUrl(asset.id)}
       alt={asset.originalName}
@@ -124,7 +131,7 @@ export const AssetThumb = ({
         className
       )}
     >
-      {onOpen ? (
+      {onOpen && !archived ? (
         <button
           type="button"
           onClick={() => {

@@ -21,6 +21,7 @@ import type { StorageDriver, StorageTargetLike } from "@medihub/storage";
 import { db, storage, storageRoot } from "#src/context.ts";
 import { env } from "#src/env.ts";
 import { viewerOf } from "#src/lib/session.ts";
+import { checkUploadQuota } from "#src/storage-guard.ts";
 
 /**
  * 上传要落到哪个科室：普通账号用自己的科室；root 用顶部切换器指定的科室，
@@ -464,6 +465,20 @@ export const filesRoute = new Hono()
 
     const driver = driverOf(target);
 
+    {
+      const quota = await checkUploadQuota({
+        byteSize: body.byteLength,
+        db,
+        organizationId,
+        storage,
+        target,
+      });
+
+      if (!quota.ok) {
+        return c.json({ error: quota.message }, quota.status);
+      }
+    }
+
     const storageKey = buildStorageKey(organizationId, mimeType, fileName);
 
     await driver.put(storageKey, body);
@@ -593,6 +608,23 @@ export const filesRoute = new Hono()
 
     if (!target) {
       return c.json({ error: "素材的存储目标已被删除" }, 410);
+    }
+
+    // 覆盖保存只占用增量空间：按新文件与旧文件的差值检查配额与磁盘余量。
+    const deltaBytes = body.byteLength - row.byteSize;
+
+    if (deltaBytes > 0) {
+      const quota = await checkUploadQuota({
+        byteSize: deltaBytes,
+        db,
+        organizationId: row.organizationId,
+        storage,
+        target,
+      });
+
+      if (!quota.ok) {
+        return c.json({ error: quota.message }, quota.status);
+      }
     }
 
     const driver = driverOf(target);

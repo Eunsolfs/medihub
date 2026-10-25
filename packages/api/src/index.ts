@@ -1,6 +1,7 @@
 import type { RouterClient } from "@orpc/server";
 
 import { admissionsRouter } from "#src/routers/admissions.ts";
+import { archiveRouter } from "#src/routers/archive.ts";
 import { assetsRouter } from "#src/routers/assets.ts";
 import { auditRouter } from "#src/routers/audit.ts";
 import { collectionsRouter } from "#src/routers/collections.ts";
@@ -26,6 +27,14 @@ export {
 } from "#src/access.ts";
 
 export { loadAudience } from "#src/audience.ts";
+
+export {
+  GLOBAL_QUOTA_KEY,
+  globalUsage,
+  organizationUsage,
+  readGlobalQuota,
+  writeGlobalQuota,
+} from "#src/quota.ts";
 
 export type {
   LatestRelease,
@@ -58,6 +67,7 @@ export type {
 
 export const appRouter = {
   admissions: admissionsRouter,
+  archive: archiveRouter,
   assets: assetsRouter,
   audit: auditRouter,
   collections: collectionsRouter,

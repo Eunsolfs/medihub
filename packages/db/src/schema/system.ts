@@ -13,6 +13,13 @@ import { organization } from "#src/schema/organization.ts";
 
 export const storageDriver = ["local", "nas", "s3"] as const;
 
+/** 全站键值配置（容量上限等不需要独立表结构的少量设置）。 */
+export const appSetting = snakeCase.table("app_setting", {
+  key: text().primaryKey(),
+  value: text().notNull(),
+  ...timestamps,
+});
+
 /**
  * 一个可写入的存储位置。`config` 是 AES-256-GCM 加密后的 JSON，
  * 平台不落明文密钥；解密只发生在服务端进程内。
@@ -109,6 +116,57 @@ export const auditLog = snakeCase.table(
   ]
 );
 
+export const archiveStatus = ["pending", "running", "ready", "failed"] as const;
+
+export interface ArchiveChunk {
+  index: number;
+  /** 存储目标内的相对路径。 */
+  key: string;
+  size: number;
+}
+
+/**
+ * 一次冷数据归档：把某科室在 `beforeAt` 之前上传的素材打成若干分片 zip，
+ * 推到指定存储目标；可选删除服务器上的源文件以释放空间。
+ */
+export const archiveJob = snakeCase.table(
+  "archive_job",
+  {
+    id: primaryId(),
+    organizationId: text()
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    requestedBy: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    status: text({ enum: archiveStatus }).notNull().default("pending"),
+    /** 只归档这个时间点之前上传的素材。 */
+    beforeAt: integer({ mode: "timestamp_ms" }).notNull(),
+    /** 每片压缩包的目标大小（字节），实际按素材边界切分。 */
+    chunkBytes: integer().notNull(),
+    chunks: text({ mode: "json" })
+      .$type<ArchiveChunk[]>()
+      .notNull()
+      .default(sql`'[]'`),
+    chunkCount: integer().notNull().default(0),
+    assetCount: integer().notNull().default(0),
+    byteSize: integer().notNull().default(0),
+    storageTargetId: text().notNull(),
+    storagePrefix: text().notNull(),
+    deleteSource: integer({ mode: "boolean" }).notNull().default(false),
+    error: text(),
+    completedAt: integer({ mode: "timestamp_ms" }),
+    ...timestamps,
+  },
+  (table) => [
+    index("archive_job_organization_idx").on(
+      table.organizationId,
+      table.createdAt
+    ),
+    index("archive_job_status_idx").on(table.status),
+  ]
+);
+
 export type StorageTarget = typeof storageTarget.$inferSelect;
 
 export type StorageDriver = (typeof storageDriver)[number];
@@ -116,3 +174,5 @@ export type StorageDriver = (typeof storageDriver)[number];
 export type ExportJob = typeof exportJob.$inferSelect;
 
 export type AuditLog = typeof auditLog.$inferSelect;
+
+export type ArchiveJob = typeof archiveJob.$inferSelect;

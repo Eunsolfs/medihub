@@ -1,6 +1,7 @@
-import { mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 
 import { createRouterClient } from "@orpc/server";
 import { eq } from "drizzle-orm";
@@ -21,6 +22,7 @@ import {
 
 import type { Context, StorageAccess } from "#src/context.ts";
 import { appRouter } from "#src/index.ts";
+import { planArchiveChunks } from "#src/services/archive.ts";
 import type { UpdaterAccess } from "#src/update.ts";
 
 const { db, remove } = await createTestDatabase();
@@ -557,5 +559,152 @@ describe("system.update", () => {
       client.system.startUpdate({ targetVersion: "1.1.0" })
     ).rejects.toThrow();
     await expect(client.system.rollbackUpdate()).rejects.toThrow();
+  });
+});
+
+describe("storage quota & archive chunk planning", () => {
+  it("科室与全站配额可设置，usage 返回已用与磁盘信息", async () => {
+    const department = await createOrganization("配额科室");
+    const admin = await signInAs("dept_admin", department.id);
+
+    const target = await admin.client.storage.create({
+      driver: "local",
+      isDefault: true,
+      name: "配额存储",
+      rootPath: await mkdtemp(path.join(tmpdir(), "medihub-quota-")),
+      scope: "organization",
+    });
+
+    await db.insert(asset).values({
+      byteSize: 3 * 1024 * 1024,
+      checksum: crypto.randomUUID(),
+      kind: "image",
+      mimeType: "image/jpeg",
+      organizationId: department.id,
+      originalName: "占用.jpg",
+      ownerId: admin.id,
+      storageKey: `${department.id}/2026-10/1.jpg`,
+      storageTargetId: target.id,
+    });
+
+    await admin.client.storage.setQuota({
+      organizationId: department.id,
+      quotaBytes: 10 * 1024 * 1024,
+    });
+
+    const usage = await admin.client.storage.usage();
+
+    expect(usage.organizations[0]?.usedBytes).toBe(3 * 1024 * 1024);
+    expect(usage.organizations[0]?.quotaBytes).toBe(10 * 1024 * 1024);
+    expect(usage.disks.some((disk) => disk.targetId === target.id)).toBe(true);
+  });
+
+  it("科室管理员不能设置全站配额", async () => {
+    const department = await createOrganization("配额科室2");
+    const admin = await signInAs("dept_admin", department.id);
+
+    await expect(
+      admin.client.storage.setQuota({ quotaBytes: 1024 })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("归档分片按素材边界累积，大文件独占一片", () => {
+    const sizes = [300, 300, 300, 2000, 100];
+
+    // chunk 上限 1000：前三个一组，2000 独占，最后 100 一组。
+    expect(
+      planArchiveChunks(
+        sizes.map((byteSize) => ({ byteSize })),
+        1000
+      )
+    ).toEqual([900, 2000, 100]);
+  });
+});
+
+describe("archive job", () => {
+  it("把素材打包成分片并标记为已归档", async () => {
+    const department = await createOrganization("归档科室");
+    const admin = await signInAs("dept_admin", department.id);
+    const rootPath = await mkdtemp(path.join(tmpdir(), "medihub-archive-"));
+
+    await admin.client.storage.create({
+      driver: "local",
+      isDefault: true,
+      name: "归档存储",
+      rootPath,
+      scope: "organization",
+    });
+
+    const [target] = await db
+      .select()
+      .from(storageTarget)
+      .where(eq(storageTarget.organizationId, department.id))
+      .limit(1);
+
+    if (!target) {
+      throw new Error("缺少存储目标");
+    }
+
+    const assetId = crypto.randomUUID();
+    const storageKey = `${department.id}/old-1.jpg`;
+    await mkdir(path.join(rootPath, department.id), { recursive: true });
+    await writeFile(
+      path.join(rootPath, storageKey),
+      Buffer.from("fake-jpeg-bytes")
+    );
+
+    await db.insert(asset).values({
+      byteSize: 15,
+      checksum: crypto.randomUUID(),
+      id: assetId,
+      kind: "image",
+      mimeType: "image/jpeg",
+      organizationId: department.id,
+      originalName: "旧素材.jpg",
+      ownerId: admin.id,
+      storageKey,
+      storageTargetId: target.id,
+    });
+
+    const job = await admin.client.archive.create({
+      beforeAt: new Date(Date.now() + 60_000),
+      chunkBytes: 64 * 1024 * 1024,
+      deleteSource: false,
+      organizationId: department.id,
+    });
+
+    expect(job.status).toBe("running");
+
+    let detail = await admin.client.archive.get({ id: job.id });
+
+    for (
+      let attempt = 0;
+      attempt < 60 && detail.status === "running";
+      attempt += 1
+    ) {
+      await delay(100);
+      detail = await admin.client.archive.get({ id: job.id });
+    }
+
+    expect(detail.status, detail.error ?? "").toBe("ready");
+    expect(detail.chunkCount).toBe(1);
+    expect(detail.assetCount).toBe(1);
+
+    const [archived] = await db
+      .select({ archiveId: asset.archiveId, archivedAt: asset.archivedAt })
+      .from(asset)
+      .where(eq(asset.id, assetId));
+
+    expect(archived?.archiveId).toBe(job.id);
+    expect(archived?.archivedAt).toBeInstanceOf(Date);
+
+    const chunkPath = path.join(
+      rootPath,
+      detail.chunks[0]?.key ?? "missing.zip"
+    );
+
+    const stats = await stat(chunkPath).catch(() => null);
+
+    expect(stats?.size).toBeGreaterThan(0);
   });
 });

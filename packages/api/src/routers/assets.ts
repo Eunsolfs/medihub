@@ -36,6 +36,7 @@ import { organizationProcedure } from "#src/procedures.ts";
 
 const assetSummary = {
   admissionId: asset.admissionId,
+  archivedAt: asset.archivedAt,
   bodyPart: asset.bodyPart,
   byteSize: asset.byteSize,
   capturedAt: asset.capturedAt,

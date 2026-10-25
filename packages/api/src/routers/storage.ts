@@ -1,3 +1,5 @@
+import { statfs } from "node:fs/promises";
+
 import { ORPCError } from "@orpc/server";
 import { and, asc, count, eq, isNull, or } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
@@ -18,6 +20,12 @@ import type {
 import type { Viewer } from "#src/access.ts";
 import type { StorageAccess } from "#src/context.ts";
 import { adminProcedure } from "#src/procedures.ts";
+import {
+  globalUsage,
+  organizationUsage,
+  readGlobalQuota,
+  writeGlobalQuota,
+} from "#src/quota.ts";
 import { recordAudit } from "#src/routers/audit.ts";
 
 const scopeValues = z.enum(["global", "organization"] as const);
@@ -495,6 +503,140 @@ export const storageRouter = {
           ok: false,
         };
       }
+    }),
+
+  /** 存储用量：全站与各科室的已用/上限，以及本地/NAS 目标所在磁盘的剩余空间。 */
+  usage: adminProcedure.handler(async ({ context }) => {
+    const { viewer } = context;
+
+    if (!viewer) {
+      throw new ORPCError("UNAUTHORIZED");
+    }
+
+    const storage = requireStorage(context.storage);
+
+    const organizationRows = await context.db
+      .select({
+        id: organization.id,
+        name: organization.name,
+        quotaBytes: organization.quotaBytes,
+      })
+      .from(organization)
+      .orderBy(asc(organization.name));
+
+    const scopedOrganizations =
+      viewer.role === "root"
+        ? organizationRows
+        : organizationRows.filter((row) => row.id === viewer.organizationId);
+
+    const organizations = await Promise.all(
+      scopedOrganizations.map(async (row) => ({
+        ...row,
+        usedBytes: await organizationUsage(context.db, row.id),
+      }))
+    );
+
+    const targets = await context.db
+      .select()
+      .from(storageTarget)
+      .where(eq(storageTarget.enabled, true));
+
+    const disks: {
+      freeBytes: number;
+      name: string;
+      rootPath: string;
+      targetId: string;
+      totalBytes: number;
+    }[] = [];
+
+    for (const target of targets) {
+      if (target.driver === "s3") {
+        continue;
+      }
+
+      if (
+        viewer.role !== "root" &&
+        target.organizationId !== viewer.organizationId
+      ) {
+        continue;
+      }
+
+      try {
+        const config = storage.decrypt<LocalStorageConfig>(target.config);
+        const stats = await statfs(config.rootPath);
+
+        disks.push({
+          freeBytes: Number(stats.bavail) * Number(stats.bsize),
+          name: target.name,
+          rootPath: config.rootPath,
+          targetId: target.id,
+          totalBytes: Number(stats.blocks) * Number(stats.bsize),
+        });
+      } catch {
+        // 盘未挂载或不可读时跳过，不影响整体用量展示。
+      }
+    }
+
+    return {
+      disks,
+      global: {
+        quotaBytes: await readGlobalQuota(context.db),
+        usedBytes: await globalUsage(context.db),
+      },
+      organizations,
+    };
+  }),
+
+  /** 设置存储上限：root 可设全站或任意科室；科室管理员只能设本科室。 */
+  setQuota: adminProcedure
+    .input(
+      z.object({
+        organizationId: z.string().min(1).nullish(),
+        quotaBytes: z.int().nonnegative().nullable(),
+      })
+    )
+    .handler(async ({ context, input }) => {
+      const { viewer } = context;
+
+      if (!viewer) {
+        throw new ORPCError("UNAUTHORIZED");
+      }
+
+      if (!input.organizationId) {
+        if (viewer.role !== "root") {
+          throw new ORPCError("FORBIDDEN", {
+            message: "只有超级管理员可以设置全站存储上限",
+          });
+        }
+
+        await writeGlobalQuota(context.db, input.quotaBytes);
+
+        return { organizationId: null, quotaBytes: input.quotaBytes };
+      }
+
+      if (
+        viewer.role !== "root" &&
+        input.organizationId !== viewer.organizationId
+      ) {
+        throw new ORPCError("FORBIDDEN", {
+          message: "只能设置本科室的存储上限",
+        });
+      }
+
+      const [updated] = await context.db
+        .update(organization)
+        .set({ quotaBytes: input.quotaBytes })
+        .where(eq(organization.id, input.organizationId))
+        .returning({ id: organization.id });
+
+      if (!updated) {
+        throw new ORPCError("NOT_FOUND", { message: "科室不存在" });
+      }
+
+      return {
+        organizationId: input.organizationId,
+        quotaBytes: input.quotaBytes,
+      };
     }),
 
   remove: adminProcedure

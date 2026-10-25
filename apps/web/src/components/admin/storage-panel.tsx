@@ -24,6 +24,7 @@ import {
   storageScopeLabel,
 } from "#src/components/admin/constants.ts";
 import { StorageFormDialog } from "#src/components/admin/storage-form-dialog.tsx";
+import { StorageQuotaCard } from "#src/components/admin/storage-quota-card.tsx";
 import type {
   AdminViewer,
   StorageDriver,
@@ -297,6 +298,8 @@ export const StoragePanel = ({ viewer }: StoragePanelProps) => {
 
   return (
     <div className="grid gap-3">
+      <StorageQuotaCard viewer={viewer} />
+
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="grid gap-0.5">
           <h2 className="text-sm font-medium">存储目标</h2>
