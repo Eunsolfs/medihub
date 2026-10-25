@@ -147,3 +147,33 @@ for (const [name, size, padding] of [
   writeFileSync(path.join(outDir, name), render(size, padding));
   console.log(`wrote ${name}`);
 }
+
+// 同步一份 Android 启动图标（Capacitor 模板的 mipmap 尺寸）。
+const androidRes = path.join(
+  process.cwd(),
+  "..",
+  "mobile",
+  "android",
+  "app",
+  "src",
+  "main",
+  "res"
+);
+const androidSizes = {
+  "mipmap-mdpi": 48,
+  "mipmap-hdpi": 72,
+  "mipmap-xhdpi": 96,
+  "mipmap-xxhdpi": 144,
+  "mipmap-xxxhdpi": 192,
+};
+
+for (const [dir, size] of Object.entries(androidSizes)) {
+  const target = path.join(androidRes, dir);
+  mkdirSync(target, { recursive: true });
+  writeFileSync(path.join(target, "ic_launcher.png"), render(size, 0));
+  writeFileSync(path.join(target, "ic_launcher_round.png"), render(size, 0));
+  writeFileSync(
+    path.join(target, "ic_launcher_foreground.png"),
+    render(size * 2, size * 2 * 0.2)
+  );
+}

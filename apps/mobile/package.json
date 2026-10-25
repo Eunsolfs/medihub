@@ -1,0 +1,20 @@
+{
+  "name": "@medihub/mobile",
+  "version": "1.6.0",
+  "private": true,
+  "description": "医档通安卓壳（Capacitor）：加载线上站点，由 GitHub Actions 构建 APK",
+  "type": "module",
+  "scripts": {
+    "config:android": "node scripts/write-config.mjs",
+    "add:android": "node scripts/write-config.mjs && cap add android",
+    "sync:android": "node scripts/write-config.mjs && cap sync android",
+    "open:android": "cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "catalog:",
+    "@capacitor/core": "catalog:"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "catalog:"
+  }
+}

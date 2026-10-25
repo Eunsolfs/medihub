@@ -66,6 +66,11 @@ catalog:
   archiver: ^8.0.0
   "@types/archiver": ^8.0.0
 
+  # mobile (Capacitor)
+  "@capacitor/android": ^7.4.3
+  "@capacitor/cli": ^7.4.3
+  "@capacitor/core": ^7.4.3
+
   # storage
   "@aws-sdk/client-s3": ^3.1002.0
 

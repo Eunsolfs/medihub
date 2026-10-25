@@ -1,6 +1,6 @@
 # MediHub 部署与运维文档
 
-仓库 `docs/` 下的运维文档索引。六份文档都按「可以直接照做」的标准写：命令可复制、界面路径给出
+仓库 `docs/` 下的运维文档索引。七份文档都按「可以直接照做」的标准写：命令可复制、界面路径给出
 1Panel 的具体位置、关键结论标注来源。
 
 | 文档                                     | 内容                                                                                                                                                                                                                                                                                                                                                                           | 适合谁                                                                         |
@@ -11,6 +11,7 @@
 | [ONLYOFFICE.md](./ONLYOFFICE.md)         | **ONLYOFFICE 是否免费与接入方案**：AGPLv3 与商用边界、9.4 起取消 20 并发限制、社区版 / 企业版 / 开发者版能力对照、与 Collabora / Microsoft WOPI 的门槛对比、1Panel Docker 编排全文、`https://office.example.com` 反代要点、本项目 `.env` 两个变量与完整验证流程、常见报错、不部署时的降级路径                                                                                  | 正在决定「Office 文档要不要在线编辑、要花多少钱」的人；负责接入排错的人        |
 | [ARCHIVE.md](./ARCHIVE.md)               | **容量与冷数据归档**（存储配额 / 冷数据归档 / 定时计划 / 镜像备份）：容量规划、GB↔字节与 413/507 排查、手工归档与分片选择、**定时归档计划**（频率/整点/本地目标 200MB 规则）、**镜像备份**（SQLite 快照 + 可选素材、每目标**只留 2 份**、从指定镜像一键恢复与回滚）、归档包内容（`manifest.json` / `viewer.html`）、归档后如何取回、桌面端离线查看、大文件断点续传、运维与备份 | 磁盘快满、要给科室设上传上限、要把旧素材下线归档、或需要一份能恢复的冷备份的人 |
 | [MOBILE-PWA.md](./MOBILE-PWA.md)         | **手机端使用与安装（PWA）**：安装到安卓桌面（两个入口）、手机能做什么/不能做什么、拍照录像上传、HTTPS 硬要求、iOS 差异、为什么先做 PWA、什么时候值得上原生（Expo / Electron 壳，含 VibeStart 命令示例但未实现）、常见问题自检清单                                                                                                                                              | 要在手机上拍照上传的科室、负责上线 HTTPS 与答疑的人                            |
+| [ANDROID-APK.md](./ANDROID-APK.md)       | **安卓 APK（Capacitor 套壳）**：GitHub Actions 一键构建（workflow_dispatch 填站点地址，或 tag + 仓库变量）、Artifacts 下载 `app-debug.apk`、本地构建命令（JDK 21 / Android SDK 35）、远程加载 vs 本地资源、安装与更新、debug 签名与上架说明、常见问题                                                                                                                          | 需要独立 APK 分发给同事、或要上架应用商店的人                                  |
 
 ## 阅读顺序建议
 
@@ -25,7 +26,8 @@
 5. 磁盘开始紧张、或要给科室设上传上限时，读 [ARCHIVE.md](./ARCHIVE.md)：§1 容量规划、
    §2 配额（含 413/507 排查）、§3 归档操作与 §3.7 定时计划 / §3.8 镜像备份；
    动手前务必看清 §9「限制与注意事项」。
-6. 要让医生在手机上拍照上传，读 [MOBILE-PWA.md](./MOBILE-PWA.md)：先确认 HTTPS（§5.1），
+6. 需要独立 APK（而不是 PWA）时，读 [ANDROID-APK.md](./ANDROID-APK.md)：先配站点地址，再从 Actions Artifacts 下载；签名与上架见 §5。
+7. 要让医生在手机上拍照上传，读 [MOBILE-PWA.md](./MOBILE-PWA.md)：先确认 HTTPS（§5.1），
    再按 §2 教他们装到桌面；能力边界见 §4。
 
 ## 三个最容易踩的坑

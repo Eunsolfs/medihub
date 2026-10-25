@@ -2,6 +2,21 @@
 
 本项目从第一版起的所有对外变更。版本号遵循 `MAJOR.MINOR.PATCH`。
 
+## v1.6.0 — 2026-10-25
+
+### 新功能：安卓 APK（Capacitor 套壳）
+
+- 新增 `apps/mobile`：Capacitor 安卓工程，远程加载已部署站点（`CAPACITOR_SERVER_URL`），
+  保留 PWA 的拍照上传/预览能力；未配置地址时退化为本地资源预览。
+- 新增 GitHub Actions 工作流 `.github/workflows/android-apk.yml`：
+  `workflow_dispatch` 填站点地址，或配置仓库变量后推 `v*` tag 自动构建；
+  产物 `medihub-debug-apk`（`app-debug.apk`）在 Actions Artifacts 下载。
+- 生成 Android 启动图标（与站点图标一致）、应用名「医档通」、版本 1.6.0。
+- 文档：新增 `docs/ANDROID-APK.md`（构建、下载、本地构建、远程/本地模式、签名与上架、FAQ），
+  docs 索引更新；README 增加功能行。
+- 说明：APK 是 WebView 壳，加载线上站点；没有原生推送/后台任务；debug 签名可直接安装，
+  上架需自备 release keystore（文档 §5）。
+
 ## v1.5.0 — 2026-10-25
 
 ### 新功能：镜像只留两份 + 从镜像恢复

@@ -18,6 +18,10 @@ export default defineConfig({
       ...generatedFiles,
       // 浏览器直接加载的 Service Worker 与离线页，不是模块代码。
       "apps/web/public/**",
+      // Capacitor 配置生成脚本（构建辅助，不是产品代码）。
+      "apps/mobile/scripts/**",
+      // Capacitor 生成的 Android 工程与打包进 assets 的 web 产物；不是模块代码。
+      "apps/mobile/android/**",
     ],
     proseWrap: "preserve",
     sortImports: {
@@ -53,6 +57,10 @@ export default defineConfig({
       "apps/web/scripts/**",
       "apps/server/scripts/**",
       "apps/web/public/**",
+      // Capacitor 配置生成脚本（构建辅助，不是产品代码）。
+      "apps/mobile/scripts/**",
+      // Capacitor 生成的 Android 工程与打包进 assets 的 web 产物；不是模块代码。
+      "apps/mobile/android/**",
     ],
     jsPlugins: [
       // Knip reads this string. A spread of `shadcn.jsPlugins` is invisible to it.

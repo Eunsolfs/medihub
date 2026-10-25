@@ -1,0 +1,5 @@
+{
+  "appId": "com.medihub.app",
+  "appName": "医档通",
+  "webDir": "../web/dist"
+}

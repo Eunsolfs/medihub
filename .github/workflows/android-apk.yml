@@ -1,0 +1,92 @@
+name: android-apk
+
+on:
+  workflow_dispatch:
+    inputs:
+      server_url:
+        description: "医档通线上地址（HTTPS，例如 https://medihub.example.com）"
+        required: true
+        type: string
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # tag 构建只在配置了仓库变量时运行；否则请在 Actions 页面手动 Run workflow 并填地址。
+    if: github.event_name == 'workflow_dispatch' || vars.CAPACITOR_SERVER_URL != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12.15.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.1
+          cache: pnpm
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android platform and build tools
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build web assets
+        run: pnpm --filter @medihub/web run build
+
+      - name: Resolve server URL
+        env:
+          INPUT_URL: ${{ inputs.server_url }}
+          REPO_URL: ${{ vars.CAPACITOR_SERVER_URL }}
+        run: |
+          URL="${INPUT_URL:-$REPO_URL}"
+          if [ -z "$URL" ]; then
+            echo "缺少站点地址：workflow_dispatch 时填 server_url，或设置仓库变量 CAPACITOR_SERVER_URL" >&2
+            exit 1
+          fi
+          case "$URL" in
+            https://*) ;;
+            http://*)
+              echo "警告：使用 HTTP，安卓 WebView 的相机/Service Worker 会受限，正式包请用 HTTPS" >&2 ;;
+            *) echo "必须是以 http(s):// 开头的地址" >&2; exit 1 ;;
+          esac
+          echo "CAPACITOR_SERVER_URL=$URL" >> "$GITHUB_ENV"
+
+      - name: Sync Capacitor
+        working-directory: apps/mobile
+        run: pnpm run sync:android
+
+      - name: Build debug APK
+        working-directory: apps/mobile/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: medihub-debug-apk
+          path: apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
