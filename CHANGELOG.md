@@ -2,6 +2,14 @@
 
 本项目从第一版起的所有对外变更。版本号遵循 `MAJOR.MINOR.PATCH`。
 
+## v1.6.2 — 2026-10-25
+
+### 修复
+
+- Android APK 工作流不再依赖 `android-actions/setup-android@v3`（在 ubuntu-latest 上安装失败）：
+  直接用 runner 预装的 Android SDK，通过 `cmdline-tools` 的 `sdkmanager` 安装
+  platform 35 / build-tools 35 并接受许可。
+
 ## v1.6.1 — 2026-10-25
 
 ### 配置
