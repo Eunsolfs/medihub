@@ -9,7 +9,7 @@
 ## 一条命令（真正的一行）
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Eunsolfs/medihub/main/scripts/install-1panel.sh | sudo bash -s -- --url https://medihub.example.com --seed
+curl -fsSL https://raw.githubusercontent.com/Eunsolfs/medihub/main/scripts/install-1panel.sh | sudo bash -s -- --url https://medihub.summerecho.cn --seed
 ```
 
 不想用管道，也可以先下载再执行（脚本内容可先看一眼）：
@@ -17,7 +17,7 @@ curl -fsSL https://raw.githubusercontent.com/Eunsolfs/medihub/main/scripts/insta
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Eunsolfs/medihub/main/scripts/install-1panel.sh -o install-medihub.sh
 less install-medihub.sh   # 看完再跑
-sudo bash install-medihub.sh --url https://medihub.example.com --seed
+sudo bash install-medihub.sh --url https://medihub.summerecho.cn --seed
 ```
 
 - `--url` 换成你准备绑定的域名（还没配 HTTPS 也可以先写 `http://服务器IP:3000`，之后用 `--update` 或直接改 `.env`）。

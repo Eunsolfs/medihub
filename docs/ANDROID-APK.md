@@ -13,7 +13,7 @@
 两种触发方式：
 
 1. **手动**：仓库 → Actions → `android-apk` → Run workflow，填 `server_url`
-   （你的 HTTPS 站点地址，如 `https://medihub.example.com`）。
+   （你的 HTTPS 站点地址，如 `https://medihub.summerecho.cn`）。
 2. **打 tag 自动构建**：先设置仓库变量 `CAPACITOR_SERVER_URL`（Settings → Secrets and
    variables → Actions → Variables），之后推送 `v*` tag 就会自动构建。
 
@@ -22,7 +22,7 @@
 
 ```bash
 # 本机也可以直接触发（需要 gh CLI 并登录）
-gh workflow run android-apk.yml -f server_url=https://medihub.example.com
+gh workflow run android-apk.yml -f server_url=https://medihub.summerecho.cn
 gh run watch
 ```
 
@@ -35,7 +35,7 @@ pnpm install
 pnpm --filter @medihub/web run build
 
 cd apps/mobile
-CAPACITOR_SERVER_URL=https://medihub.example.com pnpm run sync:android
+CAPACITOR_SERVER_URL=https://medihub.summerecho.cn pnpm run sync:android
 cd android
 chmod +x gradlew
 ./gradlew assembleDebug

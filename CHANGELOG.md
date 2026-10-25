@@ -2,6 +2,14 @@
 
 本项目从第一版起的所有对外变更。版本号遵循 `MAJOR.MINOR.PATCH`。
 
+## v1.6.1 — 2026-10-25
+
+### 配置
+
+- 部署域名确定为 `https://medihub.summerecho.cn`：README / 安装与 Android 文档示例同步。
+- GitHub Actions 的 APK 构建默认使用该域名（可用仓库变量 `CAPACITOR_SERVER_URL` 覆盖），
+  推 `v*` tag 即自动产出 `medihub-debug-apk`。
+
 ## v1.6.0 — 2026-10-25
 
 ### 新功能：安卓 APK（Capacitor 套壳）

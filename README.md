@@ -136,7 +136,7 @@ pnpm dev                                       # web :5173 / api :3000
 | 变量                                       | 说明                                                                     |
 | ------------------------------------------ | ------------------------------------------------------------------------ |
 | `BETTER_AUTH_SECRET`                       | 必填，≥32 字符；同时用于存储配置加密。生产环境必须替换                   |
-| `BETTER_AUTH_URL`                          | 浏览器访问地址，如 `https://medihub.example.com`                         |
+| `BETTER_AUTH_URL`                          | 浏览器访问地址，如 `https://medihub.summerecho.cn`                       |
 | `DATABASE_URL`                             | SQLite 文件，相对 `apps/server` 解析                                     |
 | `PORT`                                     | API 端口，默认 3000                                                      |
 | `STORAGE_ROOT`                             | 本地存储根目录，默认 `./storage`                                         |

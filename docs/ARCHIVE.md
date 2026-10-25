@@ -935,13 +935,13 @@ npx vibestart-cli create my-archive-viewer
 
 ```bash
 # 先登录拿 cookie（在浏览器 F12 → Network 里复制 Cookie 头，或用下面的 curl 登录）
-curl -fsS -c cookies.txt -X POST https://medihub.example.com/api/auth/sign-in/email \
+curl -fsS -c cookies.txt -X POST https://medihub.summerecho.cn/api/auth/sign-in/email \
   -H 'Content-Type: application/json' \
   -d '{"email":"root@example.com","password":"<密码>"}'
 
 JOB=0f3c9a12-1111-2222-3333-444455556666
 curl -fL -b cookies.txt -o chunk-001.zip \
-  "https://medihub.example.com/api/archive/$JOB/0"
+  "https://medihub.summerecho.cn/api/archive/$JOB/0"
 ```
 
 ### 7.2 断点续传 / 失败重试
@@ -951,10 +951,10 @@ curl -fL -b cookies.txt -o chunk-001.zip \
 ```bash
 # 已下了 300MB 断了：从这里接着下
 curl -fL -b cookies.txt -C - -o chunk-001.zip \
-  "https://medihub.example.com/api/archive/$JOB/0"
+  "https://medihub.summerecho.cn/api/archive/$JOB/0"
 
 # 校验服务端支持 Range
-curl -sI -b cookies.txt "https://medihub.example.com/api/archive/$JOB/0" | grep -i accept-ranges
+curl -sI -b cookies.txt "https://medihub.summerecho.cn/api/archive/$JOB/0" | grep -i accept-ranges
 # 期望：accept-ranges: bytes
 ```
 

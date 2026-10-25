@@ -61,7 +61,7 @@ MediHub 的站点支持**安装到手机桌面**：用安卓 Chrome 打开站点
 ```bash
 for p in /manifest.webmanifest /sw-register.js /sw.js /icons/icon-192.png; do
   printf '%-24s ' "$p"
-  curl -s -o /dev/null -w '%{http_code} %{content_type}\n' "https://medihub.example.com$p"
+  curl -s -o /dev/null -w '%{http_code} %{content_type}\n' "https://medihub.summerecho.cn$p"
 done
 # 期望：/manifest.webmanifest → 200 application/manifest+json（或 application/json）
 #       /sw.js              → 200 text/javascript 或 application/javascript
@@ -75,7 +75,7 @@ done
 
 **入口 A：浏览器菜单**
 
-1. Chrome 打开 `https://medihub.example.com` 并登录；
+1. Chrome 打开 `https://medihub.summerecho.cn` 并登录；
 2. 点右上角 **⋮** → **「安装应用」**（部分版本显示为 **「添加到主屏幕」**）；
 3. 弹出确认框 → 点「安装」；
 4. 桌面出现 MediHub 图标，点开即为全屏。
@@ -145,8 +145,8 @@ done
 
 | 访问方式                                    | 能否安装                                     |
 | ------------------------------------------- | -------------------------------------------- |
-| `https://medihub.example.com`               | ✅                                           |
-| `http://medihub.example.com`                | ❌（不会有安装入口）                         |
+| `https://medihub.summerecho.cn`             | ✅                                           |
+| `http://medihub.summerecho.cn`              | ❌（不会有安装入口）                         |
 | `http://localhost` / `http://127.0.0.1`     | ✅（浏览器把本机当安全上下文，仅本地调试用） |
 | `https://` + 自签证书（有「继续访问」警告） | ❌ 通常会失败                                |
 
@@ -297,7 +297,7 @@ manifest 里登记的是 `/icons/` 下的四个文件，逐个确认能 200 访�
 for icon in icon-192.png icon-512.png icon-maskable-512.png apple-touch-icon.png; do
   printf '%-24s ' "$icon"
   curl -s -o /dev/null -w '%{http_code} %{content_type}\n' \
-    "https://medihub.example.com/icons/$icon"
+    "https://medihub.summerecho.cn/icons/$icon"
 done
 ```
 

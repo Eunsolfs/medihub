@@ -268,20 +268,20 @@ openssl rand -hex 32
 文件位置：`/opt/medihub/apps/server/.env`（`DATABASE_URL`、`STORAGE_ROOT` 等相对路径都以
 `apps/server` 为基准解析）。
 
-| 变量                          | 必填 | 生产示例                                       | 说明                                                                        |
-| ----------------------------- | ---- | ---------------------------------------------- | --------------------------------------------------------------------------- |
-| `BETTER_AUTH_SECRET`          | 是   | `openssl rand -hex 32` 的输出                  | ≥32 字符；同时是存储配置加密密钥，务必长期不变并纳入备份                    |
-| `BETTER_AUTH_URL`             | 是   | `https://medihub.example.com`                  | **浏览器看到的外部地址**。Better Auth 用它做 Origin 校验，写错就是 403      |
-| `DATABASE_URL`                | 是   | `/data/medihub/local.db`                       | SQLite 文件；相对路径相对 `apps/server`                                     |
-| `PORT`                        | 否   | `3000`                                         | 监听端口                                                                    |
-| `STORAGE_ROOT`                | 否   | `/data/medihub/storage`                        | 本地/NAS 驱动的根目录；`/api/office` 的转换缓存写在它下面的 `.office-cache` |
-| `UPLOAD_MAX_BYTES`            | 否   | `268435456`                                    | 单文件上限，默认 256 MB。**Nginx 的 `client_max_body_size` 必须比它大**     |
-| `SOFFICE_PATH`                | 否   | `/usr/bin/soffice`                             | 配置后 docx/xlsx/pptx 可转 PDF 预览；不配则该接口返回 501                   |
-| `ONLYOFFICE_URL`              | 否   | `https://office.example.com`                   | OnlyOffice Document Server 地址；**必须和主站同协议**                       |
-| `ONLYOFFICE_JWT_SECRET`       | 否   | 与容器 `JWT_SECRET` 同值                       | 两个都填才启用在线编辑                                                      |
-| `BETTER_AUTH_TRUSTED_ORIGINS` | 否   | `https://medihub.example.com,https://10.0.0.8` | 逗号分隔的额外可信来源（局域网 IP、备用域名）                               |
-| `SEED_ROOT_EMAIL`             | 否   | `root@example.com`                             | 仅执行 seed 脚本时创建的超管邮箱                                            |
-| `SEED_ROOT_PASSWORD`          | 否   | 强密码（≥8 位）                                | 仅执行 seed 脚本时使用                                                      |
+| 变量                          | 必填 | 生产示例                                         | 说明                                                                        |
+| ----------------------------- | ---- | ------------------------------------------------ | --------------------------------------------------------------------------- |
+| `BETTER_AUTH_SECRET`          | 是   | `openssl rand -hex 32` 的输出                    | ≥32 字符；同时是存储配置加密密钥，务必长期不变并纳入备份                    |
+| `BETTER_AUTH_URL`             | 是   | `https://medihub.summerecho.cn`                  | **浏览器看到的外部地址**。Better Auth 用它做 Origin 校验，写错就是 403      |
+| `DATABASE_URL`                | 是   | `/data/medihub/local.db`                         | SQLite 文件；相对路径相对 `apps/server`                                     |
+| `PORT`                        | 否   | `3000`                                           | 监听端口                                                                    |
+| `STORAGE_ROOT`                | 否   | `/data/medihub/storage`                          | 本地/NAS 驱动的根目录；`/api/office` 的转换缓存写在它下面的 `.office-cache` |
+| `UPLOAD_MAX_BYTES`            | 否   | `268435456`                                      | 单文件上限，默认 256 MB。**Nginx 的 `client_max_body_size` 必须比它大**     |
+| `SOFFICE_PATH`                | 否   | `/usr/bin/soffice`                               | 配置后 docx/xlsx/pptx 可转 PDF 预览；不配则该接口返回 501                   |
+| `ONLYOFFICE_URL`              | 否   | `https://office.example.com`                     | OnlyOffice Document Server 地址；**必须和主站同协议**                       |
+| `ONLYOFFICE_JWT_SECRET`       | 否   | 与容器 `JWT_SECRET` 同值                         | 两个都填才启用在线编辑                                                      |
+| `BETTER_AUTH_TRUSTED_ORIGINS` | 否   | `https://medihub.summerecho.cn,https://10.0.0.8` | 逗号分隔的额外可信来源（局域网 IP、备用域名）                               |
+| `SEED_ROOT_EMAIL`             | 否   | `root@example.com`                               | 仅执行 seed 脚本时创建的超管邮箱                                            |
+| `SEED_ROOT_PASSWORD`          | 否   | 强密码（≥8 位）                                  | 仅执行 seed 脚本时使用                                                      |
 
 > `BETTER_AUTH_TRUSTED_ORIGINS` 已在 `apps/server/src/env.ts` 里声明（`z.string().optional()`），
 > 但它是**可选的普通字符串，值本身不做格式校验**：写成中文逗号、留空格、带多余引号都不会
@@ -296,7 +296,7 @@ openssl rand -hex 32
 BETTER_AUTH_SECRET="替换为 openssl rand -hex 32 的输出"
 
 # 浏览器访问本站的地址。必须是对外 https 域名，末尾不要带斜杠。
-BETTER_AUTH_URL="https://medihub.example.com"
+BETTER_AUTH_URL="https://medihub.summerecho.cn"
 
 # SQLite 放在数据盘，避免重装系统丢数据。
 DATABASE_URL="/data/medihub/local.db"
@@ -315,7 +315,7 @@ ONLYOFFICE_URL="https://office.example.com"
 ONLYOFFICE_JWT_SECRET="与 onlyoffice 容器的 JWT_SECRET 完全一致"
 
 # 额外可信来源（可选）。主域名由 BETTER_AUTH_URL 自动覆盖，无需重复。
-BETTER_AUTH_TRUSTED_ORIGINS="https://medihub.example.com,https://10.0.0.8"
+BETTER_AUTH_TRUSTED_ORIGINS="https://medihub.summerecho.cn,https://10.0.0.8"
 
 # 首次执行 seed 脚本时创建的超管（可选，seed 之后可以删掉这两行）。
 SEED_ROOT_EMAIL="root@example.com"
@@ -632,7 +632,7 @@ sudo -u www -H pm2 restart medihub
 | 字段     | 值                                                                        |
 | -------- | ------------------------------------------------------------------------- |
 | 类型     | 反向代理（部分版本在「运行环境/其他」里选，创建后在站点设置里配代理亦可） |
-| 域名     | `medihub.example.com`                                                     |
+| 域名     | `medihub.summerecho.cn`                                                   |
 | 代理地址 | `http://127.0.0.1:3000`                                                   |
 | 备注     | MediHub 生产站                                                            |
 
@@ -652,7 +652,7 @@ sudo -u www -H pm2 restart medihub
 server {
     listen 80;
     # 【1Panel 自动生成】域名与证书跳转相关配置，保持原样
-    server_name medihub.example.com;
+    server_name medihub.summerecho.cn;
 
     # =====【手动补充 1】上传大小 =====
     # 应用层上限是 UPLOAD_MAX_BYTES（默认 256 MB）。这里给 300m 留出 multipart
@@ -757,7 +757,7 @@ sudo "$OPENRESTY_BIN" -t && sudo "$OPENRESTY_BIN" -s reload
 | 字段     | 值                                                        |
 | -------- | --------------------------------------------------------- |
 | 类型     | Let's Encrypt                                             |
-| 域名     | `medihub.example.com`                                     |
+| 域名     | `medihub.summerecho.cn`                                   |
 | 验证方式 | HTTP 校验（需要 80 端口对公网可达，且该域名已解析到本机） |
 | 自动续签 | 开启（1Panel 会建计划任务）                               |
 
@@ -776,7 +776,7 @@ sudo "$OPENRESTY_BIN" -t && sudo "$OPENRESTY_BIN" -s reload
 ### 10.3 改 `BETTER_AUTH_URL` 并重启
 
 ```bash
-sudo -u www -H sed -i 's|^BETTER_AUTH_URL=.*|BETTER_AUTH_URL="https://medihub.example.com"|' \
+sudo -u www -H sed -i 's|^BETTER_AUTH_URL=.*|BETTER_AUTH_URL="https://medihub.summerecho.cn"|' \
   /opt/medihub/apps/server/.env
 sudo grep BETTER_AUTH_URL /opt/medihub/apps/server/.env
 
@@ -963,7 +963,7 @@ sudo chown -R www:www /data/medihub
 sudo supervisorctl start medihub
 
 # 6) 验证
-curl -I https://medihub.example.com/
+curl -I https://medihub.summerecho.cn/
 # 登录后随机点开一个素材，确认图片/文档能打开（说明 storageKey 与文件对得上）
 ```
 
@@ -1016,7 +1016,7 @@ sudo supervisorctl restart medihub
 # 或 sudo -u www -H pm2 restart medihub
 
 # 8) 冒烟
-curl -fsS -o /dev/null -w '%{http_code}\n' https://medihub.example.com/
+curl -fsS -o /dev/null -w '%{http_code}\n' https://medihub.summerecho.cn/
 sudo supervisorctl tail -200 medihub   # pm2 方案改：sudo -u www -H pm2 logs medihub --lines 200
 ```
 
@@ -1073,7 +1073,7 @@ Drizzle 的迁移是**单向**的：`packages/db/src/migrations` 里只有 `up`�
 
 按顺序逐条打勾，任何一条不过都不要对外宣布上线。
 
-- [ ] `curl -I https://medihub.example.com/` 返回 `200`、`content-type: text/html`
+- [ ] `curl -I https://medihub.summerecho.cn/` 返回 `200`、`content-type: text/html`
 - [ ] 浏览器打开域名能到登录页；地址栏是小锁（证书有效）
 - [ ] `http://` 访问自动 301 到 `https://`
 - [ ] 用 `SEED_ROOT_EMAIL` 账号登录成功，刷新页面不掉登录态
@@ -1111,7 +1111,7 @@ Drizzle 的迁移是**单向**的：`packages/db/src/migrations` 里只有 `up`�
 | 页面能开，登录后立刻掉登录态                                               | Cookie 没被标记为 Secure，或 `X-Forwarded-Proto` 缺失导致后端以为是 http                                         | F12 → Application → Cookies，看 `Secure` 与 `SameSite`                                                      | 补 `proxy_set_header X-Forwarded-Proto $scheme;`，`BETTER_AUTH_URL` 用 https，清 cookie 重登                                                                                                                                                            |
 | **OnlyOffice 混合内容**：编辑器区域空白，控制台 `Mixed Content`            | 主站 https，`ONLYOFFICE_URL` 是 http                                                                             | F12 Console 里的被拦 URL                                                                                    | 给 OnlyOffice 配 https 子域名（同证书体系），把 `ONLYOFFICE_URL` 改成 https，重启。详见 [ONLYOFFICE.md](./ONLYOFFICE.md#7-反向代理到-httpsofficeexamplecom)                                                                                             |
 | 在线编辑能打开，保存后内容没变                                             | OnlyOffice 回调到不了主站（`callbackUrl` 是 `BETTER_AUTH_URL` + `/api/office/:id/callback`）                     | OnlyOffice 容器日志 `docker logs onlyoffice \| tail -100`；主站访问日志有没有 `POST /api/office/*/callback` | 保证 OnlyOffice 容器能访问 `BETTER_AUTH_URL`（DNS/出网）；跨机时不要用内网 IP 且未开 `ALLOW_PRIVATE_IP_ADDRESS`                                                                                                                                         |
-| 时间显示差 8 小时                                                          | 进程或系统时区不是 `Asia/Shanghai`                                                                               | `date`；`curl -s https://medihub.example.com/api/...` 看返回时间戳                                          | `sudo timedatectl set-timezone Asia/Shanghai`；`.env` 加 `TZ="Asia/Shanghai"`；守护配置里也带上 `TZ`（Supervisor `environment=` / pm2 `env`）。注意：库里时间戳是毫秒整数，前端按浏览器时区渲染，**改系统时区不会改历史数据**，只影响新记录与服务端日志 |
+| 时间显示差 8 小时                                                          | 进程或系统时区不是 `Asia/Shanghai`                                                                               | `date`；`curl -s https://medihub.summerecho.cn/api/...` 看返回时间戳                                        | `sudo timedatectl set-timezone Asia/Shanghai`；`.env` 加 `TZ="Asia/Shanghai"`；守护配置里也带上 `TZ`（Supervisor `environment=` / pm2 `env`）。注意：库里时间戳是毫秒整数，前端按浏览器时区渲染，**改系统时区不会改历史数据**，只影响新记录与服务端日志 |
 | **磁盘满**：上传失败、SQLite 报 `disk I/O error`、备份脚本失败             | 素材/备份/日志把数据盘写满                                                                                       | `df -h`、`du -sh /data/medihub/* /www/backup/medihub /www/wwwlogs`                                          | 清理过期备份（脚本已保留 7 天）、清 `.office-cache`（可随时重建）、压缩旧日志。要把素材挪到更大的盘：停服 → `rsync` 目录 → 改 `.env` 的 `STORAGE_ROOT` → 启动（`storageKey` 不含根路径，换根目录不影响历史数据）                                        |
 | 所有页面 **403/500**，日志里 `EACCES`                                      | 文件属主不是 `www`（用 root 跑过 install/build，或 `git pull` 用了 root）                                        | `ls -l apps/server/.env apps/server/dist`；`namei -l /data/medihub/storage`                                 | `chown -R www:www /opt/medihub /data/medihub /www/backup/medihub`；**之后所有命令都 `sudo -u www -H` 执行**。1Panel 的站点目录默认 `www:www`，不要混入 root 的产物                                                                                      |
 | `SOFFICE` 转换报 501 / 转换失败                                            | 未配 `SOFFICE_PATH`，或 `$STORAGE_ROOT/.office-cache` 不可写                                                     | `curl -I .../api/office/<id>/pdf` 返回 501 就是没配                                                         | 装 LibreOffice、`.env` 填 `SOFFICE_PATH=/usr/bin/soffice`、`chown -R www:www` 缓存目录、重启。CentOS 上 SELinux 需 `setsebool -P httpd_can_network_connect 1`                                                                                           |

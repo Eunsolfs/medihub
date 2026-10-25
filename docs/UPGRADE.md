@@ -507,7 +507,7 @@ curl -fsS http://127.0.0.1:3000/api/health
 # {"status":"ok","version":"1.1.0"}
 
 # 经过反代（给同事确认用）
-curl -fsS https://medihub.example.com/api/health
+curl -fsS https://medihub.summerecho.cn/api/health
 ```
 
 回到卡片：状态区应显示 **已升级到 v1.1.0**；「当前版本」也变成 `v1.1.0`。

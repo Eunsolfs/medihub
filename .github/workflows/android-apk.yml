@@ -4,8 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       server_url:
-        description: "医档通线上地址（HTTPS，例如 https://medihub.example.com）"
-        required: true
+        description: "医档通线上地址（HTTPS）"
+        required: false
+        default: "https://medihub.summerecho.cn"
         type: string
   push:
     tags:
@@ -16,8 +17,6 @@ permissions:
 
 jobs:
   build:
-    # tag 构建只在配置了仓库变量时运行；否则请在 Actions 页面手动 Run workflow 并填地址。
-    if: github.event_name == 'workflow_dispatch' || vars.CAPACITOR_SERVER_URL != ''
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -58,7 +57,7 @@ jobs:
       - name: Resolve server URL
         env:
           INPUT_URL: ${{ inputs.server_url }}
-          REPO_URL: ${{ vars.CAPACITOR_SERVER_URL }}
+          REPO_URL: ${{ vars.CAPACITOR_SERVER_URL || 'https://medihub.summerecho.cn' }}
         run: |
           URL="${INPUT_URL:-$REPO_URL}"
           if [ -z "$URL" ]; then
