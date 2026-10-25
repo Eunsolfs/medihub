@@ -169,6 +169,8 @@ export interface UploadButtonProps {
   target: UploadTarget;
   onUploaded?: (assets: UploadedAsset[]) => void;
   accept?: string;
+  /** 移动端唤起相机：environment=后置、user=前置；桌面浏览器会忽略。 */
+  capture?: "environment" | "user";
   multiple?: boolean;
   label?: string;
   variant?: UploadButtonVariant;
@@ -182,6 +184,7 @@ export const UploadButton = ({
   target,
   onUploaded,
   accept,
+  capture,
   multiple = true,
   label = "上传",
   variant = "default",
@@ -198,6 +201,7 @@ export const UploadButton = ({
         ref={inputRef}
         type="file"
         accept={accept}
+        capture={capture}
         multiple={multiple}
         data-testid="upload-button-input"
         className="sr-only"

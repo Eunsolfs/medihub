@@ -708,3 +708,47 @@ describe("archive job", () => {
     expect(stats?.size).toBeGreaterThan(0);
   });
 });
+
+describe("mirror backup", () => {
+  it("root 可把数据库快照镜像到存储目标", async () => {
+    const root = await signInAs("root", null);
+    const rootPath = await mkdtemp(path.join(tmpdir(), "medihub-mirror-"));
+
+    await root.client.storage.create({
+      driver: "local",
+      isDefault: true,
+      name: "镜像目标",
+      rootPath,
+      scope: "global",
+    });
+
+    const job = await root.client.mirror.run({ includeAssets: false });
+
+    expect(job.status).toBe("running");
+
+    let list = await root.client.mirror.list({});
+
+    for (
+      let attempt = 0;
+      attempt < 60 && list.items[0]?.status === "running";
+      attempt += 1
+    ) {
+      await delay(100);
+      list = await root.client.mirror.list({});
+    }
+
+    const ready = list.items.find((item) => item.id === job.id);
+
+    expect(ready?.status).toBe("ready");
+    expect(ready?.byteSize ?? 0).toBeGreaterThan(0);
+  });
+
+  it("科室管理员不能执行镜像备份", async () => {
+    const department = await createOrganization("镜像科室");
+    const admin = await signInAs("dept_admin", department.id);
+
+    await expect(admin.client.mirror.run({})).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
+  });
+});

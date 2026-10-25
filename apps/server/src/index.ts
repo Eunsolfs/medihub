@@ -8,6 +8,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { app } from "#src/app.ts";
 import { db } from "#src/context.ts";
 import { env } from "#src/env.ts";
+import { startArchiveScheduler } from "#src/scheduler.ts";
 
 const publicDir = fileURLToPath(new URL("public", import.meta.url));
 
@@ -17,11 +18,15 @@ if (existsSync(publicDir)) {
     .get("*", serveStatic({ root: publicDir, path: "index.html" }));
 }
 
+const stopScheduler = startArchiveScheduler();
+
 const server = serve({ fetch: app.fetch, port: env.PORT }, ({ port }) => {
   console.log(`Server listening on http://localhost:${port}`);
 });
 
 await Promise.race([once(process, "SIGINT"), once(process, "SIGTERM")]);
+
+stopScheduler();
 
 server.close();
 

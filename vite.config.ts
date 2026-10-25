@@ -13,7 +13,12 @@ const vendoredFiles = ["packages/ui/src/components/**"];
 export default defineConfig({
   fmt: {
     ...oxfmt,
-    ignorePatterns: [...(oxfmt.ignorePatterns ?? []), ...generatedFiles],
+    ignorePatterns: [
+      ...(oxfmt.ignorePatterns ?? []),
+      ...generatedFiles,
+      // 浏览器直接加载的 Service Worker 与离线页，不是模块代码。
+      "apps/web/public/**",
+    ],
     proseWrap: "preserve",
     sortImports: {
       customGroups: [
@@ -47,6 +52,7 @@ export default defineConfig({
       // 一次性截图 / 验收脚本与构建辅助脚本，不是产品代码。
       "apps/web/scripts/**",
       "apps/server/scripts/**",
+      "apps/web/public/**",
     ],
     jsPlugins: [
       // Knip reads this string. A spread of `shadcn.jsPlugins` is invisible to it.

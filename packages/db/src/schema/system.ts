@@ -167,6 +167,76 @@ export const archiveJob = snakeCase.table(
   ]
 );
 
+export const archiveFrequency = ["daily", "weekly", "monthly"] as const;
+
+/** 定时归档计划：到期后按截止天数把旧素材归档到指定目标，自动运营。 */
+export const archiveSchedule = snakeCase.table(
+  "archive_schedule",
+  {
+    id: primaryId(),
+    organizationId: text()
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    createdBy: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    enabled: integer({ mode: "boolean" }).notNull().default(true),
+    frequency: text({ enum: archiveFrequency }).notNull().default("monthly"),
+    /** 本地时间整点（0-23）。 */
+    hour: integer().notNull().default(3),
+    /** weekly 用：1=周一 … 7=周日。 */
+    weekday: integer().notNull().default(1),
+    /** monthly 用：1-28，避免月末不存在。 */
+    dayOfMonth: integer().notNull().default(1),
+    /** 归档「多少天之前上传」的素材。 */
+    beforeDays: integer().notNull().default(730),
+    chunkBytes: integer()
+      .notNull()
+      .default(200 * 1024 * 1024),
+    targetId: text().notNull(),
+    deleteSource: integer({ mode: "boolean" }).notNull().default(true),
+    lastRunAt: integer({ mode: "timestamp_ms" }),
+    nextRunAt: integer({ mode: "timestamp_ms" }),
+    lastJobId: text(),
+    lastError: text(),
+    ...timestamps,
+  },
+  (table) => [
+    index("archive_schedule_org_idx").on(table.organizationId, table.enabled),
+    index("archive_schedule_next_idx").on(table.enabled, table.nextRunAt),
+  ]
+);
+
+export const mirrorStatus = ["pending", "running", "ready", "failed"] as const;
+
+/** 镜像备份任务：把数据库快照（可选连同素材）复制到另一个存储目标。 */
+export const mirrorJob = snakeCase.table(
+  "mirror_job",
+  {
+    id: primaryId(),
+    organizationId: text().references(() => organization.id, {
+      onDelete: "cascade",
+    }),
+    requestedBy: text().references(() => user.id, { onDelete: "set null" }),
+    status: text({ enum: mirrorStatus }).notNull().default("pending"),
+    includeAssets: integer({ mode: "boolean" }).notNull().default(false),
+    targetId: text().notNull(),
+    storagePrefix: text().notNull(),
+    dbKey: text(),
+    manifestKey: text(),
+    assetCount: integer().notNull().default(0),
+    byteSize: integer().notNull().default(0),
+    error: text(),
+    completedAt: integer({ mode: "timestamp_ms" }),
+    ...timestamps,
+  },
+  (table) => [index("mirror_job_created_idx").on(table.createdAt)]
+);
+
+export type ArchiveSchedule = typeof archiveSchedule.$inferSelect;
+
+export type MirrorJobRow = typeof mirrorJob.$inferSelect;
+
 export type StorageTarget = typeof storageTarget.$inferSelect;
 
 export type StorageDriver = (typeof storageDriver)[number];

@@ -10,6 +10,7 @@ import { ThemeProvider } from "next-themes";
 
 import { Toaster } from "@medihub/ui/components/sonner";
 
+import { InstallPrompt } from "#src/components/pwa/install-prompt.tsx";
 import { getSession } from "#src/lib/auth.ts";
 
 interface RouterContext {
@@ -30,6 +31,7 @@ const RootLayout = () => (
     <HeadContent />
     <Outlet />
     <Toaster position="top-center" richColors />
+    <InstallPrompt />
     {showDevtools ? (
       <>
         <TanStackRouterDevtools position="bottom-left" />

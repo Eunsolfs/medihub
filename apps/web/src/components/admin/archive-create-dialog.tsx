@@ -23,20 +23,16 @@ import {
   SelectValue,
 } from "@medihub/ui/components/select";
 
+import {
+  ARCHIVE_CHUNK_OPTIONS,
+  DEFAULT_ARCHIVE_CHUNK_BYTES,
+} from "#src/components/admin/archive-options.ts";
 import { storageDriverLabel } from "#src/components/admin/constants.ts";
 import type { AdminViewer } from "#src/components/admin/types.ts";
 import { api } from "#src/lib/api.ts";
 import { useOrgScope } from "#src/lib/org-scope.ts";
 
 const DEFAULT_TARGET = "__default__";
-const CHUNK_SIZE = 1024 ** 3;
-
-const CHUNK_OPTIONS = [
-  { label: "512 MB", value: String(512 * 1024 * 1024) },
-  { label: "1 GB", value: String(CHUNK_SIZE) },
-  { label: "2 GB", value: String(2 * CHUNK_SIZE) },
-  { label: "4 GB", value: String(4 * CHUNK_SIZE) },
-] as const;
 
 const toDateInput = (date: Date) => {
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -69,7 +65,11 @@ export const ArchiveCreateDialog = ({
   const { currentOrganization, organizations } = useOrgScope();
 
   const [beforeAt, setBeforeAt] = useState(defaultBeforeAt);
-  const [chunkBytes, setChunkBytes] = useState(String(CHUNK_SIZE));
+
+  const [chunkBytes, setChunkBytes] = useState(
+    String(DEFAULT_ARCHIVE_CHUNK_BYTES)
+  );
+
   const [deleteSource, setDeleteSource] = useState(true);
   const [targetId, setTargetId] = useState(DEFAULT_TARGET);
 
@@ -200,7 +200,7 @@ export const ArchiveCreateDialog = ({
             <div className="grid gap-2">
               <Label htmlFor="archive-chunk-size">分片大小</Label>
               <Select
-                items={CHUNK_OPTIONS.map((option) => ({
+                items={ARCHIVE_CHUNK_OPTIONS.map((option) => ({
                   label: option.label,
                   value: option.value,
                 }))}
@@ -215,13 +215,16 @@ export const ArchiveCreateDialog = ({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {CHUNK_OPTIONS.map((option) => (
+                  {ARCHIVE_CHUNK_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-muted-foreground text-xs">
+                分片越小越省内存，但片数更多。
+              </p>
             </div>
           </div>
 

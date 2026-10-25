@@ -27,6 +27,7 @@ import type {
   UploadTarget,
 } from "#src/components/media/index.ts";
 import { BatchActionBar } from "#src/components/patients/batch-action-bar.tsx";
+import { CameraUploadButton } from "#src/components/patients/camera-upload-button.tsx";
 import {
   assetKindOptions,
   stageOptions,
@@ -170,34 +171,44 @@ const MediaToolbar = ({
       ) : null}
     </div>
 
-    <div className="flex flex-wrap items-end gap-2">
-      <div className="grid gap-1">
-        <span className="text-muted-foreground text-xs">上传分期</span>
-        <FilterSelect
-          items={uploadStageItems}
-          label="上传分期"
-          onChange={onUploadStageChange}
-          value={uploadStage}
+    <div className="flex w-full flex-col gap-2 sm:w-auto">
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="grid gap-1">
+          <span className="text-muted-foreground text-xs">上传分期</span>
+          <FilterSelect
+            items={uploadStageItems}
+            label="上传分期"
+            onChange={onUploadStageChange}
+            value={uploadStage}
+          />
+        </div>
+        <div className="grid gap-1">
+          <span className="text-muted-foreground text-xs">拍摄时间</span>
+          <Input
+            aria-label="拍摄时间"
+            className="h-7 w-36"
+            onChange={(event) => {
+              onCapturedAtChange(event.target.value);
+            }}
+            type="date"
+            value={capturedAt}
+          />
+        </div>
+      </div>
+      {/* 移动端两个按钮并排不换行，且保持 44px 触控高度。 */}
+      <div className="flex flex-nowrap items-center gap-2 max-sm:[&_button]:min-h-11">
+        <UploadButton
+          label="上传素材"
+          onUploaded={onUploaded}
+          size="sm"
+          target={target}
+        />
+        <CameraUploadButton
+          label="拍照上传"
+          onUploaded={onUploaded}
+          target={target}
         />
       </div>
-      <div className="grid gap-1">
-        <span className="text-muted-foreground text-xs">拍摄时间</span>
-        <Input
-          aria-label="拍摄时间"
-          className="h-7 w-36"
-          onChange={(event) => {
-            onCapturedAtChange(event.target.value);
-          }}
-          type="date"
-          value={capturedAt}
-        />
-      </div>
-      <UploadButton
-        label="上传素材"
-        onUploaded={onUploaded}
-        size="sm"
-        target={target}
-      />
     </div>
 
     {showViewToggle ? (

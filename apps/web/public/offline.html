@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0f766e" />
+    <title>医档通 MediHub · 离线</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f7f7f8;
+        --text: #18181b;
+        --muted: #6b7280;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #111113;
+          --text: #f4f4f5;
+          --muted: #a1a1aa;
+        }
+      }
+      body {
+        display: grid;
+        min-height: 100dvh;
+        margin: 0;
+        place-items: center;
+        background: var(--bg);
+        color: var(--text);
+        font:
+          15px/1.7 system-ui,
+          -apple-system,
+          "Segoe UI",
+          sans-serif;
+        text-align: center;
+      }
+      main {
+        padding: 24px;
+        max-width: 340px;
+      }
+      h1 {
+        font-size: 20px;
+        margin: 0 0 8px;
+      }
+      p {
+        color: var(--muted);
+        margin: 0 0 18px;
+      }
+      button {
+        min-height: 44px;
+        padding: 0 20px;
+        border: 0;
+        border-radius: 10px;
+        background: #0f766e;
+        color: #fff;
+        font: inherit;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>暂时连不上服务器</h1>
+      <p>
+        医档通需要网络才能读取病历与上传素材。请确认手机已联网，或稍后重试。
+      </p>
+      <button type="button" onclick="location.reload()">重新加载</button>
+    </main>
+  </body>
+</html>

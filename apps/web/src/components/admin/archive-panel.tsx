@@ -11,6 +11,7 @@ import { Button } from "@medihub/ui/components/button";
 import { Skeleton } from "@medihub/ui/components/skeleton";
 
 import { ArchiveCreateDialog } from "#src/components/admin/archive-create-dialog.tsx";
+import { ArchiveScheduleSection } from "#src/components/admin/archive-schedules.tsx";
 import { Pill } from "#src/components/admin/badges.tsx";
 import type { PillTone } from "#src/components/admin/badges.tsx";
 import type {
@@ -251,6 +252,8 @@ export const ArchivePanel = ({ viewer }: ArchivePanelProps) => {
       {listQuery.isError && listQuery.data ? (
         <p className="text-warning text-xs">归档列表刷新失败，显示上次结果。</p>
       ) : null}
+
+      <ArchiveScheduleSection viewer={viewer} />
 
       {createOpen ? (
         <ArchiveCreateDialog

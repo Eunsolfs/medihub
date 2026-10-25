@@ -54,6 +54,16 @@ export type ArchiveDetail = ProcedureOutput<ArchiveClient["get"]>;
 
 export type ArchiveChunkRow = ArchiveDetail["chunks"][number];
 
+export type ArchiveScheduleRow = ProcedureOutput<
+  ArchiveClient["schedules"]["list"]
+>["items"][number];
+
+type MirrorClient = AppRouterClient["mirror"];
+
+type MirrorList = ProcedureOutput<MirrorClient["list"]>;
+
+export type MirrorJobRow = MirrorList["items"][number];
+
 type AuditList = ProcedureOutput<AuditClient["list"]>;
 
 export type AuditRow = AuditList["items"][number];

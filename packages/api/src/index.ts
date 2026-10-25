@@ -9,6 +9,7 @@ import { exportsRouter } from "#src/routers/exports.ts";
 import { health } from "#src/routers/health.ts";
 import { learningRouter } from "#src/routers/learning.ts";
 import { meRouter } from "#src/routers/me.ts";
+import { mirrorRouter } from "#src/routers/mirror.ts";
 import { orgsRouter } from "#src/routers/orgs.ts";
 import { patientsRouter } from "#src/routers/patients.ts";
 import { postsRouter } from "#src/routers/posts.ts";
@@ -27,6 +28,8 @@ export {
 } from "#src/access.ts";
 
 export { loadAudience } from "#src/audience.ts";
+
+export { runDueArchiveSchedules } from "#src/services/schedule-runner.ts";
 
 export {
   GLOBAL_QUOTA_KEY,
@@ -68,6 +71,7 @@ export type {
 export const appRouter = {
   admissions: admissionsRouter,
   archive: archiveRouter,
+  mirror: mirrorRouter,
   assets: assetsRouter,
   audit: auditRouter,
   collections: collectionsRouter,
