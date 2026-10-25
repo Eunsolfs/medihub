@@ -752,3 +752,76 @@ describe("mirror backup", () => {
     });
   });
 });
+
+describe("mirror retention", () => {
+  it("同一目标只保留最近两份镜像", async () => {
+    const root = await signInAs("root", null);
+    const rootPath = await mkdtemp(path.join(tmpdir(), "medihub-retain-"));
+
+    const target = await root.client.storage.create({
+      driver: "local",
+      isDefault: false,
+      name: "保留策略目标",
+      rootPath,
+      scope: "global",
+    });
+
+    const waitReady = async (id: string) => {
+      for (let attempt = 0; attempt < 80; attempt += 1) {
+        const list = await root.client.mirror.list({});
+        const job = list.items.find((item) => item.id === id);
+
+        if (job && job.status !== "running") {
+          return job;
+        }
+
+        await delay(100);
+      }
+
+      throw new Error("镜像任务超时");
+    };
+
+    const first = await root.client.mirror.run({ targetId: target.id });
+    await waitReady(first.id);
+    const second = await root.client.mirror.run({ targetId: target.id });
+    await waitReady(second.id);
+    const third = await root.client.mirror.run({ targetId: target.id });
+    await waitReady(third.id);
+
+    // 清理是任务完成后的下一步，等它落库。
+    let list = await root.client.mirror.list({ pageSize: 20 });
+
+    for (
+      let attempt = 0;
+      attempt < 40 &&
+      !list.items.some(
+        (item) => item.targetId === target.id && item.status === "pruned"
+      );
+      attempt += 1
+    ) {
+      await delay(100);
+      list = await root.client.mirror.list({ pageSize: 20 });
+    }
+
+    const scoped = list.items.filter(
+      (item) =>
+        item.targetId === target.id &&
+        (item.status === "ready" || item.status === "pruned")
+    );
+
+    const pruned = scoped.filter((item) => item.status === "pruned");
+
+    expect(scoped.filter((item) => item.status === "ready")).toHaveLength(2);
+    expect(pruned).toHaveLength(1);
+    expect(pruned[0]?.dbKey).toBeNull();
+
+    // 被清理的镜像文件已从存储里删除。
+    const [prunedJob] = pruned;
+
+    if (prunedJob) {
+      await expect(
+        stat(path.join(rootPath, prunedJob.storagePrefix, "medihub.sqlite"))
+      ).rejects.toBeTruthy();
+    }
+  });
+});

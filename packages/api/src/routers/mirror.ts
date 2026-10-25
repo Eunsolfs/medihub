@@ -1,10 +1,17 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { ORPCError } from "@orpc/server";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import type { Database } from "@medihub/db";
@@ -35,6 +42,85 @@ const requireStorage = (storage: StorageAccess | undefined): StorageAccess => {
   }
 
   return storage;
+};
+
+const KEEP_MIRRORS = 2;
+
+interface MirrorManifestFile {
+  assetId: string;
+  byteSize: number;
+  key: string;
+  originalStorageKey: string;
+  targetId: string;
+}
+
+const manifestFiles = async (
+  storage: StorageAccess,
+  target: StorageTarget,
+  manifestKey: string | null
+): Promise<MirrorManifestFile[]> => {
+  if (!manifestKey) {
+    return [];
+  }
+
+  try {
+    const stream = await storage
+      .driverFor({ config: target.config, driver: target.driver })
+      .get(manifestKey);
+
+    const parsed = JSON.parse(await new Response(stream).text()) as {
+      files?: Partial<MirrorManifestFile>[];
+    };
+
+    return (parsed.files ?? []).filter(
+      (file): file is MirrorManifestFile =>
+        typeof file?.key === "string" &&
+        typeof file.originalStorageKey === "string" &&
+        typeof file.targetId === "string"
+    );
+  } catch {
+    // 旧镜像没有 files 清单，只能清掉快照与 manifest。
+    return [];
+  }
+};
+
+/** 每个目标只保留最近两份；更早的删除对象并标记 pruned。 */
+const pruneOldMirrors = async (
+  db: Database,
+  storage: StorageAccess,
+  target: StorageTarget
+) => {
+  const ready = await db
+    .select()
+    .from(mirrorJob)
+    .where(
+      and(eq(mirrorJob.targetId, target.id), eq(mirrorJob.status, "ready"))
+    )
+    .orderBy(desc(mirrorJob.createdAt));
+
+  const driver = storage.driverFor({
+    config: target.config,
+    driver: target.driver,
+  });
+
+  for (const job of ready.slice(KEEP_MIRRORS)) {
+    const files = await manifestFiles(storage, target, job.manifestKey);
+
+    const keys = [
+      job.dbKey,
+      job.manifestKey,
+      ...files.map((file) => file.key),
+    ].filter((key): key is string => Boolean(key));
+
+    for (const key of keys) {
+      await driver.delete(key).catch(() => {});
+    }
+
+    await db
+      .update(mirrorJob)
+      .set({ dbKey: null, manifestKey: null, status: "pruned" })
+      .where(eq(mirrorJob.id, job.id));
+  }
 };
 
 const resolveMirrorTarget = async (db: Database, targetId?: string) => {
@@ -93,6 +179,14 @@ const runMirror = async (input: {
   let copiedAssets = 0;
   let copiedBytes = snapshot.bytes.byteLength;
 
+  const fileEntries: {
+    assetId: string;
+    byteSize: number;
+    key: string;
+    originalStorageKey: string;
+    targetId: string;
+  }[] = [];
+
   try {
     const dbKey = `${input.storagePrefix}/medihub.sqlite`;
     await driver.put(dbKey, snapshot.bytes);
@@ -129,12 +223,18 @@ const runMirror = async (input: {
 
           const buffer = Buffer.from(await new Response(stream).arrayBuffer());
 
-          await driver.put(
-            `${input.storagePrefix}/files/${row.id}-${safeName(row.originalName)}`,
-            buffer
-          );
+          const fileKey = `${input.storagePrefix}/files/${row.id}-${safeName(row.originalName)}`;
+
+          await driver.put(fileKey, buffer);
           copiedAssets += 1;
           copiedBytes += buffer.byteLength;
+          fileEntries.push({
+            assetId: row.id,
+            byteSize: buffer.byteLength,
+            key: fileKey,
+            originalStorageKey: row.storageKey,
+            targetId: row.storageTargetId,
+          });
         } catch {
           // 单个素材缺失不阻塞镜像，manifest 记录实际复制数量。
         }
@@ -148,6 +248,7 @@ const runMirror = async (input: {
           byteSize: copiedBytes,
           checksum: createHash("sha256").update(snapshot.bytes).digest("hex"),
           createdAt: new Date().toISOString(),
+          files: fileEntries,
           includeAssets: input.includeAssets,
           jobId: input.jobId,
           schema: "medihub.mirror/v1",
@@ -171,6 +272,8 @@ const runMirror = async (input: {
         status: "ready",
       })
       .where(eq(mirrorJob.id, input.jobId));
+
+    await pruneOldMirrors(input.db, input.storage, input.target);
   } catch (error) {
     await input.db
       .update(mirrorJob)
@@ -277,5 +380,124 @@ export const mirrorRouter = {
       });
 
       return job;
+    }),
+
+  /**
+   * 从指定镜像恢复：全量替换数据库（不是增量），文件写入 .restore/，
+   * 服务重启时由启动钩子替换；可选把素材复制回原存储位置。
+   */
+  restore: protectedProcedure
+    .input(
+      z.object({
+        id: z.string().min(1),
+        restoreAssets: z.boolean().default(true),
+      })
+    )
+    .handler(async ({ context, input }) => {
+      requireRoot(context.viewer ?? null);
+
+      const storage = requireStorage(context.storage);
+
+      const [job] = await context.db
+        .select()
+        .from(mirrorJob)
+        .where(eq(mirrorJob.id, input.id));
+
+      if (!job || job.status !== "ready" || !job.dbKey) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: "这份镜像不可恢复（已清理或未完成）",
+        });
+      }
+
+      const [target] = await context.db
+        .select()
+        .from(storageTarget)
+        .where(eq(storageTarget.id, job.targetId));
+
+      if (!target) {
+        throw new ORPCError("NOT_FOUND", { message: "镜像的存储目标已删除" });
+      }
+
+      const driver = storage.driverFor({
+        config: target.config,
+        driver: target.driver,
+      });
+
+      let assetsRestored = 0;
+
+      if (input.restoreAssets) {
+        const files = await manifestFiles(storage, target, job.manifestKey);
+        const targetCache = new Map<string, StorageTarget>();
+
+        for (const file of files) {
+          let fileTarget = targetCache.get(file.targetId);
+
+          if (!fileTarget) {
+            const [found] = await context.db
+              .select()
+              .from(storageTarget)
+              .where(eq(storageTarget.id, file.targetId));
+
+            if (!found) {
+              continue;
+            }
+
+            fileTarget = found;
+            targetCache.set(found.id, found);
+          }
+
+          try {
+            const stream = await driver.get(file.key);
+
+            const buffer = Buffer.from(
+              await new Response(stream).arrayBuffer()
+            );
+
+            await storage
+              .driverFor({
+                config: fileTarget.config,
+                driver: fileTarget.driver,
+              })
+              .put(file.originalStorageKey, buffer);
+            assetsRestored += 1;
+          } catch {
+            // 单个素材恢复失败不阻塞数据库恢复；界面只回报成功数量。
+          }
+        }
+      }
+
+      const restoreDir = path.resolve(".restore");
+      await mkdir(restoreDir, { recursive: true });
+
+      const snapshotStream = await driver.get(job.dbKey);
+
+      const snapshotBytes = Buffer.from(
+        await new Response(snapshotStream).arrayBuffer()
+      );
+
+      const restoreFile = path.join(restoreDir, "medihub.restore.sqlite");
+
+      await writeFile(restoreFile, snapshotBytes);
+
+      const dbPath = path.resolve(context.dbPath ?? "local.db");
+      const stamp = new Date().toISOString().replaceAll(/[:.]/gu, "-");
+
+      await copyFile(dbPath, `${dbPath}.pre-restore-${stamp}`).catch(() => {});
+
+      await writeFile(
+        path.join(restoreDir, "pending.json"),
+        JSON.stringify(
+          {
+            createdAt: new Date().toISOString(),
+            dbPath,
+            jobId: job.id,
+            restoreFile,
+          },
+          null,
+          2
+        )
+      );
+
+      return { assetsRestored, ok: true, restartRequired: true };
     }),
 };

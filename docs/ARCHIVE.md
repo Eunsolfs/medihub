@@ -403,14 +403,37 @@ sqlite3 /data/medihub/local.db "select id, last_error from archive_schedule wher
 3. 勾选「**同时复制素材文件**」时，再把**所有未删除的素材**（含已归档的）复制到
    `mirror/<jobId>/files/<素材id>-<原文件名>`（体积 = 素材总量，可能非常大）；
 4. 写一份 `manifest.json`（schema `medihub.mirror/v1`）：记录 `jobId`、创建时间、
-   `includeAssets`、实际复制的素材数与字节数、快照的 `checksum`（数据库快照的 SHA-256）；
+   `includeAssets`、实际复制的素材数与字节数、快照的 `checksum`（数据库快照的 SHA-256），
+   以及 `files` 清单——每一项是 `{ assetId, key, originalStorageKey, targetId, byteSize }`，
+   它同时用于**旧的自动清理**和**恢复时把素材写回原位**（见 §3.8.6、§3.8.7）；
 5. 任务状态与错误进列表（最近 10 条）。
 
-任务列表会显示：状态（`pending` / `running` / `ready` / `failed`）、大小、素材数、错误原因。
+任务列表会显示：状态（`pending` / `running` / `ready` / `failed` / `pruned`）、大小、素材数、错误原因。
 **只有 `root` 能看、能触发**（接口层按 root 校验，不是仅隐藏界面）。
 
-> 单个素材读不到（源文件已被删、目标不可达）不会让整个镜像失败：它会被跳过，
-> `manifest.json` 里的 `assetCount` 反映的是**实际复制成功**的数量。
+`manifest.json` 里的 `files` 长这样（便于脚本处理）：
+
+```json
+{
+  "schema": "medihub.mirror/v1",
+  "jobId": "0f3c…",
+  "includeAssets": true,
+  "checksum": "数据库快照的 sha256",
+  "files": [
+    {
+      "assetId": "…",
+      "key": "mirror/0f3c…/files/…-术前-1-1.png",
+      "originalStorageKey": "org/2024-03/ab12…png",
+      "targetId": "…",
+      "byteSize": 2411724
+    }
+  ]
+}
+```
+
+> 单个素材读不到（源文件已被删、目标不可达）不会让整个镜像失败：它会被跳过（不会出现在
+> `files` 里），`manifest.json` 里的 `assetCount` 反映的是**实际复制成功**的数量。
+> **旧镜像没有 `files` 清单**，只能整库恢复，素材无法批量还原（§3.8.6、§3.8.7）。
 
 #### 3.8.2 选目标
 
@@ -431,11 +454,15 @@ sqlite3 /data/medihub/local.db "select id, last_error from archive_schedule wher
 | manifest           | 可忽略                                                                       |
 
 所以：只勾「数据库」时几乎不占地方，适合**每天一次**；勾「素材」时建议**每周/每月一次**，
-并给目标留出至少 **2 × 素材总量**（新旧两份同时在）。
+并给目标留出 **2 × 素材总量**（系统按目标只保留最近的 2 份，见 §3.8.6）。
 
-每次备份都是一个独立目录 `mirror/<jobId>/`，**不会自动删除旧备份**——清理策略见 §8.3。
+每次备份都是一个独立目录 `mirror/<jobId>/`。**旧备份会被自动清理**（每个目标只保留最近 2 份
+成功备份），不需要你手工删——细节与「被清理后还剩什么」见 §3.8.6。
 
-#### 3.8.4 恢复方式
+#### 3.8.4 手工恢复（兜底方式）
+
+> 优先用界面上的**一键恢复**（§3.8.7）：它会自动取回快照、备份当前库、重启后生效。
+> 本节是「一键恢复不可用」（目标已离线、界面进不去、需要恢复到别的机器）时的手工路径。
 
 镜像包里的 `medihub.sqlite` 就是一个标准 SQLite 文件，恢复时把它放回 `DATABASE_URL` 指的路径
 （默认 `apps/server/local.db`）即可：
@@ -444,7 +471,7 @@ sqlite3 /data/medihub/local.db "select id, last_error from archive_schedule wher
 # 1) 停服务
 sudo systemctl stop medihub
 
-# 2) 备份现状（保命）
+# 2) 备份现状（保命）——命名与系统自动备份的 .pre-restore-<时间戳> 区分开，避免混淆
 sudo -u www -H cp /data/medihub/local.db /data/medihub/local.db.before-restore.$(date +%s)
 
 # 3) 从镜像目标取回快照（本地/NAS 目标直接 cp；S3 用 rclone/aws-cli/面板下载）
@@ -462,9 +489,10 @@ curl -fsS http://127.0.0.1:3000/api/health      # {"status":"ok","version":"…"
 
 - **先停服再换库**，运行中替换会留下不一致的 `-wal`；
 - 恢复的是**数据库**。素材文件仍在它们各自的存储目标里（归档过的除外，归档时删了源）；
-- 若镜像时**勾选了「同时复制素材文件」**，镜像里是扁平目录 `mirror/<jobId>/files/<素材id>-<原文件名>`，
-  **不是**原来的 `storage/<组织>/<年月>/<hash>.<ext>` 结构。要真正恢复可用，需要按数据库里的
-  `storage_key` 把文件放回对应存储目标的位置（批量恢复请让维护者写脚本，别手工一个个来）；
+- 若镜像时**勾选了「同时复制素材文件」**，本轮起的镜像在 `manifest.json` 里有 `files` 清单
+  （每项含 `assetId` / `key` / `originalStorageKey` / `targetId` / `byteSize`），
+  可以照它把 `mirror/<jobId>/files/...` 写回各自的 `originalStorageKey`；
+  **旧镜像（没有 `files` 清单）只能手工对照，无法批量恢复**；
 - `.env`、`storage/` 下的 `.office-cache`、`.updates/` **不在镜像范围内**，需要另外备份。
 
 恢复前先核对快照完整性（`manifest.json` 里有快照的 SHA-256）：
@@ -492,9 +520,185 @@ sqlite3 medihub.sqlite "select count(*) from asset; select count(*) from archive
 | 能不能省磁盘     | 能                                                    | **不能**，反而多占一份                                          |
 | 产物             | `archive/<jobId>/chunk-00N.zip`（自带 `viewer.html`） | `mirror/<jobId>/medihub.sqlite` + `manifest.json`（+ `files/`） |
 | 谁能用           | `root` / `dept_admin`                                 | **仅 `root`**                                                   |
+| 保留策略         | 不自动删，按院规长期保留（§8.3）                      | **按目标自动只留最近 2 份**，更早的标 `pruned`（§3.8.6）        |
+| 恢复方式         | 解压分片 → 单文件重新上传（或改库，见 §5）            | 界面一键恢复（全量）或手工换库（§3.8.7 / §3.8.4）               |
 
 一句话：**归档是「搬家」，镜像是「留底」**。两个都要有——归档让系统能长期跑下去，
 镜像让误删/损坏/勒索软件之后还能救回来。
+
+#### 3.8.6 保留策略（每个目标只留 2 份）
+
+镜像不像归档那样越积越多：**每次镜像成功后，按「存储目标」只保留最近 2 份成功的镜像**，
+更早的会被自动清理。
+
+清理时具体做了什么：
+
+| 对象                                     | 处理                                                                                   |
+| ---------------------------------------- | -------------------------------------------------------------------------------------- |
+| 存储里的 `mirror/<jobId>/medihub.sqlite` | **删除**                                                                               |
+| `mirror/<jobId>/manifest.json`           | **删除**                                                                               |
+| `mirror/<jobId>/files/...`（素材副本）   | 按 manifest 的 `files` 清单**逐个删除**（本轮起的镜像才有清单）                        |
+| `mirror_job` 任务行                      | **保留**，`status` 改为 `pruned`（界面显示「已清理」），`db_key` / `manifest_key` 清空 |
+| 归档包、站点素材                         | 不受影响（两套东西互不干涉）                                                           |
+
+要注意的四件事：
+
+1. **`pruned` 不可恢复**：任务行还在，但它指向的快照与素材已经被删了。点它恢复只会失败——
+   这是「已经被淘汰」的标记，不是「可以再取回」的标记。
+2. **「按目标」是分开算的**：NAS 目标留 2 份、S3 目标留 2 份，互不挤占。所以**不要给同一个目标
+   配多个高频备份**，否则旧的自然被挤掉。
+3. **旧版本镜像会留下孤儿素材文件**：`pruned` 之前的镜像（没有 `files` 清单）在清理时
+   只能删掉快照与 manifest，`files/` 下的素材副本会留在存储里，成为孤儿。
+   文档提醒：这类目录需要**手工清理**，否则等于永久占空间。
+4. **清理是「保留最近 2 份成功」，不是「保留 2 天」**：如果连续三天备份，第三天成功后
+   第一天的就被清了；如果备份连续失败，则一份都不新增、也不清理。
+
+查看每个目标还剩哪几份「活着的」镜像：
+
+```bash
+sqlite3 /data/medihub/local.db \
+  "select target_id, count(*) as alive
+   from mirror_job where status='ready' group by target_id;"
+
+# 最近的任务（含已清理的）
+sqlite3 /data/medihub/local.db \
+  "select id, target_id, status, include_assets, asset_count,
+          datetime(created_at/1000,'unixepoch','localtime') as created,
+          coalesce(db_key,'-') as db_key
+   from mirror_job order by created_at desc limit 10;"
+```
+
+手工清理旧镜像的孤儿目录（**先确认那个 jobId 已经是 `pruned` 或不在数据库里**）：
+
+```bash
+# 1) 列出存储里存在的镜像目录
+ls -1 /mnt/nas/medihub/mirror/
+
+# 2) 列出数据库里还「活着」（ready）的 jobId
+sqlite3 /data/medihub/local.db "select id from mirror_job where status='ready';"
+
+# 3) 两边对比，把「目录存在但不在 ready 列表里」的目录手工删掉（示例：删指定一个）
+#    ⚠️ 删之前再核对一次 id，别删错
+rm -rf /mnt/nas/medihub/mirror/<jobId>
+```
+
+#### 3.8.7 从镜像恢复
+
+**界面：系统管理 → 存储 → 镜像备份 → 选一条 `ready` 的镜像 → 「恢复」**（仅 `root`）。
+确认框里可选「**同时恢复素材文件**」（前提：那次的镜像勾选过「同时复制素材文件」，且原存储目标还在）。
+
+##### 全量恢复，没有增量
+
+镜像每次都是**全量快照**（数据库整库 + 可选全部素材），所以恢复也只有一种模式：
+**把站点整体回退到那一刻的状态**。没有「只恢复某个科室」「只恢复某几条素材」的增量恢复——
+要单条数据，请从快照里查/导出后手工补录（见 §3.8.4 的 `sqlite3` 用法）。
+
+因此恢复前必须接受一件事：**镜像时间点之后写入的所有数据都会丢**。
+
+##### 操作步骤
+
+1. **停业务、通知用户**：恢复需要重启服务，期间站点不可用（通常 1–3 分钟，取决于快照大小）。
+2. **先手动做一份保命备份**（不要只依赖系统自动备份）：
+   ```bash
+   sudo -u www -H /opt/medihub/scripts/backup.sh      # 若你按 DEPLOY 手册配过备份脚本
+   # 或最小化：
+   sudo -u www -H sqlite3 /data/medihub/local.db \
+     ".backup '/www/backup/medihub/pre-restore-manual-$(date +%F-%H%M).db'"
+   ```
+3. **点「恢复」**：服务端把快照下载到服务器 `.restore/` 目录，并写一个 `pending.json`
+   记录「重启时要替换哪个库、从哪个快照来」。此时**还什么都没变**。
+4. **重启服务**（必须，否则不会生效）：
+   ```bash
+   # systemd
+   sudo systemctl restart medihub
+   # PM2
+   sudo -u www -H pm2 restart medihub --update-env
+   # 1Panel 工具箱 → Supervisor
+   sudo supervisorctl restart medihub
+   ```
+   启动时服务会检查 `.restore/pending.json`：
+   - 先把**当前库**备份成 `<db>.pre-restore-<时间戳>`（例如
+     `local.db.pre-restore-20261025-1200`）；
+   - 再用快照替换 `DATABASE_URL` 指向的库；
+   - 清掉 `pending.json`，正常启动。
+5. **恢复后校验**（见下）。
+
+接口返回里带 `restartRequired: true`，**系统不会自动重启**——这是故意的：让运维自己选时间点，
+避免在门诊高峰把站点踢下线。
+
+`.restore/` 的位置在服务端工作目录下（按部署手册就是 `/opt/medihub/.restore/`）。
+找不到时用这条定位：
+
+```bash
+sudo find /opt/medihub -maxdepth 3 -name pending.json -o -maxdepth 3 -name '.restore' -type d
+ls -la /opt/medihub/.restore/ 2>/dev/null
+```
+
+##### 可选：同时恢复素材文件
+
+勾选后，服务端会按该镜像 `manifest.json` 里的 `files` 清单
+（`assetId` / `key` / `originalStorageKey` / `targetId` / `byteSize`），
+把 `mirror/<jobId>/files/...` **写回各自的 `originalStorageKey`**（即原来在存储目标里的位置），
+让数据库记录与文件重新对得上。
+
+前提与限制：
+
+| 条件                                | 说明                                                         |
+| ----------------------------------- | ------------------------------------------------------------ |
+| 那次镜像勾了「同时复制素材文件」    | 否则镜像里根本没有素材副本，只有数据库                       |
+| 那个镜像有 `files` 清单             | **本轮之前的旧镜像没有清单**，无法批量恢复素材，只能手工对照 |
+| 原存储目标还在（`targetId` 仍存在） | 目标被删掉时无法回写，需要先把存储目标配回来                 |
+| 目标可写、空间够                    | 回写等于把素材再写一遍，目标盘必须有足够空间                 |
+
+##### 恢复后校验（按顺序做）
+
+```bash
+# 1) 进程活着、数据库可读
+curl -fsS http://127.0.0.1:3000/api/health
+#    {"status":"ok","version":"..."}
+
+# 2) 数据回到镜像时间点（患者数/素材数与你记忆中的量级对得上）
+sqlite3 /data/medihub/local.db \
+  "select (select count(*) from patient) as patients,
+          (select count(*) from asset)  as assets,
+          (select count(*) from archive_job) as archive_jobs;"
+
+# 3) 确认系统自动备份确实生成了
+ls -lh /data/medihub/ | grep pre-restore
+```
+
+4. **登录一次**：用 `root` 账号登录，确认能进系统管理（会话表也在快照里，恢复后旧会话可能失效，
+   重新登录是正常的）。
+5. **抽样打开素材**：随机点开 3–5 条（图片、视频、文档各一条），确认能预览；
+   若勾了素材恢复但仍有 410，说明某些文件没回写成功（看恢复日志/目标是否可写）。
+6. **核对版本**：卡片与 `/api/health` 的版本号应与镜像当时的版本一致（升级过的话，
+   恢复会把数据库退回到旧结构，注意与当前 `dist` 的兼容性；必要时回滚代码，见
+   [DEPLOY-1PANEL.md §13](./DEPLOY-1PANEL.md#13-升级与回滚)、
+   [UPGRADE.md §7.1](./UPGRADE.md#71-数据库迁移是不可逆的)）。
+
+##### 恢复失败怎么回滚
+
+恢复本身是「先备份、再替换」，所以**原库一定还在**，只是改了后缀：
+
+```bash
+# 1) 停服
+sudo systemctl stop medihub
+
+# 2) 找到自动备份（时间戳最近的那个）
+ls -lt /data/medihub/ | grep 'pre-restore'
+
+# 3) 用它换回当前库（把 <时间戳> 换成实际值）
+sudo -u www -H cp /data/medihub/local.db.pre-restore-<时间戳> /data/medihub/local.db
+sudo rm -f /data/medihub/local.db-wal /data/medihub/local.db-shm
+
+# 4) 起服并验证
+sudo systemctl start medihub
+curl -fsS http://127.0.0.1:3000/api/health
+```
+
+> 恢复过程中如果服务起不来（库损坏/兼容问题），先看进程日志
+> （`journalctl -u medihub -n 100` 或 `supervisorctl tail medihub`），
+> 再按上面的回滚步骤退回 `<db>.pre-restore-<时间戳>`；实在不行用 §3.8.4 的手工路径。
 
 ---
 
@@ -819,14 +1023,14 @@ sqlite3 /data/medihub/local.db "select chunks from archive_job where id='<jobId>
 
 ### 8.3 清理策略
 
-| 对象                  | 建议                                                                                                                                                 |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 本地 staging/临时文件 | 服务端自己会清理（`/tmp/medihub-archive-*`）；异常退出可能残留，可定期 `find /tmp -maxdepth 1 -name 'medihub-archive-*' -mtime +7 -exec rm -rf {} +` |
-| 失败任务的孤儿分片    | 失败时已上传的分片不会自动删。确认不再重试后，手工删 `archive/<jobId>/` 目录（库里的任务记录保留，下载会返回 410）                                   |
-| 老归档包              | 按院规留存期处理。**没有「删除归档任务」接口**，清理只能在存储侧做，并在运维记录里写清删了哪个 jobId                                                 |
-| 站点里的素材行        | 归档不删行。真要清理请走业务侧的删除（软删除），别直接 `delete from asset`                                                                           |
-| **镜像备份**          | 每次备份都是独立目录 `mirror/<jobId>/`，**不会自动清理**。建议：只留最近 7 份日备、4 份周备，其余手工删；删之前确认新的那份能恢复（见 §3.8.4）       |
-| 停用的归档计划        | 停用/删除计划不会清理任何历史数据，只是不再触发；想彻底停掉自动归档，逐个关掉 `enabled` 即可                                                         |
+| 对象                  | 建议                                                                                                                                                                                                                                 |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 本地 staging/临时文件 | 服务端自己会清理（`/tmp/medihub-archive-*`）；异常退出可能残留，可定期 `find /tmp -maxdepth 1 -name 'medihub-archive-*' -mtime +7 -exec rm -rf {} +`                                                                                 |
+| 失败任务的孤儿分片    | 失败时已上传的分片不会自动删。确认不再重试后，手工删 `archive/<jobId>/` 目录（库里的任务记录保留，下载会返回 410）                                                                                                                   |
+| 老归档包              | 按院规留存期处理。**没有「删除归档任务」接口**，清理只能在存储侧做，并在运维记录里写清删了哪个 jobId                                                                                                                                 |
+| 站点里的素材行        | 归档不删行。真要清理请走业务侧的删除（软删除），别直接 `delete from asset`                                                                                                                                                           |
+| **镜像备份**          | **自动保留**：每个存储目标只留最近 2 份成功的镜像，更早的会自动清理并把任务标成 `pruned`（界面「已清理」），**不需要你手工删**。需要手工处理的只有一种：**旧版本镜像（没有 `files` 清单）清理后留下的 `files/` 孤儿目录**，见 §3.8.6 |
+| 停用的归档计划        | 停用/删除计划不会清理任何历史数据，只是不再触发；想彻底停掉自动归档，逐个关掉 `enabled` 即可                                                                                                                                         |
 
 镜像备份的清理示例（NAS 目标，只保留最近 7 个目录）：
 
@@ -917,12 +1121,24 @@ sqlite3 /data/medihub/local.db \
 16. **一个计划一次最多仍受 5000 条素材限制**（与手工归档同一条查询），素材极大的科室要缩短
     `before_days` 让每轮量变小。
 17. **镜像备份只备份数据库（+ 可选素材）**：`.env`、`STORAGE_ROOT` 的结构本身、`.updates/`
-    不在范围内；恢复后仍需把素材文件放回正确位置（§3.8.4）。
-18. **镜像「同时复制素材文件」是全量**：每次都是一份完整的素材副本，不增量、不自动清理旧备份；
-    空间规划必须按「份数 × 素材总量」来算。
+    不在范围内；恢复后仍需把素材文件放回正确位置（§3.8.4、§3.8.7）。
+18. **镜像「同时复制素材文件」是全量**：每次都是一份完整的素材副本，不做增量；
+    空间规划按「2 份 × 素材总量」算（系统只保留 2 份，§3.8.6）。
 19. **镜像只有 `root` 能用**：`dept_admin` 与普通成员看不到入口，也不能通过接口触发
     （接口层同样按 root 校验）。
 20. **镜像不能省磁盘**：它的目的是「数据还在」，与归档的方向相反；用镜像去缓解磁盘紧张只会更糟。
+21. **镜像只保留最近 2 份（按目标计）**：第 3 次成功后最早的那份会被自动删除，
+    任务行变成 `pruned`（界面「已清理」）。所以**别把「镜像」当成长期归档**——
+    需要按院规留很多年，请用归档包 + 离线下线流程。
+22. **`pruned` 的镜像不可恢复**：任务行还在只是「历史记录」，它指向的快照与素材已经删除；
+    点它恢复会失败。这不是故障，是保留策略的结果。
+23. **旧镜像无法批量恢复素材**：本轮之前创建的镜像没有 `files` 清单，只能整库恢复，
+    素材副本需要人工对照（且它们被清理后会变成孤儿目录，要手工删，见 §3.8.6）。
+24. **恢复需要停机重启，且是全量回退**：镜像只有全量快照、没有增量恢复；恢复点之后写入的
+    数据会丢。流程是「点恢复 → 手动重启 → 启动时替换库」，系统**不会自动重启**
+    （接口返回 `restartRequired: true`）。
+25. **恢复前必须先做保命备份**：系统会在替换前把当前库自动备份为 `<db>.pre-restore-<时间戳>`，
+    但那是「恢复开始时」的状态；如果你在恢复后又写入了数据才决定回滚，仍要靠你自己那份手动备份。
 
 ---
 
@@ -944,17 +1160,18 @@ sqlite3 /data/medihub/local.db \
 
 ### 10.2 数据表与字段
 
-| 表 / 字段                                   | 说明                                                                                                                                                                                                                                                                              |
-| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `organization.quota_bytes`                  | 科室上限（字节，可空 = 不限）                                                                                                                                                                                                                                                     |
-| `app_setting` 的 `storage.globalQuotaBytes` | 全站上限（字节的字符串，记录不存在 = 不限；设成 `0` 等于禁止上传）                                                                                                                                                                                                                |
-| `asset.byte_size`                           | 单素材字节数，配额的唯一口径                                                                                                                                                                                                                                                      |
-| `asset.archived_at` / `asset.archive_id`    | 归档时间与所属任务；任一非空即视为已归档（不计额度、不可再次打包）                                                                                                                                                                                                                |
-| `archive_job`                               | 任务：`status`(`pending`/`running`/`ready`/`failed`)、`before_at`、`chunk_bytes`、`delete_source`、`asset_count`、`byte_size`、`chunk_count`、`chunks`(JSON: `index`/`key`/`size`)、`storage_target_id`、`error`                                                                  |
-| `archive_schedule`                          | 定时计划：`enabled`、`frequency`(`daily`/`weekly`/`monthly`)、`hour`(0–23 本地整点)、`weekday`(1=周一…7=周日)、`day_of_month`(1–28)、`before_days`(默认 730)、`chunk_bytes`(默认 200 MB)、`target_id`、`delete_source`、`last_run_at`、`next_run_at`、`last_job_id`、`last_error` |
-| `mirror_job`                                | 镜像备份：`status`(`pending`/`running`/`ready`/`failed`)、`include_assets`、`target_id`、`storage_prefix`、`db_key`、`manifest_key`、`asset_count`、`byte_size`、`error`、`completed_at`；`organization_id` 可为空（全站）                                                        |
-| 分片路径                                    | `<存储目标内>` `archive/<jobId>/chunk-001.zip`（序号 3 位、从 1 开始）                                                                                                                                                                                                            |
-| 镜像路径                                    | `<存储目标内>` `mirror/<jobId>/medihub.sqlite`（+ `manifest`，勾选时另有素材副本）                                                                                                                                                                                                |
+| 表 / 字段                                   | 说明                                                                                                                                                                                                                                                                                                                   |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `organization.quota_bytes`                  | 科室上限（字节，可空 = 不限）                                                                                                                                                                                                                                                                                          |
+| `app_setting` 的 `storage.globalQuotaBytes` | 全站上限（字节的字符串，记录不存在 = 不限；设成 `0` 等于禁止上传）                                                                                                                                                                                                                                                     |
+| `asset.byte_size`                           | 单素材字节数，配额的唯一口径                                                                                                                                                                                                                                                                                           |
+| `asset.archived_at` / `asset.archive_id`    | 归档时间与所属任务；任一非空即视为已归档（不计额度、不可再次打包）                                                                                                                                                                                                                                                     |
+| `archive_job`                               | 任务：`status`(`pending`/`running`/`ready`/`failed`)、`before_at`、`chunk_bytes`、`delete_source`、`asset_count`、`byte_size`、`chunk_count`、`chunks`(JSON: `index`/`key`/`size`)、`storage_target_id`、`error`                                                                                                       |
+| `archive_schedule`                          | 定时计划：`enabled`、`frequency`(`daily`/`weekly`/`monthly`)、`hour`(0–23 本地整点)、`weekday`(1=周一…7=周日)、`day_of_month`(1–28)、`before_days`(默认 730)、`chunk_bytes`(默认 200 MB)、`target_id`、`delete_source`、`last_run_at`、`next_run_at`、`last_job_id`、`last_error`                                      |
+| `mirror_job`                                | 镜像备份：`status`(`pending`/`running`/`ready`/`failed`/`pruned`)、`include_assets`、`target_id`、`storage_prefix`、`db_key`、`manifest_key`、`asset_count`、`byte_size`、`error`、`completed_at`；`organization_id` 可为空（全站）。`pruned` = 已被保留策略清理（存储内容已删、`db_key`/`manifest_key` 清空、行保留） |
+| 分片路径                                    | `<存储目标内>` `archive/<jobId>/chunk-001.zip`（序号 3 位、从 1 开始）                                                                                                                                                                                                                                                 |
+| 镜像路径                                    | `<存储目标内>` `mirror/<jobId>/medihub.sqlite` + `manifest.json`（+ 勾选时的 `files/`）；每个目标只保留最近 2 份 `ready`，更早的标 `pruned` 并删除存储内容                                                                                                                                                             |
+| 恢复暂存                                    | 服务端工作目录下的 `.restore/`：恢复前的快照与 `pending.json`，重启时消费并替换库；当前库先备份为 `<db>.pre-restore-<时间戳>`                                                                                                                                                                                          |
 
 ### 10.3 相关文档
 

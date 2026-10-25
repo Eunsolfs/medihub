@@ -207,7 +207,13 @@ export const archiveSchedule = snakeCase.table(
   ]
 );
 
-export const mirrorStatus = ["pending", "running", "ready", "failed"] as const;
+export const mirrorStatus = [
+  "pending",
+  "running",
+  "ready",
+  "failed",
+  "pruned",
+] as const;
 
 /** 镜像备份任务：把数据库快照（可选连同素材）复制到另一个存储目标。 */
 export const mirrorJob = snakeCase.table(

@@ -16,6 +16,8 @@ export interface StorageAccess {
 
 export interface Context {
   db: Database;
+  /** SQLite 文件路径（恢复镜像时用于定位、备份与重启替换）。 */
+  dbPath?: string;
   session: Session | null;
   storage?: StorageAccess;
   /** 在线升级执行器；未配置时 updater 为 undefined。 */

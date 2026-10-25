@@ -5,10 +5,15 @@ import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 
-import { app } from "#src/app.ts";
-import { db } from "#src/context.ts";
 import { env } from "#src/env.ts";
-import { startArchiveScheduler } from "#src/scheduler.ts";
+import { applyPendingRestore } from "#src/restore.ts";
+
+// 恢复镜像必须在打开 SQLite 之前完成，所以 app / db 用动态 import。
+await applyPendingRestore();
+
+const { app } = await import("#src/app.ts");
+const { db } = await import("#src/context.ts");
+const { startArchiveScheduler } = await import("#src/scheduler.ts");
 
 const publicDir = fileURLToPath(new URL("public", import.meta.url));
 

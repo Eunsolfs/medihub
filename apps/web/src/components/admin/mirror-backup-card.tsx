@@ -6,6 +6,14 @@ import { toast } from "sonner";
 import { Button } from "@medihub/ui/components/button";
 import { Checkbox } from "@medihub/ui/components/checkbox";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@medihub/ui/components/dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -33,10 +41,19 @@ const statusMeta = (status: string): { label: string; tone: PillTone } => {
     return { label: "失败", tone: "danger" };
   }
 
+  if (status === "pruned") {
+    return { label: "已清理", tone: "neutral" };
+  }
+
   return { label: "进行中", tone: "info" };
 };
 
-const MirrorJobRowItem = ({ job }: { job: MirrorJobRow }) => {
+interface MirrorJobRowItemProps {
+  job: MirrorJobRow;
+  onRestore: (job: MirrorJobRow) => void;
+}
+
+const MirrorJobRowItem = ({ job, onRestore }: MirrorJobRowItemProps) => {
   const meta = statusMeta(job.status);
 
   return (
@@ -60,6 +77,20 @@ const MirrorJobRowItem = ({ job }: { job: MirrorJobRow }) => {
       {job.status === "failed" && job.error ? (
         <p className="text-destructive text-xs break-all">{job.error}</p>
       ) : null}
+      {job.status === "ready" ? (
+        <div>
+          <Button
+            className="min-h-11 sm:min-h-7"
+            onClick={() => {
+              onRestore(job);
+            }}
+            size="sm"
+            variant="outline"
+          >
+            从该镜像恢复
+          </Button>
+        </div>
+      ) : null}
     </li>
   );
 };
@@ -69,6 +100,8 @@ export const MirrorBackupCard = () => {
   const queryClient = useQueryClient();
   const [targetId, setTargetId] = useState(DEFAULT_TARGET);
   const [includeAssets, setIncludeAssets] = useState(false);
+  const [restoreJob, setRestoreJob] = useState<MirrorJobRow | null>(null);
+  const [restoreAssets, setRestoreAssets] = useState(true);
 
   const statusQuery = useQuery(api.mirror.status.queryOptions());
 
@@ -98,6 +131,29 @@ export const MirrorBackupCard = () => {
     })
   );
 
+  const restoreMutation = useMutation(
+    api.mirror.restore.mutationOptions({
+      onSuccess: async () => {
+        toast.success(
+          "恢复已准备，请重启服务生效（sudo systemctl restart medihub）"
+        );
+        setRestoreJob(null);
+        await queryClient.invalidateQueries({
+          queryKey: api.mirror.status.key(),
+        });
+        await queryClient.invalidateQueries({
+          queryKey: api.mirror.list.key(),
+        });
+      },
+    })
+  );
+
+  const openRestore = (job: MirrorJobRow) => {
+    restoreMutation.reset();
+    setRestoreAssets(true);
+    setRestoreJob(job);
+  };
+
   const targets = statusQuery.data?.targets ?? [];
   const jobs = listQuery.data?.items ?? [];
 
@@ -112,7 +168,8 @@ export const MirrorBackupCard = () => {
         </h2>
         <p className="text-muted-foreground text-xs text-pretty">
           数据库快照始终包含；素材多时耗时较长，建议指向
-          NAS/S3。仅超级管理员可见。
+          NAS/S3。每个存储目标只保留最近 2
+          份镜像，更早的会自动清理（状态显示已清理）。仅超级管理员可见。
         </p>
       </div>
 
@@ -204,7 +261,11 @@ export const MirrorBackupCard = () => {
         {jobs.length > 0 ? (
           <ul className="divide-border divide-y rounded-lg border">
             {jobs.map((job) => (
-              <MirrorJobRowItem job={job} key={job.id} />
+              <MirrorJobRowItem
+                job={job}
+                key={job.id}
+                onRestore={openRestore}
+              />
             ))}
           </ul>
         ) : null}
@@ -215,6 +276,74 @@ export const MirrorBackupCard = () => {
           </p>
         ) : null}
       </div>
+
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open) {
+            setRestoreJob(null);
+          }
+        }}
+        open={restoreJob !== null}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>从这份镜像恢复</DialogTitle>
+            <DialogDescription>
+              将用该快照全量替换当前数据库（不是增量），恢复后需重启服务生效；恢复前会自动备份当前数据库。
+            </DialogDescription>
+          </DialogHeader>
+
+          <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border p-3">
+            <Checkbox
+              checked={restoreAssets}
+              className="mt-0.5"
+              onCheckedChange={(checked) => {
+                setRestoreAssets(checked);
+              }}
+            />
+            <span className="grid gap-0.5">
+              <span className="text-sm font-medium">同时恢复素材文件</span>
+              <span className="text-muted-foreground text-xs">
+                素材会从镜像复制回原存储位置。
+              </span>
+            </span>
+          </label>
+
+          {restoreMutation.isError ? (
+            <p className="text-destructive text-xs break-all">
+              {restoreMutation.error instanceof Error
+                ? restoreMutation.error.message
+                : "恢复失败，请稍后重试"}
+            </p>
+          ) : null}
+
+          <DialogFooter>
+            <Button
+              className="min-h-11 sm:min-h-8"
+              onClick={() => {
+                setRestoreJob(null);
+              }}
+              variant="outline"
+            >
+              取消
+            </Button>
+            <Button
+              className="min-h-11 sm:min-h-8"
+              disabled={restoreMutation.isPending || !restoreJob}
+              onClick={() => {
+                if (restoreJob) {
+                  restoreMutation.mutate({
+                    id: restoreJob.id,
+                    restoreAssets,
+                  });
+                }
+              }}
+            >
+              {restoreMutation.isPending ? "正在恢复…" : "确认恢复"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 };
