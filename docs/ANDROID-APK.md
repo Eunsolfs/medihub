@@ -1,7 +1,7 @@
 # 安卓 APK（Capacitor 套壳）
 
 项目提供 `apps/mobile`：用 [Capacitor](https://capacitorjs.com/) 把已部署的医档通站点包成
-安卓 App，APK 由 **GitHub Actions** 构建，产物在 Actions 运行的 Artifacts 里下载。
+安卓 App，APK 由 **GitHub Actions** 构建：**debug 与 release 两个版本**，tag 构建会自动上传到 GitHub Release，也能在 Actions Artifacts 里下载。
 
 > 这是一层 WebView 壳：页面、接口、权限仍来自线上站点。原生能力（后台任务、推送、
 > 原生相机）不在壳里实现；日常更新站点即可，只有改壳/插件/图标时才需要重打 APK。
@@ -17,8 +17,13 @@
 2. **打 tag 自动构建**：先设置仓库变量 `CAPACITOR_SERVER_URL`（Settings → Secrets and
    variables → Actions → Variables），之后推送 `v*` tag 就会自动构建。
 
-构建完成后：Actions 运行页 → 底部 **Artifacts** → 下载 `medihub-debug-apk`，
-解压得到 `app-debug.apk`。
+构建完成后：
+
+- **tag 构建**（推 `v*` tag）：构建成功会自动创建/更新 GitHub Release，直接在
+  https://github.com/Eunsolfs/medihub/releases 下载 `medihub-<版本>-debug.apk` 与
+  `medihub-<版本>-release.apk`（不需要登录）；
+- **手动运行**：进入该次运行 → 页面底部 **Artifacts** → 下载 `medihub-apk`，
+  解压得到两个 APK。
 
 ```bash
 # 本机也可以直接触发（需要 gh CLI 并登录）
@@ -38,15 +43,18 @@ cd apps/mobile
 CAPACITOR_SERVER_URL=https://medihub.summerecho.cn pnpm run sync:android
 cd android
 chmod +x gradlew
-./gradlew assembleDebug
+./gradlew assembleDebug assembleRelease
 ```
 
-产物：`apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk`。
+产物：
+
+- debug：`apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk`
+- release：`apps/mobile/android/app/build/outputs/apk/release/app-release.apk`（当前用 debug 签名，可直接安装）
 
 ## 3. 安装与更新
 
 - 把 `app-debug.apk` 发到安卓手机，允许「安装未知来源应用」后安装；
-- debug 包由 CI 的临时 debug keystore 签名，**可以直接安装，但不能上架应用商店**；
+- 两个包都可直接安装；**都用 CI 的 debug keystore 签名**（debug 版本来如此，release 版在未配置正式 keystore 时也回退到 debug 签名），因此**都不能上架应用商店**；
 - 站点更新不需要重装 App（壳加载的是线上地址）；换域名/改图标/加插件才需要重新构建；
 - 首次打开若白屏，检查手机能否访问该地址、证书是否有效（不要用自签 HTTPS）。
 
@@ -67,7 +75,7 @@ chmod +x gradlew
 
 ## 5. 签名与上架（未包含）
 
-工作流只产出 debug APK。要发布到应用商店需要：
+工作流目前产出 debug 与 release 两个变体，但 release 也使用 debug 签名。要发布到应用商店需要：
 
 1. 生成 release keystore（`keytool -genkeypair ...`），不要提交到仓库；
 2. 在 `apps/mobile/android/app/build.gradle` 增加 `signingConfigs.release`；

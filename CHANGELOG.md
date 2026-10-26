@@ -2,6 +2,19 @@
 
 本项目从第一版起的所有对外变更。版本号遵循 `MAJOR.MINOR.PATCH`。
 
+## v1.7.0 — 2026-10-26
+
+### 改进：APK 双版本与 Release 发布
+
+- 工作流同时构建 **debug 与 release** 两个 APK；release 在未配置正式 keystore 时使用
+  debug 签名，保证可直接安装（上架仍需自备 keystore，见文档 §5）。
+- tag 构建成功后自动把两个 APK **上传到 GitHub Release**（无需登录即可下载），
+  同时保留 Actions Artifacts；手动运行时从 Artifacts 下载。
+- 升级 Actions 到 Node 24 版本，消除 Node 20 弃用告警：
+  checkout v7 / setup-node v7 / setup-java v6 / upload-artifact v7 /
+  pnpm action-setup v6 / action-gh-release v3。
+- 文档更新下载位置（Release 资产 / Artifacts）与签名说明。
+
 ## v1.6.2 — 2026-10-25
 
 ### 修复

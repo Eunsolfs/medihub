@@ -7,8 +7,8 @@ android {
         applicationId "com.medihub.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 16
-        versionName "1.6.0"
+        versionCode 17
+        versionName "1.7.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -20,6 +20,9 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            // 没有配置正式 keystore 时，release 版用 debug 签名，保证 APK 可直接安装。
+            // 上架应用商店前请改成自己的 signingConfigs.release（见 docs/ANDROID-APK.md §5）。
+            signingConfig signingConfigs.debug
         }
     }
 }
@@ -52,4 +55,5 @@ try {
 } catch(Exception e) {
     logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
 }
+
 
