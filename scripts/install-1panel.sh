@@ -16,7 +16,7 @@
 #   --dir /opt/medihub          安装目录（默认 /opt/medihub）
 #   --tag v1.1.0                指定版本（默认最新 Release）
 #   --url https://...           浏览器访问地址（写入 BETTER_AUTH_URL）
-#   --port 3000                 API 端口（默认 3000）
+#   --port 3000                 API 端口（默认自动选择空闲端口）
 #   --user medihub              运行服务的系统用户
 #   --seed                      创建超级管理员，随机密码打印一次
 #   --onlyoffice-url URL        OnlyOffice Document Server 地址（可后填）
@@ -35,7 +35,8 @@ REPO="${MEDIHUB_REPO:-Eunsolfs/medihub}"
 DIR="/opt/medihub"
 TAG=""
 SITE_URL=""
-APP_PORT="3000"
+APP_PORT=""
+USER_PORT=""
 RUN_USER="medihub"
 NODE_VERSION="${NODE_VERSION:-24.22.1}"
 PNPM_VERSION="${PNPM_VERSION:-12.15.0}"
@@ -69,6 +70,87 @@ run() {
     return 0
   fi
   "$@"
+}
+
+# 端口是否空闲：优先 ss，其次 netstat，最后用 Node 实际绑定测试。
+port_is_free() {
+  local port="$1"
+  local pattern="[:.]${port}$"
+
+  if command -v ss >/dev/null 2>&1; then
+    if ss -ltn 2>/dev/null | awk '{print $4}' | grep -Eq "$pattern"; then
+      return 1
+    fi
+
+    return 0
+  fi
+
+  if command -v netstat >/dev/null 2>&1; then
+    if netstat -ltn 2>/dev/null | awk '{print $4}' | grep -Eq "$pattern"; then
+      return 1
+    fi
+
+    return 0
+  fi
+
+  if command -v node >/dev/null 2>&1; then
+    if node -e 'const net=require("node:net");const s=net.createServer();s.once("error",()=>process.exit(1));s.listen(Number(process.argv[1]),"0.0.0.0",()=>s.close(()=>process.exit(0)))' "$port" >/dev/null 2>&1; then
+      return 0
+    fi
+
+    return 1
+  fi
+
+  # DRY-RUN 且系统没有任何检测工具时，不阻塞预览。
+  [[ "$DRY_RUN" == "true" ]]
+}
+
+select_free_port() {
+  local attempt port
+
+  # 20000-29999：避开 80/443/3000/8080 等常被面板或开发服务器占用的端口。
+  for ((attempt = 1; attempt <= 100; attempt += 1)); do
+    port=$((20000 + RANDOM % 10000))
+
+    if port_is_free "$port"; then
+      echo "$port"
+      return 0
+    fi
+  done
+
+  fail "连续尝试 100 次都没有找到空闲端口，请用 --port 手动指定"
+}
+
+resolve_port() {
+  local env_file="$DIR/apps/server/.env"
+  local existing=""
+
+  if [[ -n "$USER_PORT" ]]; then
+    if ! port_is_free "$USER_PORT"; then
+      fail "端口 $USER_PORT 已被占用，请换一个，或去掉 --port 让脚本自动选择"
+    fi
+
+    APP_PORT="$USER_PORT"
+    log "使用指定端口：$APP_PORT"
+    return 0
+  fi
+
+  if [[ -f "$env_file" ]]; then
+    existing="$(sed -n 's/^PORT="\{0,1\}\([0-9]\+\)"\{0,1\}$/\1/p' "$env_file" | head -n1)"
+  fi
+
+  if [[ -n "$existing" ]]; then
+    if port_is_free "$existing"; then
+      APP_PORT="$existing"
+      log "沿用现有 .env 里的端口：$APP_PORT"
+      return 0
+    fi
+
+    warn "现有端口 $existing 已被占用，改为自动选择"
+  fi
+
+  APP_PORT="$(select_free_port)"
+  log "自动选择端口：$APP_PORT"
 }
 
 on_error() {
@@ -108,7 +190,7 @@ while [[ $# -gt 0 ]]; do
     --dir) DIR="$2"; shift 2 ;;
     --tag) TAG="$2"; shift 2 ;;
     --url) SITE_URL="$2"; shift 2 ;;
-    --port) APP_PORT="$2"; shift 2 ;;
+    --port) USER_PORT="$2"; shift 2 ;;
     --user) RUN_USER="$2"; shift 2 ;;
     --seed) SEED="true"; shift ;;
     --update) UPDATE_MODE="true"; shift ;;
@@ -133,8 +215,10 @@ if [[ -n "$SITE_URL" ]]; then
   SITE_URL="${SITE_URL%/}"
 fi
 
-[[ "$APP_PORT" =~ ^[0-9]+$ ]] || fail "--port 必须是数字"
-[[ "$APP_PORT" -ge 1 && "$APP_PORT" -le 65535 ]] || fail "--port 超出范围"
+if [[ -n "$USER_PORT" ]]; then
+  [[ "$USER_PORT" =~ ^[0-9]+$ ]] || fail "--port 必须是数字"
+  [[ "$USER_PORT" -ge 1 && "$USER_PORT" -le 65535 ]] || fail "--port 超出范围（1-65535）"
+fi
 
 if [[ "$UPDATE_MODE" == "true" && "$SEED" == "true" ]]; then
   fail "--update 用于升级现有安装，不要再叠加 --seed（会重复写入演示数据）"
@@ -604,6 +688,9 @@ main() {
   ensure_pnpm
   PHASE="创建运行用户"
   ensure_user
+
+  PHASE="选择端口"
+  resolve_port
 
   local tag
   if [[ -n "$TAG" ]]; then
