@@ -24,9 +24,12 @@
 #   --update                    升级现有安装（保留数据）
 #   --dry-run                   只打印将执行的操作，不改动系统
 #   --yes                       非交互确认
+#   --purge                     清理一次失败/不再需要的安装（删服务、目录与用户）
+#   --force                     与 --purge 连用：即使已有数据库也强制删除
 #
 # 全部逻辑幂等：重复执行会保留 .env、SQLite、storage 与 .updates 备份。
 set -euo pipefail
+trap on_error EXIT
 
 REPO="${MEDIHUB_REPO:-Eunsolfs/medihub}"
 DIR="/opt/medihub"
@@ -40,9 +43,14 @@ SEED="false"
 UPDATE_MODE="false"
 DRY_RUN="false"
 ASSUME_YES="false"
+PURGE="false"
+FORCE="false"
 ONLYOFFICE_URL=""
 ONLYOFFICE_SECRET=""
 SERVICE_NAME="medihub"
+TMP_DIR=""
+PHASE="准备"
+INSTALL_STARTED="false"
 
 log() { printf '\033[1;34m[medihub]\033[0m %s\n' "$*" >&2; }
 warn() { printf '\033[1;33m[medihub]\033[0m %s\n' "$*" >&2; }
@@ -63,6 +71,33 @@ run() {
   "$@"
 }
 
+on_error() {
+  local code=$?
+
+  if [[ "$code" -eq 0 ]]; then
+    return 0
+  fi
+
+  if [[ -n "$TMP_DIR" && -d "$TMP_DIR" ]]; then
+    rm -rf "$TMP_DIR"
+  fi
+
+  if [[ "$INSTALL_STARTED" != "true" ]]; then
+    exit "$code"
+  fi
+
+  # 失败时不要让残留的半成品服务继续跑。
+  if command -v systemctl >/dev/null && systemctl list-unit-files | grep -q "^$SERVICE_NAME.service"; then
+    systemctl stop "$SERVICE_NAME" >/dev/null 2>&1 || true
+  fi
+
+  printf '\n' >&2
+  warn "安装/升级在「$PHASE」阶段失败（退出码 $code）。"
+  warn "已完成的文件与配置保留在 $DIR，数据库/素材不会被自动删除；修复原因后可直接重跑同一命令（幂等）。"
+  warn "想彻底清掉这次残留：sudo bash $0 --purge --yes（有数据库时必须再加 --force）"
+  exit "$code"
+}
+
 usage() {
   sed -n '2,32p' "$0" | sed 's/^# \{0,1\}//'
   exit 0
@@ -79,6 +114,8 @@ while [[ $# -gt 0 ]]; do
     --update) UPDATE_MODE="true"; shift ;;
     --dry-run) DRY_RUN="true"; shift ;;
     --yes|-y) ASSUME_YES="true"; shift ;;
+    --purge) PURGE="true"; shift ;;
+    --force) FORCE="true"; shift ;;
     --onlyoffice-url) ONLYOFFICE_URL="$2"; shift 2 ;;
     --onlyoffice-secret) ONLYOFFICE_SECRET="$2"; shift 2 ;;
     -h|--help) usage ;;
@@ -88,6 +125,7 @@ done
 
 [[ $EUID -eq 0 ]] || fail "请用 root 或 sudo 运行：sudo bash $0"
 [[ "$DRY_RUN" == "true" ]] || command -v systemctl >/dev/null || fail "未找到 systemd"
+[[ "$DIR" == /* && "$DIR" != "/" ]] || fail "--dir 必须是绝对路径，且不能是 /"
 
 # 参数校验：早失败比装到一半失败好。
 if [[ -n "$SITE_URL" ]]; then
@@ -271,14 +309,16 @@ apply_release() {
 
   run mkdir -p "$DIR"
   if command -v rsync >/dev/null; then
+    # 排除项必须锚定到具体路径：`--exclude storage` 会把 packages/storage 一起排除，
+    # 导致 @medihub/storage 链接缺失、构建与 seed 直接失败。
     run rsync -a --delete \
-      --exclude '.env' \
-      --exclude 'local.db' \
-      --exclude 'storage' \
-      --exclude '.updates' \
+      --exclude '/apps/server/.env' \
+      --exclude '/apps/server/local.db' \
+      --exclude '/apps/server/storage' \
+      --exclude '/.updates' \
+      --exclude '/.local' \
+      --exclude '/.pnpm-store' \
       --exclude 'node_modules' \
-      --exclude '.local' \
-      --exclude '.pnpm-store' \
       "$source/" "$DIR/"
   else
     run cp -a "$source/." "$DIR/"
@@ -378,8 +418,58 @@ install_deps_and_build() {
   # 显式补 /usr/local/bin：脚本把 Node/pnpm 装在这里，runuser 的登录 shell 未必包含。
   run runuser -u "$RUN_USER" -- bash -lc \
     "export PATH=/usr/local/bin:\$PATH; cd '$DIR' && pnpm install --frozen-lockfile"
+
+  if [[ "$DRY_RUN" != "true" ]]; then
+    verify_workspace_links
+  fi
+
   run runuser -u "$RUN_USER" -- bash -lc \
     "export PATH=/usr/local/bin:\$PATH; cd '$DIR' && pnpm run build"
+}
+
+verify_source_tree() {
+  [[ -f "$DIR/packages/storage/package.json" ]] ||
+    fail "源码包缺少 packages/storage（常见原因：rsync 排除规则把 storage 目录一起排除了）。请重跑修复后的安装脚本"
+
+  local pkg
+  for pkg in "$DIR"/packages/*/package.json; do
+    [[ -f "$pkg" ]] || fail "源码包缺少 workspace 包：$pkg"
+  done
+}
+
+verify_workspace_links() {
+  local pkg name missing=""
+
+  for pkg in "$DIR"/packages/*/package.json; do
+    [[ -f "$pkg" ]] || continue
+    name="$(sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' "$pkg" | head -n1)"
+    [[ -n "$name" && -e "$DIR/node_modules/$name" ]] || missing="$missing ${name:-$pkg}"
+  done
+
+  [[ -z "$missing" ]] ||
+    fail "工作区包未正确链接：$missing。请检查 $DIR/packages 是否完整，然后重跑安装脚本"
+}
+
+purge_install() {
+  [[ "$ASSUME_YES" == "true" ]] || fail "--purge 会删除目录、服务与用户，必须同时加 --yes 确认"
+
+  if [[ -f "$DIR/apps/server/local.db" && "$FORCE" != "true" ]]; then
+    fail "检测到数据库 $DIR/apps/server/local.db。确认要删除数据请加 --force"
+  fi
+
+  if systemctl list-unit-files 2>/dev/null | grep -q "^$SERVICE_NAME.service"; then
+    run systemctl stop "$SERVICE_NAME" || true
+    run systemctl disable "$SERVICE_NAME" || true
+    run rm -f "/etc/systemd/system/$SERVICE_NAME.service"
+    run systemctl daemon-reload
+  fi
+
+  run rm -rf "$DIR"
+  if id -u "$RUN_USER" >/dev/null 2>&1; then
+    run userdel "$RUN_USER" 2>/dev/null || true
+  fi
+
+  log "已清理 $DIR、服务与用户（如存在）。"
 }
 
 migrate_and_seed() {
@@ -494,15 +584,25 @@ main() {
     log "DRY-RUN：只打印操作，不修改系统"
   fi
 
+  if [[ "$PURGE" == "true" ]]; then
+    purge_install
+    return
+  fi
+
   if [[ "$UPDATE_MODE" == "true" ]]; then
     confirm "将升级 $DIR 到最新版本并重启服务，继续？"
   else
     confirm "将安装医档通到 $DIR 并启动 systemd 服务，继续？"
   fi
 
+  INSTALL_STARTED="true"
+
+  PHASE="安装系统依赖"
   install_system_deps
+  PHASE="安装 Node.js / pnpm"
   ensure_node
   ensure_pnpm
+  PHASE="创建运行用户"
   ensure_user
 
   local tag
@@ -515,14 +615,14 @@ main() {
   fi
   log "目标版本：$tag"
 
-  local tmp
-  tmp="$(mktemp -d)"
-  trap 'rm -rf "$tmp"' EXIT
+  TMP_DIR="$(mktemp -d)"
 
   local source
-  source="$(fetch_release "$tag" "$tmp")"
+  PHASE="下载并解压源码包"
+  source="$(fetch_release "$tag" "$TMP_DIR")"
   [[ -n "$source" ]] || fail "解压源码包失败"
 
+  PHASE="停止旧服务"
   stop_service_if_running
 
   # 升级前留一份数据库备份（与在线升级共用 .updates/backups 约定）
@@ -536,14 +636,26 @@ main() {
   fi
 
   preserve_data "$source"
+  PHASE="同步代码"
   apply_release "$source"
+  if [[ "$DRY_RUN" != "true" ]]; then
+    verify_source_tree
+  fi
   write_env
+  PHASE="安装依赖并构建"
   run chown -R "$RUN_USER:$RUN_USER" "$DIR"
   install_deps_and_build
+  PHASE="初始化数据库"
   migrate_and_seed
+  PHASE="写入并启动 systemd 服务"
   write_service
   start_and_check
   chown -R "$RUN_USER:$RUN_USER" "$DIR" 2>/dev/null || true
+
+  if [[ -n "$TMP_DIR" && -d "$TMP_DIR" ]]; then
+    rm -rf "$TMP_DIR"
+    TMP_DIR=""
+  fi
 
   if [[ "$DRY_RUN" == "true" ]]; then
     log "DRY-RUN 完成：以上为将执行的操作"
@@ -554,5 +666,6 @@ main() {
 }
 
 main "$@"
+
 
 

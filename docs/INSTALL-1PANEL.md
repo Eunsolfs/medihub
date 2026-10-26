@@ -54,17 +54,51 @@ OnlyOffice 参数写入 `.env` 后需要重启服务才生效（页面会提示�
 
 ## 常用参数
 
-| 参数                                       | 说明                                              |
-| ------------------------------------------ | ------------------------------------------------- |
-| `--dir /opt/medihub`                       | 安装目录（默认 `/opt/medihub`）                   |
-| `--url https://...`                        | 写入 `BETTER_AUTH_URL`，必须是浏览器访问地址      |
-| `--port 3000`                              | API 端口（默认 3000，不对公网暴露）               |
-| `--tag v1.1.0`                             | 指定版本（默认取最新 Release）                    |
-| `--seed`                                   | 写入演示数据 + 超级管理员（随机密码）             |
-| `--update`                                 | 升级现有安装，保留 `.env`、SQLite、素材与升级备份 |
-| `--onlyoffice-url` / `--onlyoffice-secret` | OnlyOffice 地址与 JWT 密钥，可后填                |
-| `--dry-run`                                | 只打印要执行的操作，不改系统                      |
-| `--yes`                                    | 非交互确认                                        |
+| 参数                                       | 说明                                                |
+| ------------------------------------------ | --------------------------------------------------- |
+| `--dir /opt/medihub`                       | 安装目录（默认 `/opt/medihub`）                     |
+| `--url https://...`                        | 写入 `BETTER_AUTH_URL`，必须是浏览器访问地址        |
+| `--port 3000`                              | API 端口（默认 3000，不对公网暴露）                 |
+| `--tag v1.1.0`                             | 指定版本（默认取最新 Release）                      |
+| `--seed`                                   | 写入演示数据 + 超级管理员（随机密码）               |
+| `--update`                                 | 升级现有安装，保留 `.env`、SQLite、素材与升级备份   |
+| `--onlyoffice-url` / `--onlyoffice-secret` | OnlyOffice 地址与 JWT 密钥，可后填                  |
+| `--dry-run`                                | 只打印要执行的操作，不改系统                        |
+| `--yes`                                    | 非交互确认                                          |
+| `--purge`                                  | 清理一次失败/不再需要的安装（停服务、删目录与用户） |
+| `--force`                                  | 与 `--purge` 连用，允许连数据库一起删除             |
+
+### 安装失败 / 残留处理
+
+脚本是幂等的：**失败后修复原因，直接重跑同一条安装命令即可**，`.env`、数据库与素材不会被删除。
+脚本失败时会打印失败阶段，并尝试停掉半成品服务；临时目录会自动清理。
+
+先看是什么失败：
+
+```bash
+systemctl status medihub --no-pager
+journalctl -u medihub -n 100 --no-pager
+```
+
+常见残留与处理：
+
+```bash
+# 1) 源码目录不完整（例如 packages/storage 缺失）
+ls /opt/medihub/packages
+# 修复：重新下载最新安装脚本后重跑；不要手工删 node_modules
+
+# 2) 想彻底重来（会删数据库与素材！）
+sudo bash install-medihub.sh --purge --yes
+# 已有数据库时必须显式加 --force：
+sudo bash install-medihub.sh --purge --yes --force
+
+# 3) 只想保留数据、重装程序
+sudo bash install-medihub.sh --update --yes
+```
+
+> 旧版脚本有一个已修复的缺陷：同步代码时用小写 `storage` 当排除规则，会连
+> `packages/storage` 一起排除，导致构建/seed 报 `Cannot find package '@medihub/storage'`。
+> 升级到包含该修复的版本（v1.7.1+）后重跑即可。
 
 ## OnlyOffice（已装好，稍后填参数）
 

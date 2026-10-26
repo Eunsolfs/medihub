@@ -2,6 +2,22 @@
 
 本项目从第一版起的所有对外变更。版本号遵循 `MAJOR.MINOR.PATCH`。
 
+## v1.7.1 — 2026-10-26
+
+### 修复：一键安装脚本漏装 `packages/storage`
+
+- 根因：`rsync --exclude 'storage'` 是未锚定的模式，会把 `packages/storage` 一起排除，
+  导致构建报 `Could not resolve "@medihub/storage"`、seed 报
+  `Cannot find package '@medihub/storage'`。排除项改为锚定路径
+  （`/apps/server/storage`、`/apps/server/.env`、`/apps/server/local.db`、`/.updates`），
+  并保留 `node_modules`。
+- 安装失败不再出现 `tmp: unbound variable`：临时目录改为全局变量并在 EXIT 中安全清理。
+- 失败时打印失败阶段、停止半成品服务，并提示修复后重跑或 `--purge`。
+- 新增 `--purge` / `--force`：清理失败安装（必须 `--yes`；有数据库时再加 `--force`）。
+- 新增安装后校验：源码树必须有 `packages/storage`，且所有 workspace 包都已链接到
+  `node_modules`，否则明确报错而不是等到 seed 才崩。
+- 文档补充「安装失败 / 残留处理」。
+
 ## v1.7.0 — 2026-10-26
 
 ### 改进：APK 双版本与 Release 发布
