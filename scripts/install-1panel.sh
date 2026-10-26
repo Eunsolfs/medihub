@@ -527,11 +527,22 @@ verify_workspace_links() {
   for pkg in "$DIR"/packages/*/package.json; do
     [[ -f "$pkg" ]] || continue
     name="$(sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' "$pkg" | head -n1)"
-    [[ -n "$name" && -e "$DIR/node_modules/$name" ]] || missing="$missing ${name:-$pkg}"
+
+    # pnpm 默认 isolated：workspace 链接在各自消费方的 node_modules，不要把根目录当成唯一位置。
+    if [[ -z "$name" ]] ||
+      { [[ ! -e "$DIR/node_modules/$name" ]] &&
+        [[ ! -e "$DIR/apps/server/node_modules/$name" ]] &&
+        [[ ! -e "$DIR/apps/web/node_modules/$name" ]]; }; then
+      missing="$missing ${name:-$pkg}"
+    fi
   done
 
   [[ -z "$missing" ]] ||
     fail "工作区包未正确链接：$missing。请检查 $DIR/packages 是否完整，然后重跑安装脚本"
+
+  # 真实解析一次，防止「文件在但 exports/链接是坏的」拖到 seed 才暴露。
+  run runuser -u "$RUN_USER" -- bash -lc \
+    "export PATH=/usr/local/bin:\$PATH; cd '$DIR/apps/server' && node --input-type=module -e \"await import('@medihub/storage')\""
 }
 
 purge_install() {

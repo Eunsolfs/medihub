@@ -2,6 +2,16 @@
 
 本项目从第一版起的所有对外变更。版本号遵循 `MAJOR.MINOR.PATCH`。
 
+## v1.7.3 — 2026-10-26
+
+### 修复：安装后校验误报「工作区包未正确链接」
+
+- pnpm 默认 isolated 布局把 workspace 链接放在各消费方的 `node_modules`（如
+  `apps/server/node_modules/@medihub/*`），v1.7.2 只检查了根目录，导致安装被误判失败。
+- 校验改为：根 / `apps/server` / `apps/web` 任一位置存在即可，并额外用 Node 真实
+  `import('@medihub/storage')` 验证解析（坏 exports/坏链接会立即暴露）。
+- 说明：v1.7.2 的 `--purge` 会连同数据库删除；已执行过的用户直接重跑安装即可。
+
 ## v1.7.2 — 2026-10-26
 
 ### 改进：安装端口自动选择与占用检测
