@@ -207,6 +207,7 @@ done
 
 [[ $EUID -eq 0 ]] || fail "请用 root 或 sudo 运行：sudo bash $0"
 [[ "$DRY_RUN" == "true" ]] || command -v systemctl >/dev/null || fail "未找到 systemd"
+SYSTEMCTL_BIN="$(command -v systemctl 2>/dev/null || echo /usr/bin/systemctl)"
 [[ "$DIR" == /* && "$DIR" != "/" ]] || fail "--dir 必须是绝对路径，且不能是 /"
 
 # 参数校验：早失败比装到一半失败好。
@@ -246,16 +247,16 @@ install_system_deps() {
   case "$DISTRO" in
     debian|ubuntu)
       run apt-get update -qq
-      run apt-get install -y -qq curl tar xz-utils ca-certificates
+      run apt-get install -y -qq curl tar xz-utils ca-certificates sudo
       ;;
     rocky|almalinux|centos|rhel|fedora)
-      run dnf install -y -q curl tar xz ca-certificates
+      run dnf install -y -q curl tar xz ca-certificates sudo
       ;;
     *)
       if command -v apt-get >/dev/null; then
-        run apt-get update -qq && run apt-get install -y -qq curl tar xz-utils ca-certificates
+        run apt-get update -qq && run apt-get install -y -qq curl tar xz-utils ca-certificates sudo
       elif command -v dnf >/dev/null; then
-        run dnf install -y -q curl tar xz ca-certificates
+        run dnf install -y -q curl tar xz ca-certificates sudo
       else
         warn "未识别的发行版 $DISTRO，请确保 curl/tar/xz 已安装"
       fi
@@ -451,7 +452,7 @@ UPLOAD_MAX_BYTES="268435456"
 # 在线升级（root 在「系统管理 → 版本与升级」操作）
 UPDATE_ENABLED="true"
 UPDATE_WORKDIR="$DIR"
-UPDATE_RESTART_CMD="systemctl restart $SERVICE_NAME"
+UPDATE_RESTART_CMD="sudo -n $SYSTEMCTL_BIN restart $SERVICE_NAME"
 UPDATE_HEALTH_URL="http://127.0.0.1:$APP_PORT/api/health"
 UPDATE_DB_PATH="apps/server/local.db"
 UPDATE_KEEP_BACKUPS="3"
@@ -479,7 +480,7 @@ EOF
   set_env_kv PORT "$APP_PORT" "$env_file"
   set_env_kv UPDATE_ENABLED "true" "$env_file"
   set_env_kv UPDATE_WORKDIR "$DIR" "$env_file"
-  set_env_kv UPDATE_RESTART_CMD "systemctl restart $SERVICE_NAME" "$env_file"
+  set_env_kv UPDATE_RESTART_CMD "sudo -n $SYSTEMCTL_BIN restart $SERVICE_NAME" "$env_file"
   set_env_kv UPDATE_HEALTH_URL "http://127.0.0.1:$APP_PORT/api/health" "$env_file"
   set_env_kv UPDATE_DB_PATH "apps/server/local.db" "$env_file"
   set_env_kv UPDATE_KEEP_BACKUPS "3" "$env_file"
@@ -556,6 +557,7 @@ purge_install() {
     run systemctl stop "$SERVICE_NAME" || true
     run systemctl disable "$SERVICE_NAME" || true
     run rm -f "/etc/systemd/system/$SERVICE_NAME.service"
+  run rm -f "/etc/sudoers.d/medihub-update"
     run systemctl daemon-reload
   fi
 
@@ -583,6 +585,35 @@ migrate_and_seed() {
   fi
 }
 
+write_sudoers() {
+  local systemctl_bin sudoers_file tmp_file
+
+  systemctl_bin="$SYSTEMCTL_BIN"
+  sudoers_file="/etc/sudoers.d/medihub-update"
+
+  if [[ "$DRY_RUN" == "true" ]]; then
+    printf '  + 写入 %s（允许 %s 免密重启 %s）\n' "$sudoers_file" "$RUN_USER" "$SERVICE_NAME"
+    return
+  fi
+
+  if ! command -v sudo >/dev/null 2>&1 || ! command -v visudo >/dev/null 2>&1; then
+    warn "未找到 sudo/visudo，在线升级将无法重启服务；请安装 sudo 后重跑脚本"
+    return
+  fi
+
+  tmp_file="$(mktemp)"
+  printf '%s ALL=(root) NOPASSWD: %s restart %s\n' \
+    "$RUN_USER" "$systemctl_bin" "$SERVICE_NAME" >"$tmp_file"
+
+  if ! visudo -cf "$tmp_file" >/dev/null 2>&1; then
+    rm -f "$tmp_file"
+    fail "生成的 sudoers 规则校验失败：$sudoers_file"
+  fi
+
+  install -m 440 "$tmp_file" "$sudoers_file"
+  rm -f "$tmp_file"
+  log "已授权 $RUN_USER 免密执行 systemctl restart $SERVICE_NAME（用于在线升级）"
+}
 write_service() {
   local node_bin
   node_bin="$(command -v node)"
@@ -609,6 +640,8 @@ ExecStart=$node_bin $DIR/apps/server/dist/index.mjs
 Restart=always
 RestartSec=3
 TimeoutStopSec=20
+# 在线升级执行器从本服务启动，重启服务时不能被一起杀掉，否则健康检查/回滚会中断。
+KillMode=process
 
 [Install]
 WantedBy=multi-user.target
@@ -700,6 +733,9 @@ main() {
   PHASE="创建运行用户"
   ensure_user
 
+  PHASE="授权在线升级"
+  write_sudoers
+
   PHASE="选择端口"
   resolve_port
 
@@ -764,6 +800,9 @@ main() {
 }
 
 main "$@"
+
+
+
 
 
 

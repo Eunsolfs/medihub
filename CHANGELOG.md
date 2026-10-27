@@ -2,6 +2,19 @@
 
 本项目从第一版起的所有对外变更。版本号遵循 `MAJOR.MINOR.PATCH`。
 
+## v1.9.1 — 2026-10-27
+
+### 修复：在线升级在「重启服务」阶段失败
+
+- 一键安装脚本现在会创建 `/etc/sudoers.d/medihub-update`，允许服务用户免密执行
+  `/usr/bin/systemctl restart medihub`；`.env` 的 `UPDATE_RESTART_CMD` 改为
+  `sudo -n <systemctl> restart medihub`，不再因权限不足失败。
+- systemd 服务增加 `KillMode=process`：在线升级执行器从服务进程启动，重启时不会被
+  一起杀掉，健康检查与自动回滚得以完成。
+- 升级执行器改为同步等待重启命令并检查退出码：权限/命令失败会立刻报
+  「重启服务失败（…）：…」，不再空等健康检查超时。
+- 已有部署升级到本版本后，后续「系统管理 → 版本与升级」即可正常使用。
+
 ## v1.9.0 — 2026-10-27
 
 ### 患者档案批量操作
@@ -292,4 +305,3 @@
 - 生产部署见 `docs/DEPLOY-1PANEL.md`，Office 选型与配置见 `docs/ONLYOFFICE.md`。
 - `/api/health` 返回 `{ status, version }`，可在部署后核对版本。
 - docx / xlsx / OnlyOffice 预览器按需加载，media 首包由约 590 KB 降至约 162 KB。
-

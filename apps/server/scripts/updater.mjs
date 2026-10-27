@@ -8,7 +8,6 @@
  * - 任何一步失败都尝试还原备份并重启（失败时 state.rolledBack 记录结果）；
  * - 所有步骤写进 .updates/state.json，前端轮询展示；不依赖 shell 插值命令。
  */
-import { spawn } from "node:child_process";
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import {
@@ -105,18 +104,26 @@ const restartService = async () => {
 
   await logLine(`重启服务：${restartCommand}`);
 
-  await new Promise((resolve, reject) => {
-    const child = spawn(restartCommand, {
+  try {
+    const { stdout, stderr } = await exec("sh", ["-c", restartCommand], {
       cwd: workdir,
-      detached: true,
-      shell: true,
-      stdio: "ignore",
+      env: { ...process.env, CI: "1" },
+      maxBuffer: 1024 * 1024,
+      timeout: 60_000,
     });
 
-    child.on("error", reject);
-    child.unref();
-    setTimeout(resolve, 1500);
-  });
+    if (stdout.trim()) {
+      await logLine(stdout.trim().slice(-1000));
+    }
+
+    if (stderr.trim()) {
+      await logLine(stderr.trim().slice(-1000));
+    }
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+
+    throw new Error(`重启服务失败（${restartCommand}）：${detail}`);
+  }
 };
 
 const waitHealthy = async (expectedVersion) => {
