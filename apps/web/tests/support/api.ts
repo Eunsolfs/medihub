@@ -72,11 +72,27 @@ export const signUp = async (email = uniqueEmail()) => {
   return { client: clientWithCookie(memberCookie), email };
 };
 
+/** 轻量验证码：读取当前已渲染 SVG 的字符节点，填入表单（测试专用）。 */
+export const fillCaptcha = async (page: Page) => {
+  const chars = await page
+    .locator('button[aria-label="刷新验证码"] svg text')
+    .allTextContents();
+
+  const answer = chars.join("");
+
+  if (answer.length !== 4) {
+    throw new Error("验证码未加载");
+  }
+
+  await page.locator("#captcha").fill(answer);
+};
+
 /** Signs in through the real form and waits until the app leaves `/login`. */
 export const signInThroughUi = async (page: Page, email: string) => {
   await page.goto(`${e2eBaseURL}/login`, { waitUntil: "networkidle" });
   await page.getByLabel("邮箱").fill(email);
   await page.getByLabel("密码").fill(password);
+  await fillCaptcha(page);
   await page.getByRole("button", { name: "登录", exact: true }).click();
   await page.waitForURL((url) => !url.pathname.startsWith("/login"), {
     timeout: 15_000,

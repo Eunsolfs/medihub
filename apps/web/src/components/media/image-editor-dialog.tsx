@@ -29,6 +29,7 @@ import type { MediaAsset } from "./types.ts";
 import {
   assetFileUrl,
   bumpAssetVersion,
+  isImageAsset,
   uploadTargetFromAsset,
 } from "./types.ts";
 
@@ -188,6 +189,15 @@ const EditorBody = ({ asset, onOpenChange, onUploaded }: EditorBodyProps) => {
   const workingCanvasRef = useRef<HTMLCanvasElement>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const dragRef = useRef<DragState | null>(null);
+
+  // 归档素材的原文件可能已移出服务器，覆盖会 404；非图片素材本就没有覆盖语义。
+  const isArchived =
+    asset.archivedAt !== null &&
+    asset.archivedAt !== undefined &&
+    asset.archivedAt !== "";
+
+  const isImage = isImageAsset(asset);
+  const canReplace = isImage && !isArchived;
 
   useEffect(() => {
     const element = new Image();
@@ -669,6 +679,10 @@ const EditorBody = ({ asset, onOpenChange, onUploaded }: EditorBodyProps) => {
   };
 
   const handleReplace = () => {
+    if (!canReplace) {
+      return;
+    }
+
     setConfirmReplace(false);
     exportBlob((blob, meta) => {
       void persistReplace(blob, meta);
@@ -872,7 +886,7 @@ const EditorBody = ({ asset, onOpenChange, onUploaded }: EditorBodyProps) => {
             </div>
           ) : null}
 
-          {confirmReplace ? (
+          {confirmReplace && canReplace ? (
             <div className="border-destructive/40 bg-destructive/5 grid gap-2 rounded-lg border p-2">
               <p className="text-xs">覆盖后原图不可恢复，确认覆盖？</p>
               <div className="grid grid-cols-2 gap-2">
@@ -898,7 +912,10 @@ const EditorBody = ({ asset, onOpenChange, onUploaded }: EditorBodyProps) => {
             </div>
           ) : (
             <div
-              className="grid grid-cols-2 gap-2"
+              className={cn(
+                "grid gap-2",
+                canReplace ? "grid-cols-2" : "grid-cols-1"
+              )}
               data-testid="image-save-actions"
             >
               <Button
@@ -914,15 +931,17 @@ const EditorBody = ({ asset, onOpenChange, onUploaded }: EditorBodyProps) => {
                 )}
                 保存为新素材
               </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                className="h-11 sm:h-8"
-                onClick={() => setConfirmReplace(true)}
-                disabled={busy !== null || !image}
-              >
-                覆盖原素材
-              </Button>
+              {isImage ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="h-11 sm:h-8"
+                  onClick={() => setConfirmReplace(true)}
+                  disabled={busy !== null || !image || !canReplace}
+                >
+                  覆盖原素材
+                </Button>
+              ) : null}
             </div>
           )}
 
@@ -935,10 +954,20 @@ const EditorBody = ({ asset, onOpenChange, onUploaded }: EditorBodyProps) => {
           >
             取消
           </Button>
-          <p className="text-muted-foreground text-xs">
-            「保存为新素材」保留原图；「覆盖原素材」直接替换当前素材。
-            {asset.byteSize ? ` 原图 ${formatBytes(asset.byteSize)}。` : ""}
-          </p>
+          {isArchived ? (
+            <p className="text-destructive/90 text-xs">
+              该素材已归档，原文件可能已移出服务器，无法覆盖；可以保存为新素材。
+            </p>
+          ) : isImage ? (
+            <p className="text-muted-foreground text-xs">
+              「保存为新素材」保留原图；「覆盖原素材」直接替换当前素材。
+              {asset.byteSize ? ` 原图 ${formatBytes(asset.byteSize)}。` : ""}
+            </p>
+          ) : (
+            <p className="text-muted-foreground text-xs">
+              只有图片素材支持覆盖原素材；当前文件可以另存为新素材。
+            </p>
+          )}
         </div>
       </aside>
     </div>

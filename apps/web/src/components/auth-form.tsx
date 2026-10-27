@@ -1,6 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { TriangleAlertIcon } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { SubmitEvent } from "react";
 
 import { Button } from "@medihub/ui/components/button";
@@ -62,6 +62,10 @@ export const authErrorMessage = (mode: Mode, message: string): string => {
     return "请填写姓名";
   }
 
+  if (text.includes("验证码")) {
+    return message;
+  }
+
   if (text.includes("network") || text.includes("fetch")) {
     return "网络异常，请稍后重试";
   }
@@ -71,9 +75,66 @@ export const authErrorMessage = (mode: Mode, message: string): string => {
     : "注册失败，请稍后重试";
 };
 
-const authenticate = async (mode: Mode, form: FormData) => {
+interface CaptchaChallenge {
+  id: string;
+  svg: string;
+}
+
+const isCaptchaChallenge = (value: unknown): value is CaptchaChallenge =>
+  typeof value === "object" &&
+  value !== null &&
+  typeof (value as { id?: unknown }).id === "string" &&
+  typeof (value as { svg?: unknown }).svg === "string";
+
+const verifyCaptcha = async (form: FormData, challenge: CaptchaChallenge) => {
+  const answer = formValue(form, "captcha").trim();
+
+  if (!answer) {
+    throw new Error("请输入验证码");
+  }
+
+  const response = await fetch("/api/captcha/verify", {
+    body: JSON.stringify({ answer, id: challenge.id }),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    let message = "验证码错误，请重试";
+
+    try {
+      const data: unknown = await response.json();
+
+      if (
+        typeof data === "object" &&
+        data !== null &&
+        typeof (data as { error?: unknown }).error === "string"
+      ) {
+        message = (data as { error: string }).error;
+      }
+    } catch {
+      // 忽略解析失败，用默认提示。
+    }
+
+    throw new Error(message);
+  }
+};
+
+const authenticate = async (
+  mode: Mode,
+  form: FormData,
+  challenge: CaptchaChallenge | null
+) => {
   const email = formValue(form, "email").trim();
   const password = formValue(form, "password");
+
+  if (mode === "sign-in") {
+    if (!challenge) {
+      throw new Error("验证码未加载，请点击图片刷新");
+    }
+
+    await verifyCaptcha(form, challenge);
+  }
 
   if (password.length < 8) {
     throw new Error("Password too short, minimum 8 characters");
@@ -100,11 +161,36 @@ interface AuthFormProps {
 export const AuthForm = ({ onSuccess }: AuthFormProps) => {
   const [mode, setMode] = useState<Mode>("sign-in");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [captcha, setCaptcha] = useState<CaptchaChallenge | null>(null);
+  const [captchaLoading, setCaptchaLoading] = useState(true);
+
+  const loadCaptcha = useCallback(async () => {
+    setCaptchaLoading(true);
+
+    try {
+      const response = await fetch("/api/captcha", { cache: "no-store" });
+      const data: unknown = response.ok ? await response.json() : null;
+
+      setCaptcha(isCaptchaChallenge(data) ? data : null);
+    } catch {
+      setCaptcha(null);
+    } finally {
+      setCaptchaLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (mode === "sign-in") {
+      void loadCaptcha();
+    } else {
+      setCaptcha(null);
+    }
+  }, [loadCaptcha, mode]);
   const text = copy[mode];
 
   const { mutate, isPending } = useMutation({
     mutationFn: async (form: FormData) => {
-      await authenticate(mode, form);
+      await authenticate(mode, form, captcha);
     },
     onError: (error) => {
       setErrorMessage(authErrorMessage(mode, error.message));
@@ -172,6 +258,44 @@ export const AuthForm = ({ onSuccess }: AuthFormProps) => {
             type="password"
           />
         </div>
+
+        {mode === "sign-in" ? (
+          <div className="grid gap-2">
+            <Label htmlFor="captcha">验证码</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                autoComplete="off"
+                className="flex-1"
+                id="captcha"
+                inputMode="text"
+                maxLength={4}
+                name="captcha"
+                placeholder="输入右侧 4 位字符"
+                required
+              />
+              <button
+                aria-label="刷新验证码"
+                className="border-border bg-muted flex h-10 w-[120px] shrink-0 items-center justify-center overflow-hidden rounded-md border"
+                disabled={captchaLoading}
+                onClick={() => {
+                  void loadCaptcha();
+                }}
+                type="button"
+              >
+                {captcha ? (
+                  <span
+                    aria-hidden="true"
+                    dangerouslySetInnerHTML={{ __html: captcha.svg }}
+                  />
+                ) : (
+                  <span className="text-muted-foreground text-xs">
+                    {captchaLoading ? "加载中…" : "点击刷新"}
+                  </span>
+                )}
+              </button>
+            </div>
+          </div>
+        ) : null}
 
         {errorMessage === null ? null : (
           <p

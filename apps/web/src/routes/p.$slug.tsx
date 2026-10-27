@@ -93,7 +93,7 @@ const BrandMark = () => (
 );
 
 const PublicShell = ({ children }: { children: ReactNode }) => (
-  <div className="bg-background min-h-svh">
+  <div className="bg-background pt-safe min-h-svh">
     <header className="bg-background/80 border-b print:hidden">
       <div className="mx-auto flex w-full max-w-4xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
         <BrandMark />

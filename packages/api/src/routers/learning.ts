@@ -8,6 +8,7 @@ import {
   learningSession,
   learningSessionKind,
 } from "@medihub/db/schema/learning";
+import type { LearningCourse } from "@medihub/db/schema/learning";
 
 import {
   canEditOwned,
@@ -27,7 +28,27 @@ import {
 import type { AudienceTargets } from "#src/audience.ts";
 import { organizationProcedure } from "#src/procedures.ts";
 
+const courseInput = z.object({
+  id: z.string().min(1).optional(),
+  note: z.string().trim().max(2000).nullish(),
+  speaker: z.string().trim().max(60).nullish(),
+  startsAt: z.string().trim().max(40).nullish(),
+  title: z.string().trim().min(1).max(200),
+});
+
+const normalizeCourses = (
+  courses: z.infer<typeof courseInput>[]
+): LearningCourse[] =>
+  courses.map((course) => ({
+    id: course.id ?? crypto.randomUUID(),
+    note: course.note?.trim() || null,
+    speaker: course.speaker?.trim() || null,
+    startsAt: course.startsAt?.trim() || null,
+    title: course.title.trim(),
+  }));
+
 const sessionInput = z.object({
+  courses: z.array(courseInput).max(50).default([]),
   description: z.string().max(8000).nullish(),
   heldAt: z.coerce.date(),
   kind: z.enum(learningSessionKind).default("lecture"),
@@ -118,6 +139,7 @@ export const learningRouter = {
               eq(asset.sessionId, learningSession.id)
             ),
             createdBy: learningSession.createdBy,
+            courses: learningSession.courses,
             heldAt: learningSession.heldAt,
             id: learningSession.id,
             kind: learningSession.kind,
@@ -223,6 +245,7 @@ export const learningRouter = {
       const [created] = await context.db
         .insert(learningSession)
         .values({
+          courses: normalizeCourses(input.courses),
           createdBy: viewer.id,
           description: input.description?.trim() || null,
           heldAt: input.heldAt,
@@ -286,6 +309,9 @@ export const learningRouter = {
       const [updated] = await context.db
         .update(learningSession)
         .set({
+          ...(values.courses === undefined
+            ? {}
+            : { courses: normalizeCourses(values.courses) }),
           ...(values.description === undefined
             ? {}
             : { description: values.description?.trim() || null }),

@@ -187,6 +187,12 @@ export default defineConfig({
         files: ["apps/server/src/**"],
         rules: { "node/callback-return": "off" },
       },
+      {
+        // 登录验证码在页面打开/切换登录模式时拉取一次；effect 是唯一同步点，
+        // 数据到达后的 setState 发生在 await 之后。
+        files: ["apps/web/src/components/auth-form.tsx"],
+        rules: { "react/set-state-in-effect": "off" },
+      },
     ],
     rules: {
       "vite-plus/prefer-vite-plus-imports": "error",

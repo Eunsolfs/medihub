@@ -6,6 +6,7 @@ import {
   useRouteContext,
 } from "@tanstack/react-router";
 import {
+  BookOpenIcon,
   CalendarDaysIcon,
   DownloadIcon,
   MapPinIcon,
@@ -315,12 +316,20 @@ const SessionsPage = () => {
                 </div>
               </dl>
 
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <TagList tags={item.tags ?? []} />
-                <span className="text-muted-foreground flex shrink-0 items-center gap-1 text-xs">
-                  <PaperclipIcon aria-hidden="true" className="size-3.5" />
-                  {item.assetCount} 份资料
-                </span>
+                <div className="flex shrink-0 items-center gap-2">
+                  {item.courses.length > 0 ? (
+                    <span className="text-muted-foreground flex items-center gap-1 text-xs">
+                      <BookOpenIcon aria-hidden="true" className="size-3.5" />
+                      {item.courses.length} 门课程
+                    </span>
+                  ) : null}
+                  <span className="text-muted-foreground flex items-center gap-1 text-xs">
+                    <PaperclipIcon aria-hidden="true" className="size-3.5" />
+                    {item.assetCount} 份资料
+                  </span>
+                </div>
               </div>
 
               {item.canEdit ? null : (

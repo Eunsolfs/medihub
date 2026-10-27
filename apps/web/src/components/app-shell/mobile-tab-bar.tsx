@@ -1,4 +1,4 @@
-import { useRouterState } from "@tanstack/react-router";
+import { Link, useRouterState } from "@tanstack/react-router";
 import { MoreHorizontalIcon, SearchIcon } from "lucide-react";
 import { useState } from "react";
 
@@ -57,15 +57,15 @@ export const MobileTabBar = ({ role, onOpenSearch }: MobileTabBarProps) => {
             const active = isNavActive(pathname, tab.href);
 
             return (
-              <a
+              <Link
                 aria-current={active ? "page" : undefined}
                 className={tabClassName(active)}
-                href={tab.href}
                 key={tab.href}
+                to={tab.href}
               >
                 <Icon aria-hidden="true" className="size-5" />
                 <span>{tab.label}</span>
-              </a>
+              </Link>
             );
           })}
           <button
@@ -101,7 +101,7 @@ export const MobileTabBar = ({ role, onOpenSearch }: MobileTabBarProps) => {
               role={role}
             />
           </div>
-          <div className="pb-safe-3 grid shrink-0 gap-2 border-t p-3">
+          <div className="pb-safe-3 grid shrink-0 gap-2 border-t px-3 pt-3">
             <div className="flex items-center gap-2">
               <Button
                 className="flex-1"

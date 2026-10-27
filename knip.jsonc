@@ -6,4 +6,5 @@
     "apps/server/scripts/**",
   ],
   "ignoreExportsUsedInFile": true,
+  "ignoreDependencies": ["@capacitor/app"],
 }

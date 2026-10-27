@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { PlusIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
 import type { ReactNode, SubmitEvent } from "react";
 import { toast } from "sonner";
@@ -26,6 +27,12 @@ import { Textarea } from "@medihub/ui/components/textarea";
 
 import { LoadingRows } from "#src/components/app-shell/ui/skeletons.tsx";
 import { AudiencePicker } from "#src/components/sessions/audience-picker.tsx";
+import {
+  createCourseDraft,
+  toCourseDrafts,
+  toCoursePayloads,
+} from "#src/components/sessions/courses.ts";
+import type { CourseDraft } from "#src/components/sessions/courses.ts";
 import {
   isLearningKind,
   LEARNING_KIND_OPTIONS,
@@ -114,6 +121,10 @@ const SessionFormBody = ({
   const [description, setDescription] = useState(detail?.description ?? "");
   const [tags, setTags] = useState((detail?.tags ?? []).join("、"));
 
+  const [courses, setCourses] = useState<CourseDraft[]>(() =>
+    toCourseDrafts(detail?.courses)
+  );
+
   const [visibility, setVisibility] = useState<SessionVisibility>(
     detail && isSessionVisibility(detail.visibility) ? detail.visibility : "org"
   );
@@ -166,6 +177,25 @@ const SessionFormBody = ({
 
   const isPending = createMutation.isPending || updateMutation.isPending;
 
+  const updateCourse = (
+    key: string,
+    patch: Partial<Omit<CourseDraft, "key">>
+  ) => {
+    setCourses((current) =>
+      current.map((course) =>
+        course.key === key ? { ...course, ...patch } : course
+      )
+    );
+  };
+
+  const addCourse = () => {
+    setCourses((current) => [...current, createCourseDraft()]);
+  };
+
+  const removeCourse = (key: string) => {
+    setCourses((current) => current.filter((course) => course.key !== key));
+  };
+
   const handleVisibilityChange = (next: SessionVisibility) => {
     setVisibility(next);
 
@@ -187,6 +217,9 @@ const SessionFormBody = ({
       audienceOrganizations:
         visibility === "selected" ? organizationValues : [],
       audienceUsers: visibility === "selected" ? userValues : [],
+      courses: toCoursePayloads(courses, (value) =>
+        new Date(value).toISOString()
+      ),
       description: description.trim() || undefined,
       heldAt: new Date(heldAt),
       kind,
@@ -317,6 +350,99 @@ const SessionFormBody = ({
             placeholder="用顿号或逗号分隔，如：皮瓣、创面修复"
             value={tags}
           />
+        </div>
+
+        <div className="grid gap-2 rounded-lg border p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="grid gap-0.5">
+              <p className="text-sm font-medium">课程安排</p>
+              <p className="text-muted-foreground text-xs">
+                一场会议可以安排多门课程，按填写顺序展示。
+              </p>
+            </div>
+            <Button
+              className="min-h-11 md:min-h-7"
+              onClick={addCourse}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <PlusIcon />
+              添加课程
+            </Button>
+          </div>
+
+          {courses.length === 0 ? (
+            <p className="bg-muted/40 text-muted-foreground rounded-lg px-3 py-4 text-center text-xs">
+              还没有课程；点「添加课程」补充本次会议的课程与主讲。
+            </p>
+          ) : (
+            <ol className="grid gap-2">
+              {courses.map((course, index) => (
+                <li
+                  className="bg-background grid gap-2 rounded-lg border p-2.5"
+                  key={course.key}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-muted-foreground text-xs font-medium">
+                      课程 {index + 1}
+                    </span>
+                    <button
+                      aria-label={`删除第 ${index + 1} 门课程`}
+                      className="text-muted-foreground hover:bg-muted hover:text-destructive grid size-11 shrink-0 place-items-center rounded-lg transition-colors md:size-9"
+                      onClick={() => {
+                        removeCourse(course.key);
+                      }}
+                      type="button"
+                    >
+                      <Trash2Icon aria-hidden="true" className="size-4" />
+                    </button>
+                  </div>
+
+                  <Input
+                    aria-label={`第 ${index + 1} 门课程名称`}
+                    onChange={(event) => {
+                      updateCourse(course.key, { title: event.target.value });
+                    }}
+                    placeholder="课程名称（必填）"
+                    value={course.title}
+                  />
+
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Input
+                      aria-label={`第 ${index + 1} 门课程主讲人`}
+                      onChange={(event) => {
+                        updateCourse(course.key, {
+                          speaker: event.target.value,
+                        });
+                      }}
+                      placeholder="主讲人（可选）"
+                      value={course.speaker}
+                    />
+                    <Input
+                      aria-label={`第 ${index + 1} 门课程开始时间`}
+                      onChange={(event) => {
+                        updateCourse(course.key, {
+                          startsAt: event.target.value,
+                        });
+                      }}
+                      type="datetime-local"
+                      value={course.startsAt}
+                    />
+                  </div>
+
+                  <Input
+                    aria-label={`第 ${index + 1} 门课程备注`}
+                    onChange={(event) => {
+                      updateCourse(course.key, { note: event.target.value });
+                    }}
+                    placeholder="备注（可选），如资料要求、准备事项"
+                    value={course.note}
+                  />
+                </li>
+              ))}
+            </ol>
+          )}
         </div>
 
         <div className="grid gap-2">

@@ -47,7 +47,7 @@ const FEATURES = [
 ] as const;
 
 const BrandPanel = () => (
-  <aside className="bg-sidebar border-border relative hidden overflow-hidden border-r lg:flex lg:flex-col lg:justify-between lg:p-10">
+  <aside className="bg-sidebar border-border pt-safe relative hidden overflow-hidden border-r lg:flex lg:flex-col lg:justify-between lg:p-10">
     <div aria-hidden="true" className="pointer-events-none absolute inset-0">
       <div className="bg-grid absolute inset-0 opacity-70" />
       <div className="bg-primary/10 absolute -top-32 -left-24 size-96 rounded-full blur-3xl" />
@@ -147,7 +147,7 @@ const LoginPage = () => {
     <div className="bg-background min-h-svh lg:grid lg:grid-cols-[1.05fr_1fr]">
       <BrandPanel />
 
-      <div className="flex min-h-svh flex-col lg:justify-center lg:px-10">
+      <div className="pt-safe flex min-h-svh flex-col lg:justify-center lg:px-10">
         <div className="border-border flex h-14 shrink-0 items-center gap-2.5 border-b px-4 lg:hidden">
           <span className="bg-primary text-primary-foreground grid size-8 shrink-0 place-items-center rounded-lg">
             <HeartPulseIcon className="size-4" strokeWidth={2.1} />

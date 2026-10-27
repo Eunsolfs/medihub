@@ -22,6 +22,7 @@ import { Button } from "@medihub/ui/components/button";
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from "@medihub/ui/components/card";
@@ -216,6 +217,51 @@ const SessionDetailPage = () => {
               </span>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>课程安排</CardTitle>
+          {session.courses.length > 0 ? (
+            <CardDescription>
+              共 {session.courses.length} 门课程
+            </CardDescription>
+          ) : null}
+        </CardHeader>
+        <CardContent>
+          {session.courses.length === 0 ? (
+            <p className="text-muted-foreground text-sm">暂无课程安排</p>
+          ) : (
+            <ol className="divide-border divide-y overflow-hidden rounded-lg border">
+              {session.courses.map((course, index) => (
+                <li
+                  className="grid gap-1 px-3 py-2.5 sm:grid-cols-[2rem_8rem_minmax(0,1fr)_8rem] sm:items-center sm:gap-3"
+                  key={course.id ?? `${course.title}-${index}`}
+                >
+                  <span className="text-muted-foreground text-xs tabular-nums">
+                    {index + 1}
+                  </span>
+                  <span className="text-muted-foreground text-xs tabular-nums">
+                    {course.startsAt
+                      ? formatDateTime(course.startsAt)
+                      : "时间待定"}
+                  </span>
+                  <span className="min-w-0 text-sm font-medium">
+                    {course.title}
+                    {course.note ? (
+                      <span className="text-muted-foreground ml-2 text-xs font-normal">
+                        {course.note}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="text-muted-foreground truncate text-xs">
+                    {course.speaker ?? "未指定主讲"}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          )}
         </CardContent>
       </Card>
 

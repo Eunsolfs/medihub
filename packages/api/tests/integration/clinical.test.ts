@@ -540,6 +540,40 @@ describe("帖子与学习会议的归属", () => {
   });
 });
 
+it("一次学习会议可以包含多门课程", async () => {
+  const author = await signUpDepartment("dept_admin");
+
+  const created = await author.client.learning.create({
+    courses: [
+      {
+        speaker: "张三",
+        startsAt: "2026-10-01T14:00:00+08:00",
+        title: "创面负压治疗",
+      },
+      { speaker: "李四", title: "皮瓣选择" },
+    ],
+    heldAt: new Date("2026-10-01"),
+    title: "十月业务学习",
+  });
+
+  expect(created.courses).toHaveLength(2);
+
+  const detail = await author.client.learning.get({ id: created.id });
+
+  expect(detail.courses.map((course) => course.title)).toEqual([
+    "创面负压治疗",
+    "皮瓣选择",
+  ]);
+
+  const updated = await author.client.learning.update({
+    courses: [{ title: "只保留一门" }],
+    id: created.id,
+  });
+
+  expect(updated.courses).toHaveLength(1);
+  expect(updated.courses[0]?.title).toBe("只保留一门");
+});
+
 describe("无科室账号", () => {
   it("只能浏览公开内容，不能发帖或开会", async () => {
     const visitor = await signUp();

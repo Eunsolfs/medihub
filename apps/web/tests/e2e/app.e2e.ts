@@ -1,7 +1,12 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
-import { createPatient, signInThroughUi, signUp } from "../support/api.ts";
+import {
+  createPatient,
+  fillCaptcha,
+  signInThroughUi,
+  signUp,
+} from "../support/api.ts";
 
 const visit = async (page: Page, path: string) => {
   await page.goto(path, { waitUntil: "networkidle" });
@@ -60,6 +65,7 @@ test("a wrong password is rejected", async ({ page }) => {
   await visit(page, "/login");
   await page.getByLabel("邮箱").fill(email);
   await page.getByLabel("密码").fill("wrong-password");
+  await fillCaptcha(page);
   await page.getByRole("button", { name: "登录", exact: true }).click();
 
   await expect(page.getByText("邮箱或密码不正确")).toBeVisible();

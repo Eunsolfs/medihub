@@ -12,8 +12,18 @@ import type { LucideIcon } from "lucide-react";
 
 import { isAdminRole, isOrglessRole } from "#src/components/app-shell/roles.ts";
 
+export type NavHref =
+  | "/dashboard"
+  | "/patients"
+  | "/library"
+  | "/posts"
+  | "/sessions"
+  | "/exports"
+  | "/admin"
+  | "/me";
+
 export interface NavItem {
-  href: string;
+  href: NavHref;
   label: string;
   description: string;
   icon: LucideIcon;

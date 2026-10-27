@@ -1,4 +1,4 @@
-import { useRouterState } from "@tanstack/react-router";
+import { Link, useRouterState } from "@tanstack/react-router";
 import { HardDriveIcon, PanelLeftIcon } from "lucide-react";
 import { useState } from "react";
 
@@ -42,7 +42,7 @@ export const SidebarNav = ({ role, onNavigate }: SidebarNavProps) => {
             const active = isNavActive(pathname, item.href);
 
             return (
-              <a
+              <Link
                 aria-current={active ? "page" : undefined}
                 className={cn(
                   "flex min-h-11 items-center gap-2.5 rounded-lg px-2.5 text-sm transition-colors",
@@ -50,9 +50,9 @@ export const SidebarNav = ({ role, onNavigate }: SidebarNavProps) => {
                     ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                     : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
                 )}
-                href={item.href}
                 key={item.href}
                 onClick={onNavigate}
+                to={item.href}
               >
                 <Icon
                   className={cn(
@@ -61,7 +61,7 @@ export const SidebarNav = ({ role, onNavigate }: SidebarNavProps) => {
                   )}
                 />
                 <span className="truncate">{item.label}</span>
-              </a>
+              </Link>
             );
           })}
         </div>
@@ -72,9 +72,9 @@ export const SidebarNav = ({ role, onNavigate }: SidebarNavProps) => {
 
 /** 存储配额入口：数据由系统管理页提供，外壳只负责入口位置与信息层级。 */
 const StorageEntry = () => (
-  <a
+  <Link
     className="hover:bg-sidebar-accent/60 border-sidebar-border flex items-start gap-2.5 rounded-lg border px-2.5 py-2 transition-colors"
-    href="/admin"
+    to="/admin"
   >
     <span
       aria-hidden="true"
@@ -90,7 +90,7 @@ const StorageEntry = () => (
         管理科室存储空间
       </span>
     </span>
-  </a>
+  </Link>
 );
 
 interface SidebarProps {
@@ -98,7 +98,7 @@ interface SidebarProps {
 }
 
 export const DesktopSidebar = ({ role }: SidebarProps) => (
-  <aside className="bg-sidebar text-sidebar-foreground border-sidebar-border fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r lg:flex">
+  <aside className="bg-sidebar text-sidebar-foreground border-sidebar-border pt-safe pb-safe fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r lg:flex">
     <div className="border-sidebar-border flex h-14 shrink-0 items-center border-b px-4">
       <Brand />
     </div>
@@ -125,7 +125,7 @@ export const IconRail = ({ role }: SidebarProps) => {
 
   return (
     <>
-      <aside className="bg-sidebar text-sidebar-foreground border-sidebar-border fixed inset-y-0 left-0 z-30 hidden w-17 flex-col items-center border-r md:flex lg:hidden">
+      <aside className="bg-sidebar text-sidebar-foreground border-sidebar-border pt-safe pb-safe fixed inset-y-0 left-0 z-30 hidden w-17 flex-col items-center border-r md:flex lg:hidden">
         <div className="border-sidebar-border flex h-14 shrink-0 items-center justify-center border-b">
           <Brand compact />
         </div>
@@ -138,7 +138,7 @@ export const IconRail = ({ role }: SidebarProps) => {
             const active = isNavActive(pathname, item.href);
 
             return (
-              <a
+              <Link
                 aria-current={active ? "page" : undefined}
                 aria-label={item.label}
                 className={cn(
@@ -147,12 +147,12 @@ export const IconRail = ({ role }: SidebarProps) => {
                     ? "bg-sidebar-accent text-primary"
                     : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
                 )}
-                href={item.href}
                 key={item.href}
                 title={item.label}
+                to={item.href}
               >
                 <Icon className="size-5" />
-              </a>
+              </Link>
             );
           })}
         </nav>
@@ -173,7 +173,7 @@ export const IconRail = ({ role }: SidebarProps) => {
 
       <Sheet onOpenChange={setDrawerOpen} open={drawerOpen}>
         <SheetContent className="w-72" side="left" variant="flush">
-          <div className="border-sidebar-border flex h-14 shrink-0 items-center border-b px-4">
+          <div className="border-sidebar-border pt-safe flex min-h-14 shrink-0 items-center border-b px-4">
             <div className="sr-only">
               <SheetTitle>主导航</SheetTitle>
               <SheetDescription>科室资料、会议与系统管理入口</SheetDescription>
@@ -188,7 +188,7 @@ export const IconRail = ({ role }: SidebarProps) => {
               role={role}
             />
           </div>
-          <div className="border-sidebar-border grid shrink-0 gap-2 border-t p-3">
+          <div className="border-sidebar-border pb-safe-3 grid shrink-0 gap-2 border-t px-3 pt-3">
             {isAdminRole(role) ? <StorageEntry /> : null}
             <UserMenu variant="sidebar" />
           </div>

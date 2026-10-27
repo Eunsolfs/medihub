@@ -11,6 +11,7 @@ import { MobileHeader } from "#src/components/app-shell/mobile-header.tsx";
 import { MobileTabBar } from "#src/components/app-shell/mobile-tab-bar.tsx";
 import { getSessionRole } from "#src/components/app-shell/roles.ts";
 import { SearchPalette } from "#src/components/app-shell/search-palette.tsx";
+import { useNativeBackButton } from "#src/lib/native-back.ts";
 
 interface AppShellProps {
   children: ReactNode;
@@ -20,6 +21,7 @@ export const AppShell = ({ children }: AppShellProps) => {
   const { session } = useRouteContext({ from: "__root__" });
   const role = getSessionRole(session);
   const [searchOpen, setSearchOpen] = useState(false);
+  useNativeBackButton();
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -47,7 +49,7 @@ export const AppShell = ({ children }: AppShellProps) => {
       <MobileHeader onOpenSearch={openSearch} />
       <div className="md:pl-17 lg:pl-64">
         <AppTopbar onOpenSearch={openSearch} />
-        <main className="mx-auto w-full max-w-[1400px] px-4 py-6 pb-24 md:px-6 md:pb-6 lg:px-8 lg:py-8">
+        <main className="pb-safe-nav mx-auto w-full max-w-[1400px] px-4 pt-6 md:px-6 md:pt-6 md:pb-6 lg:px-8 lg:pt-8 lg:pb-8">
           {children}
         </main>
       </div>

@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useRouteContext, useRouter } from "@tanstack/react-router";
+import { Link, useRouteContext, useRouter } from "@tanstack/react-router";
 import {
   ChevronDownIcon,
   LogOutIcon,
@@ -109,12 +109,12 @@ export const UserMenu = ({ variant = "icon", className }: UserMenuProps) => {
           </DropdownMenuLabel>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem render={<a aria-label="我的资料" href="/me" />}>
+        <DropdownMenuItem render={<Link aria-label="我的资料" to="/me" />}>
           <UserRoundIcon />
           我的资料
         </DropdownMenuItem>
         {isAdminRole(role) ? (
-          <DropdownMenuItem render={<a aria-label="系统管理" href="/admin" />}>
+          <DropdownMenuItem render={<Link aria-label="系统管理" to="/admin" />}>
             <SettingsIcon />
             系统管理
           </DropdownMenuItem>

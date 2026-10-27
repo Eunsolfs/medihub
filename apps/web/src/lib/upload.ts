@@ -2,6 +2,7 @@
  * 媒体上传：`/api/files/upload` 走原始 body + x-file-name 头（不是 multipart），
  * 用 XHR 换取上传进度。所有调用方（上传按钮、拖拽区、表格另存新版本）都从这里走。
  */
+import { withBusyTask } from "#src/lib/activity.ts";
 import { scopeHeaders } from "#src/lib/org-scope-storage.ts";
 
 export interface UploadTarget {
@@ -129,6 +130,18 @@ const parseUploadedAsset = (value: unknown): UploadedAsset | null => {
   };
 };
 
+/** 非 JSON 响应时把正文压成一行，附在提示后方便定位是代理/网关还是服务端拒绝。 */
+const responseSnippet = (body: string) =>
+  body.replaceAll(/\s+/gu, " ").trim().slice(0, 120);
+
+const messageWithStatus = (message: string, status: number, body: string) => {
+  const snippet = responseSnippet(body);
+
+  return snippet
+    ? `${message}（HTTP ${status}）：${snippet}`
+    : `${message}（HTTP ${status}）`;
+};
+
 const messageOf = (status: number, body: string) => {
   try {
     const parsed: unknown = JSON.parse(body);
@@ -137,26 +150,30 @@ const messageOf = (status: number, body: string) => {
       return parsed.error;
     }
   } catch {
-    // 非 JSON 响应，按状态码给中文提示。
+    // 非 JSON 响应：保留状态码与正文片段，避免把真实原因误读成权限问题。
   }
 
   if (status === 401) {
-    return "登录已过期，请重新登录后再上传";
+    return messageWithStatus("登录已过期，请重新登录后再操作", status, body);
   }
 
   if (status === 403) {
-    return "没有上传权限";
+    return messageWithStatus("没有上传权限", status, body);
   }
 
   if (status === 413) {
-    return "文件超过服务器允许的上传大小";
+    return messageWithStatus("文件超过服务器允许的上传大小", status, body);
+  }
+
+  if (status === 507) {
+    return messageWithStatus("服务器存储空间不足", status, body);
   }
 
   if (status >= 500) {
-    return "服务器保存文件失败，请稍后重试";
+    return messageWithStatus("服务器保存文件失败，请稍后重试", status, body);
   }
 
-  return `上传失败（${status}）`;
+  return messageWithStatus("上传失败", status, body);
 };
 
 const abortError = () => {
@@ -166,7 +183,7 @@ const abortError = () => {
   return error;
 };
 
-export const uploadFile = async (
+const uploadFileImpl = async (
   file: File,
   target: UploadTarget,
   onProgress?: (percent: number) => void,
@@ -196,9 +213,11 @@ export const uploadFile = async (
       file.type || "application/octet-stream"
     );
 
-    // root 切换科室后，上传也要落到当前科室。
+    // root 切换科室后，上传也要落到当前科室；空作用域不发头，避免服务端收到空值。
     for (const [key, value] of Object.entries(scopeHeaders())) {
-      xhr.setRequestHeader(key, value);
+      if (value.trim()) {
+        xhr.setRequestHeader(key, value);
+      }
     }
 
     xhr.upload.addEventListener("progress", (event) => {
@@ -284,7 +303,7 @@ const parseReplacedAsset = (value: unknown): ReplacedAsset | null => {
  * 覆盖已有图片素材：POST 原始 body 到 `/api/files/:id/replace`。
  * 归属（患者/就诊/分期）沿用原素材，不产生新记录。
  */
-export const replaceFile = async (
+const replaceFileImpl = async (
   file: File,
   assetId: string,
   options: ReplaceFileOptions = {}
@@ -309,6 +328,8 @@ export const replaceFile = async (
     }
 
     xhr.open("POST", `/api/files/${encodeURIComponent(assetId)}/replace`);
+    // 同源请求的 XHR 默认就会带上会话 cookie（withCredentials 只影响跨域），
+    // 这里不设置 withCredentials，避免开发环境经 Vite 代理时产生额外的 CORS 语义。
     xhr.setRequestHeader("x-file-name", encodeURIComponent(file.name));
     xhr.setRequestHeader(
       "content-type",
@@ -323,9 +344,11 @@ export const replaceFile = async (
       xhr.setRequestHeader("x-asset-height", String(Math.round(height)));
     }
 
-    // root 切换科室后，覆盖请求也要落到当前科室。
+    // root 切换科室后，覆盖请求也要落到当前科室；空作用域不发头。
     for (const [key, value] of Object.entries(scopeHeaders())) {
-      xhr.setRequestHeader(key, value);
+      if (value.trim()) {
+        xhr.setRequestHeader(key, value);
+      }
     }
 
     xhr.upload.addEventListener("progress", (event) => {
@@ -408,3 +431,10 @@ export const uploadFiles = async (
 
   return uploaded;
 };
+
+export const uploadFile = async (...args: Parameters<typeof uploadFileImpl>) =>
+  await withBusyTask(async () => await uploadFileImpl(...args));
+
+export const replaceFile = async (
+  ...args: Parameters<typeof replaceFileImpl>
+) => await withBusyTask(async () => await replaceFileImpl(...args));

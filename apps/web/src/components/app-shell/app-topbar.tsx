@@ -50,23 +50,25 @@ interface AppTopbarProps {
 
 /** 平板及以上顶栏：面包屑 + 搜索入口 + 主题切换 + 用户菜单。 */
 export const AppTopbar = ({ onOpenSearch }: AppTopbarProps) => (
-  <header className="bg-background/85 sticky top-0 z-20 hidden h-14 items-center gap-4 border-b px-4 backdrop-blur-md md:flex lg:px-6">
-    <Breadcrumbs />
-    <div className="ml-auto flex items-center gap-1">
-      <button
-        className="text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring/50 border-input bg-background flex h-9 items-center gap-2 rounded-lg border px-2.5 text-sm transition-colors outline-none focus-visible:ring-3"
-        onClick={onOpenSearch}
-        type="button"
-      >
-        <SearchIcon aria-hidden="true" className="size-4" />
-        <span className="hidden lg:inline">搜索或跳转</span>
-        <kbd className="border-border bg-muted text-muted-foreground ml-1 hidden rounded border px-1 font-sans text-xs font-medium lg:inline">
-          Ctrl K
-        </kbd>
-      </button>
-      <OrgScopeSelect />
-      <ThemeMenu />
-      <UserMenu />
+  <header className="bg-background/85 pt-safe sticky top-0 z-20 hidden border-b backdrop-blur-md md:block">
+    <div className="flex h-14 items-center gap-4 px-4 lg:px-6">
+      <Breadcrumbs />
+      <div className="ml-auto flex items-center gap-1">
+        <button
+          className="text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring/50 border-input bg-background flex h-9 items-center gap-2 rounded-lg border px-2.5 text-sm transition-colors outline-none focus-visible:ring-3"
+          onClick={onOpenSearch}
+          type="button"
+        >
+          <SearchIcon aria-hidden="true" className="size-4" />
+          <span className="hidden lg:inline">搜索或跳转</span>
+          <kbd className="border-border bg-muted text-muted-foreground ml-1 hidden rounded border px-1 font-sans text-xs font-medium lg:inline">
+            Ctrl K
+          </kbd>
+        </button>
+        <OrgScopeSelect />
+        <ThemeMenu />
+        <UserMenu />
+      </div>
     </div>
   </header>
 );

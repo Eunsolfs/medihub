@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { HeartPulseIcon } from "lucide-react";
 
 import { cn } from "@medihub/ui/lib/utils";
@@ -8,13 +9,13 @@ interface BrandProps {
 }
 
 export const Brand = ({ compact = false, className }: BrandProps) => (
-  <a
+  <Link
     aria-label="医档通工作台"
     className={cn(
       "focus-visible:ring-ring/50 group flex items-center gap-2.5 rounded-lg outline-none focus-visible:ring-3",
       className
     )}
-    href="/dashboard"
+    to="/dashboard"
   >
     <span
       aria-hidden="true"
@@ -30,5 +31,5 @@ export const Brand = ({ compact = false, className }: BrandProps) => (
         </span>
       </span>
     )}
-  </a>
+  </Link>
 );

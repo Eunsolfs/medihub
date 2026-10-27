@@ -1,3 +1,4 @@
+import { Link, useNavigate } from "@tanstack/react-router";
 import { CornerDownLeftIcon, SearchIcon } from "lucide-react";
 import { useState } from "react";
 
@@ -25,6 +26,7 @@ export const SearchPalette = ({
   onOpenChange,
   role,
 }: SearchPaletteProps) => {
+  const navigate = useNavigate();
   const [query, setQuery] = useState("");
 
   const keyword = query.trim().toLowerCase();
@@ -62,7 +64,7 @@ export const SearchPalette = ({
             event.preventDefault();
 
             if (firstMatch) {
-              window.location.href = firstMatch.item.href;
+              void navigate({ to: firstMatch.item.href });
             }
           }}
         >
@@ -95,12 +97,12 @@ export const SearchPalette = ({
 
                 return (
                   <li key={item.href}>
-                    <a
+                    <Link
                       className="hover:bg-muted focus-visible:bg-muted flex min-h-11 items-center gap-2.5 rounded-lg px-2.5 text-sm outline-none"
-                      href={item.href}
                       onClick={() => {
                         onOpenChange(false);
                       }}
+                      to={item.href}
                     >
                       <Icon
                         aria-hidden="true"
@@ -114,7 +116,7 @@ export const SearchPalette = ({
                         aria-hidden="true"
                         className="text-muted-foreground/60 size-3.5 shrink-0"
                       />
-                    </a>
+                    </Link>
                   </li>
                 );
               })}

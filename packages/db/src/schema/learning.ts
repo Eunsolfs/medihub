@@ -11,6 +11,15 @@ import {
 } from "#src/schema/common.ts";
 import { organization } from "#src/schema/organization.ts";
 
+export interface LearningCourse {
+  id: string;
+  title: string;
+  speaker?: string | null;
+  /** ISO 时间字符串；界面按本地时间展示。 */
+  startsAt?: string | null;
+  note?: string | null;
+}
+
 export const learningSessionKind = [
   "lecture",
   "meeting",
@@ -33,6 +42,11 @@ export const learningSession = snakeCase.table(
     location: text(),
     speaker: text(),
     description: text(),
+    /** 一次会议可包含多门课程（不同主讲/时间），按数组顺序展示。 */
+    courses: text({ mode: "json" })
+      .$type<LearningCourse[]>()
+      .notNull()
+      .default(sql`'[]'`),
     tags: tagsColumn(),
     /** 可见范围与教学帖一致（private / org / logged_in / selected / public）。 */
     visibility: text({ enum: shareVisibility }).notNull().default("org"),

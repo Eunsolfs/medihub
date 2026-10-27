@@ -195,13 +195,32 @@
   }
 }
 
-/* 安全区留白：固定底栏与底部弹层使用（iOS 手势区） */
+/*
+ * 安全区：Android 15 强制 edge-to-edge 后，WebView 内容会顶到状态栏/手势条下面。
+ * 统一收敛到两个变量，普通浏览器里 env() 为 0，不产生额外留白。
+ */
+:root {
+  --app-safe-top: env(safe-area-inset-top, 0px);
+  --app-safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* 顶部安全区：由顶栏自己吸收，背景随顶栏一起铺到状态栏下面（不留白条） */
+@utility pt-safe {
+  padding-top: var(--app-safe-top);
+}
+
+/* 底部安全区：固定底栏与底部弹层使用 */
 @utility pb-safe {
-  padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: var(--app-safe-bottom);
 }
 
 @utility pb-safe-3 {
-  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  padding-bottom: max(0.75rem, var(--app-safe-bottom));
+}
+
+/* 移动端内容底部让位：底部标签栏 56px + 手势区 */
+@utility pb-safe-nav {
+  padding-bottom: calc(6rem + var(--app-safe-bottom));
 }
 
 /* 品牌区网格纹理（登录页左侧装饰层） */

@@ -1,0 +1,1 @@
+ALTER TABLE `learning_session` ADD `courses` text DEFAULT '[]' NOT NULL;
