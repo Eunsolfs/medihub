@@ -5,6 +5,7 @@ import { ChevronRightIcon, InfoIcon, PencilIcon, PlusIcon } from "lucide-react";
 import { Suspense, useEffect, useRef, useState } from "react";
 
 import { Button } from "@medihub/ui/components/button";
+import { Checkbox } from "@medihub/ui/components/checkbox";
 import { Input } from "@medihub/ui/components/input";
 import {
   Select,
@@ -26,6 +27,8 @@ import { PaginationBar } from "#src/components/app-shell/ui/pagination-bar.tsx";
 import { SkeletonTable } from "#src/components/app-shell/ui/skeletons.tsx";
 import { describePatient, pageSize } from "#src/components/patients/display.ts";
 import { PatientsOrgRequired } from "#src/components/patients/org-required.tsx";
+import { PatientBulkBar } from "#src/components/patients/patient-bulk-bar.tsx";
+import { PatientBulkDeleteDialog } from "#src/components/patients/patient-bulk-delete-dialog.tsx";
 import { PatientFormDialog } from "#src/components/patients/patient-form-dialog.tsx";
 import { PatientStatusBadge } from "#src/components/patients/patient-status-badge.tsx";
 import { PatientsErrorState } from "#src/components/patients/patients-error-state.tsx";
@@ -113,29 +116,62 @@ const patientListOptions = (filters: PatientSearch) =>
     },
   });
 
+/** 列表页多选的选中态与操作，供列定义与批量条共用。 */
+interface PatientSelection {
+  selectedIds: readonly string[];
+  allSelected: boolean;
+  someSelected: boolean;
+  onToggle: (patientId: string) => void;
+  onToggleAll: () => void;
+}
+
 const buildPatientColumns = (options: {
   onEdit: (patientId: string) => void;
+  selection: PatientSelection;
 }): readonly DataTableColumn<PatientListItem>[] => [
   {
     cell: (row) => (
-      <Link
-        className="group flex w-full min-w-0 items-center justify-between gap-2"
-        params={{ patientId: row.id }}
-        to="/patients/$patientId"
-      >
-        <span className="grid min-w-0 gap-0.5">
-          <span className="font-medium group-hover:underline">{row.name}</span>
-          <span className="text-muted-foreground text-xs">
-            {describePatient(row.gender, row.birthDate)}
-          </span>
-        </span>
-        <ChevronRightIcon
-          aria-hidden="true"
-          className="text-muted-foreground size-4 shrink-0"
+      <div className="flex w-full min-w-0 items-center gap-2.5">
+        <Checkbox
+          aria-label={`选择 ${row.name}`}
+          checked={options.selection.selectedIds.includes(row.id)}
+          onCheckedChange={() => {
+            options.selection.onToggle(row.id);
+          }}
         />
-      </Link>
+        <Link
+          className="group flex min-w-0 flex-1 items-center justify-between gap-2"
+          params={{ patientId: row.id }}
+          to="/patients/$patientId"
+        >
+          <span className="grid min-w-0 gap-0.5">
+            <span className="font-medium group-hover:underline">
+              {row.name}
+            </span>
+            <span className="text-muted-foreground text-xs">
+              {describePatient(row.gender, row.birthDate)}
+            </span>
+          </span>
+          <ChevronRightIcon
+            aria-hidden="true"
+            className="text-muted-foreground size-4 shrink-0"
+          />
+        </Link>
+      </div>
     ),
-    header: "患者",
+    header: (
+      <span className="flex items-center gap-2.5">
+        <Checkbox
+          aria-label="全选本页"
+          checked={options.selection.allSelected}
+          indeterminate={options.selection.someSelected}
+          onCheckedChange={() => {
+            options.selection.onToggleAll();
+          }}
+        />
+        患者
+      </span>
+    ),
     key: "name",
   },
   {
@@ -259,7 +295,37 @@ const PatientTable = ({
   isAdmin: boolean;
 }) => {
   const { data } = useSuspenseQuery(patientListOptions(search));
-  const columns = buildPatientColumns({ onEdit });
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+
+  const pageIds = data.items.map((row) => row.id);
+
+  const allSelected =
+    pageIds.length > 0 && pageIds.every((id) => selectedIds.includes(id));
+
+  const someSelected = selectedIds.length > 0 && !allSelected;
+
+  const selection: PatientSelection = {
+    allSelected,
+    onToggle: (patientId) => {
+      setSelectedIds((previous) =>
+        previous.includes(patientId)
+          ? previous.filter((id) => id !== patientId)
+          : [...previous, patientId]
+      );
+    },
+    onToggleAll: () => {
+      setSelectedIds(allSelected ? [] : pageIds);
+    },
+    selectedIds,
+    someSelected,
+  };
+
+  const clearSelection = () => {
+    setSelectedIds([]);
+  };
+
+  const columns = buildPatientColumns({ onEdit, selection });
 
   const filtered =
     search.q !== "" || search.status !== "all" || search.tag !== "";
@@ -291,102 +357,132 @@ const PatientTable = ({
   })();
 
   return (
-    <DataTableShell
-      actions={
-        <div className="flex items-center gap-2">
-          <Select
-            items={sortOptions}
-            onValueChange={(value) => {
-              if (value) {
-                onChange({ page: 1, sort: value });
-              }
+    <>
+      <DataTableShell
+        actions={
+          selectedIds.length > 0 ? null : (
+            <div className="flex items-center gap-2">
+              <Select
+                items={sortOptions}
+                onValueChange={(value) => {
+                  if (value) {
+                    onChange({ page: 1, sort: value });
+                  }
+                }}
+                value={search.sort}
+              >
+                <SelectTrigger aria-label="排序" className="w-32" size="sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {sortOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )
+        }
+        columns={columns}
+        emptyState={
+          <EmptyState
+            action={
+              <Button onClick={onCreate} size="sm">
+                <PlusIcon />
+                新建患者
+              </Button>
+            }
+            description={emptyState.description}
+            title={emptyState.title}
+          />
+        }
+        footer={
+          <PaginationBar
+            onPageChange={(page) => {
+              onChange({ page });
             }}
-            value={search.sort}
-          >
-            <SelectTrigger aria-label="排序" className="w-32" size="sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {sortOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      }
-      columns={columns}
-      emptyState={
-        <EmptyState
-          action={
-            <Button onClick={onCreate} size="sm">
-              <PlusIcon />
-              新建患者
-            </Button>
-          }
-          description={emptyState.description}
-          title={emptyState.title}
-        />
-      }
-      footer={
-        <PaginationBar
-          onPageChange={(page) => {
-            onChange({ page });
-          }}
-          page={data.page}
-          pageSize={data.pageSize}
-          total={data.total}
-        />
-      }
-      rowKey={(row) => row.id}
-      rows={data.items}
-      toolbar={
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-          <SearchBox onChange={onChange} search={search} />
-          <fieldset className="bg-muted inline-flex w-fit min-w-0 flex-wrap items-center rounded-lg p-0.5">
-            <legend className="sr-only">按状态筛选</legend>
-            {statusFilters.map((filter) => {
-              const active = search.status === filter.value;
+            page={data.page}
+            pageSize={data.pageSize}
+            total={data.total}
+          />
+        }
+        rowKey={(row) => row.id}
+        rows={data.items}
+        toolbar={
+          selectedIds.length > 0 ? (
+            <PatientBulkBar
+              allSelected={allSelected}
+              onClear={clearSelection}
+              onRequestDelete={() => {
+                setDeleteOpen(true);
+              }}
+              onSelectAll={selection.onToggleAll}
+              selectedIds={selectedIds}
+            />
+          ) : (
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+              <SearchBox onChange={onChange} search={search} />
+              <fieldset className="bg-muted inline-flex w-fit min-w-0 flex-wrap items-center rounded-lg p-0.5">
+                <legend className="sr-only">按状态筛选</legend>
+                {statusFilters.map((filter) => {
+                  const active = search.status === filter.value;
 
-              return (
-                <Button
-                  aria-pressed={active}
-                  key={filter.value}
-                  onClick={() => {
-                    onChange({ page: 1, status: filter.value });
-                  }}
+                  return (
+                    <Button
+                      aria-pressed={active}
+                      key={filter.value}
+                      onClick={() => {
+                        onChange({ page: 1, status: filter.value });
+                      }}
+                      size="sm"
+                      variant={active ? "secondary" : "ghost"}
+                    >
+                      {filter.label}
+                    </Button>
+                  );
+                })}
+              </fieldset>
+              <Select
+                items={tagOptions}
+                onValueChange={(value) => {
+                  if (value !== null) {
+                    onChange({ page: 1, tag: value });
+                  }
+                }}
+                value={search.tag}
+              >
+                <SelectTrigger
+                  aria-label="按标签筛选"
+                  className="w-28"
                   size="sm"
-                  variant={active ? "secondary" : "ghost"}
                 >
-                  {filter.label}
-                </Button>
-              );
-            })}
-          </fieldset>
-          <Select
-            items={tagOptions}
-            onValueChange={(value) => {
-              if (value !== null) {
-                onChange({ page: 1, tag: value });
-              }
-            }}
-            value={search.tag}
-          >
-            <SelectTrigger aria-label="按标签筛选" className="w-28" size="sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {tagOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      }
-    />
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {tagOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )
+        }
+      />
+
+      {deleteOpen ? (
+        <PatientBulkDeleteDialog
+          ids={selectedIds}
+          onClose={() => {
+            setDeleteOpen(false);
+          }}
+          onDeleted={clearSelection}
+        />
+      ) : null}
+    </>
   );
 };
 
@@ -464,6 +560,8 @@ const PatientsPageContent = () => {
       <Suspense fallback={<SkeletonTable />}>
         <PatientTable
           isAdmin={viewer.isAdmin}
+          // 翻页 / 筛选 / 排序变化时重置多选（选择集合只保留当前页）。
+          key={`${search.page}|${search.q}|${search.sort}|${search.status}|${search.tag}`}
           onChange={updateSearch}
           onCreate={() => {
             setCreateOpen(true);

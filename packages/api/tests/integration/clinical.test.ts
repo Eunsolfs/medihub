@@ -574,6 +574,39 @@ it("一次学习会议可以包含多门课程", async () => {
   expect(updated.courses[0]?.title).toBe("只保留一门");
 });
 
+it("批量修改状态、统计与删除患者", async () => {
+  const admin = await signUpDepartment("dept_admin");
+
+  const first = await admin.client.patients.create({ name: "批量患者 A" });
+  const second = await admin.client.patients.create({ name: "批量患者 B" });
+
+  const updated = await admin.client.patients.bulkStatus({
+    ids: [first.id, second.id],
+    status: "follow_up",
+  });
+
+  expect(updated.updated).toBe(2);
+
+  const summary = await admin.client.patients.batchSummary({
+    ids: [first.id, second.id],
+  });
+
+  expect(summary.totals.patientCount).toBe(2);
+  expect(summary.totals.admissionCount).toBe(0);
+
+  const deleted = await admin.client.patients.bulkDelete({
+    deleteFiles: false,
+    ids: [first.id],
+  });
+
+  expect(deleted.deleted).toBe(1);
+
+  await expect(admin.client.patients.get({ id: first.id })).rejects.toThrow();
+  await expect(
+    admin.client.patients.get({ id: second.id })
+  ).resolves.toBeTruthy();
+});
+
 describe("无科室账号", () => {
   it("只能浏览公开内容，不能发帖或开会", async () => {
     const visitor = await signUp();
