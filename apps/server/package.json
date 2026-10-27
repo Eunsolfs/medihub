@@ -1,6 +1,6 @@
 {
   "name": "@medihub/server",
-  "version": "1.9.1",
+  "version": "1.9.2",
   "private": true,
   "type": "module",
   "imports": {
@@ -11,7 +11,8 @@
     "build": "vp pack && node scripts/copy-spa.mjs",
     "start": "node --env-file-if-exists=.env dist/index.mjs",
     "db:migrate": "node --env-file-if-exists=.env src/migrate.ts",
-    "seed": "node --env-file-if-exists=.env src/seed.ts"
+    "seed": "node --env-file-if-exists=.env src/seed.ts",
+    "reset-password": "node --env-file-if-exists=.env src/reset-password.ts"
   },
   "dependencies": {
     "@hono/node-server": "catalog:",

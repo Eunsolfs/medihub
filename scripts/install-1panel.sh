@@ -208,6 +208,8 @@ done
 [[ $EUID -eq 0 ]] || fail "请用 root 或 sudo 运行：sudo bash $0"
 [[ "$DRY_RUN" == "true" ]] || command -v systemctl >/dev/null || fail "未找到 systemd"
 SYSTEMCTL_BIN="$(command -v systemctl 2>/dev/null || echo /usr/bin/systemctl)"
+SERVER_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
+[[ -n "$SERVER_IP" ]] || SERVER_IP="127.0.0.1"
 [[ "$DIR" == /* && "$DIR" != "/" ]] || fail "--dir 必须是绝对路径，且不能是 /"
 
 # 参数校验：早失败比装到一半失败好。
@@ -422,6 +424,21 @@ set_env_kv() {
 
 write_env() {
   local env_file="$DIR/apps/server/.env"
+  local url="${SITE_URL:-http://127.0.0.1:$APP_PORT}"
+  local site_host="" TRUSTED_ORIGINS=""
+
+  if [[ -n "$SITE_URL" ]]; then
+    site_host="${SITE_URL#*://}"
+    site_host="${site_host%%/*}"
+  fi
+  TRUSTED_ORIGINS="http://127.0.0.1:$APP_PORT,http://$SERVER_IP:$APP_PORT"
+  # HTTPS 站点不额外信任 HTTP 域名，避免降级；初始化阶段可用 IP:端口 访问。
+  if [[ -n "$site_host" && "$url" == http://* ]]; then
+    TRUSTED_ORIGINS+=",http://$site_host"
+    if [[ "$site_host" != *:* ]]; then
+      TRUSTED_ORIGINS+=",http://$site_host:$APP_PORT"
+    fi
+  fi
 
   if [[ -f "$env_file" ]]; then
     log "检测到现有 .env，保留密钥与已有配置，仅补齐缺失项"
@@ -432,8 +449,6 @@ write_env() {
     log "生成 $env_file"
     local secret
     secret="$(openssl rand -hex 32 2>/dev/null || head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-    local url="${SITE_URL:-http://127.0.0.1:$APP_PORT}"
-
     run mkdir -p "$DIR/apps/server"
     if [[ "$DRY_RUN" == "true" ]]; then
       printf '  + 写入 .env（BETTER_AUTH_URL=%s PORT=%s）\n' "$url" "$APP_PORT"
@@ -444,6 +459,7 @@ write_env() {
 # 由 scripts/install-1panel.sh 生成，可自行修改；修改后 systemctl restart $SERVICE_NAME
 BETTER_AUTH_SECRET="$secret"
 BETTER_AUTH_URL="$url"
+BETTER_AUTH_TRUSTED_ORIGINS="$TRUSTED_ORIGINS"
 DATABASE_URL="./local.db"
 PORT="$APP_PORT"
 STORAGE_ROOT="./storage"
@@ -475,8 +491,8 @@ EOF
   fi
 
   # 升级旧安装时补齐在线升级与访问地址等配置，避免手工改 .env。
-  local url="${SITE_URL:-http://127.0.0.1:$APP_PORT}"
   set_env_kv BETTER_AUTH_URL "$url" "$env_file"
+  set_env_kv BETTER_AUTH_TRUSTED_ORIGINS "$TRUSTED_ORIGINS" "$env_file"
   set_env_kv PORT "$APP_PORT" "$env_file"
   set_env_kv UPDATE_ENABLED "true" "$env_file"
   set_env_kv UPDATE_WORKDIR "$DIR" "$env_file"
@@ -800,6 +816,10 @@ main() {
 }
 
 main "$@"
+
+
+
+
 
 
 

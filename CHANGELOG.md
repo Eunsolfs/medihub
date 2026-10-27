@@ -2,6 +2,20 @@
 
 本项目从第一版起的所有对外变更。版本号遵循 `MAJOR.MINOR.PATCH`。
 
+## v1.9.2 — 2026-10-27
+
+### 修复：重装后新账号登录 invalid / 访问地址不一致
+
+- 安装脚本自动写入 `BETTER_AUTH_TRUSTED_ORIGINS`（localhost、服务器 IP、域名及其 HTTP 形式），
+  避免用 `http://IP:端口` 打开时被 Better Auth 以「Invalid origin」拒绝登录；
+- 登录页把 `Invalid origin` 映射成明确提示（当前地址与 BETTER_AUTH_URL 不一致），
+  不再笼统显示「邮箱或密码不正确」；
+- 新增账号运维脚本：`pnpm --filter @medihub/server reset-password`：
+  - 列出所有账号（`--list`）；
+  - 重置指定邮箱密码（不传密码则生成随机密码并打印）；
+  - 用于重装后忘记 `--seed` 随机密码、或账号不存在时快速排查。
+- 说明：已有部署需重跑安装脚本（或手动补 `BETTER_AUTH_TRUSTED_ORIGINS`）才会生效。
+
 ## v1.9.1 — 2026-10-27
 
 ### 修复：在线升级在「重启服务」阶段失败

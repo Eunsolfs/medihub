@@ -62,6 +62,10 @@ export const authErrorMessage = (mode: Mode, message: string): string => {
     return "请填写姓名";
   }
 
+  if (text.includes("invalid origin")) {
+    return "当前访问地址与系统配置不一致：请用安装时填写的域名访问，或把该地址加入 BETTER_AUTH_TRUSTED_ORIGINS 后重启服务";
+  }
+
   if (text.includes("验证码")) {
     return message;
   }
