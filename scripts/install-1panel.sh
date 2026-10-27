@@ -146,6 +146,10 @@ resolve_port() {
       return 0
     fi
 
+    if [[ "$UPDATE_MODE" == "true" ]]; then
+      fail "现有端口 $existing 被其他程序占用。请释放该端口，或用 --port 指定新端口（改端口后要同步更新 1Panel 反向代理）"
+    fi
+
     warn "现有端口 $existing 已被占用，改为自动选择"
   fi
 
@@ -752,9 +756,6 @@ main() {
   PHASE="授权在线升级"
   write_sudoers
 
-  PHASE="选择端口"
-  resolve_port
-
   local tag
   if [[ -n "$TAG" ]]; then
     tag="$TAG"
@@ -774,6 +775,9 @@ main() {
 
   PHASE="停止旧服务"
   stop_service_if_running
+
+  PHASE="选择端口"
+  resolve_port
 
   # 升级前留一份数据库备份（与在线升级共用 .updates/backups 约定）
   if [[ "$UPDATE_MODE" == "true" && -f "$DIR/apps/server/local.db" && "$DRY_RUN" != "true" ]]; then
@@ -816,6 +820,7 @@ main() {
 }
 
 main "$@"
+
 
 
 
