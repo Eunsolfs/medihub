@@ -327,7 +327,10 @@ const replaceFileImpl = async (
       xhr.abort();
     }
 
-    xhr.open("POST", `/api/files/${encodeURIComponent(assetId)}/replace`);
+    xhr.open(
+      "POST",
+      `/api/files/upload?replaceAssetId=${encodeURIComponent(assetId)}`
+    );
     // 同源请求的 XHR 默认就会带上会话 cookie（withCredentials 只影响跨域），
     // 这里不设置 withCredentials，避免开发环境经 Vite 代理时产生额外的 CORS 语义。
     xhr.setRequestHeader("x-file-name", encodeURIComponent(file.name));

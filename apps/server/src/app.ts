@@ -14,10 +14,32 @@ import { officeRoute } from "#src/routes/office.ts";
 
 const authHandler = async (c: Context) => await auth.handler(c.req.raw);
 
+/**
+ * 覆盖原图走 `/api/files/upload?replaceAssetId=...`：部分反向代理/WAF 会拦截
+ * `/replace` 路径，但上传路径是放行的。这里在服务端内部转给同一个处理逻辑。
+ */
+const replaceViaUpload = async (c: Context, next: () => Promise<void>) => {
+  const assetId = c.req.query("replaceAssetId");
+
+  if (!assetId) {
+    await next();
+
+    return;
+  }
+
+  const url = new URL(c.req.url);
+  // filesRoute 自身没有 /api/files 前缀，挂载点由外层 app 提供。
+  url.pathname = `/${encodeURIComponent(assetId)}/replace`;
+  url.search = "";
+
+  return await filesRoute.fetch(new Request(url, c.req.raw));
+};
+
 export const app = new Hono()
   .use(logger())
   .use(secureHeaders())
   .on(["GET", "POST"], "/api/auth/*", authHandler)
+  .use("/api/files/upload", replaceViaUpload)
   .route("/api/files", filesRoute)
   .route("/api/office", officeRoute)
   .route("/api/exports", exportsRoute)

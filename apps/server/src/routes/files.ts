@@ -671,3 +671,12 @@ export const filesRoute = new Hono()
       url: `/api/files/${updated.id}`,
     });
   });
+
+// 兼容部分反向代理/WAF 对 `/replace` 路径的拦截：与 replace 完全相同，
+// 只是路径不同；前端优先走这个地址。
+filesRoute.post("/:id/overwrite", async (c) => {
+  const url = new URL(c.req.url);
+  url.pathname = url.pathname.replace(/\/overwrite$/u, "/replace");
+
+  return await filesRoute.fetch(new Request(url, c.req.raw));
+});
