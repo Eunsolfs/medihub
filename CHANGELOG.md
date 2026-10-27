@@ -2,6 +2,15 @@
 
 本项目从第一版起的所有对外变更。版本号遵循 `MAJOR.MINOR.PATCH`。
 
+## v1.9.4 — 2026-10-27
+
+### 修复：命令行脚本从安装根目录运行会打开错误数据库
+
+- `DATABASE_URL` / `STORAGE_ROOT` 为相对路径时，改为以 `apps/server` 为基准解析，
+  不再依赖进程 cwd。这样 `reset-password`、`seed` 等脚本从 `/opt/medihub` 直接运行
+  也不会误建/误读 `/opt/medihub/local.db`（表现为 `no such table: user`）。
+- 服务端在 systemd 下行为不变（cwd 本来就是 apps/server）。
+
 ## v1.9.3 — 2026-10-27
 
 ### 修复：`--update` 会误判自己的端口被占用并改端口

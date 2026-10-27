@@ -1,6 +1,6 @@
 {
   "name": "@medihub/mobile",
-  "version": "1.9.3",
+  "version": "1.9.4",
   "private": true,
   "description": "医档通安卓壳（Capacitor）：加载线上站点，由 GitHub Actions 构建 APK",
   "type": "module",
