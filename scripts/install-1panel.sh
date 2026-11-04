@@ -224,8 +224,9 @@ done
 [[ $EUID -eq 0 ]] || fail "请用 root 或 sudo 运行：sudo bash $0"
 [[ "$DRY_RUN" == "true" ]] || command -v systemctl >/dev/null || fail "未找到 systemd"
 SYSTEMCTL_BIN="$(command -v systemctl 2>/dev/null || echo /usr/bin/systemctl)"
-SERVER_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
-[[ -n "$SERVER_IP" ]] || SERVER_IP="127.0.0.1"
+# 多网卡/多公网 IP 的服务器要全部加入可信来源，否则用第二个 IP 打开会 Invalid origin。
+SERVER_IPS="$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+(\.[0-9]+){3}$' | sort -u | tr '\n' ' ')"
+[[ -n "$SERVER_IPS" ]] || SERVER_IPS="127.0.0.1"
 [[ "$DIR" == /* && "$DIR" != "/" ]] || fail "--dir 必须是绝对路径，且不能是 /"
 
 if [[ -n "$USER_PORT" ]]; then
@@ -442,14 +443,23 @@ set_env_kv() {
 
 write_env() {
   local env_file="$DIR/apps/server/.env"
-  local url="${SITE_URL:-http://127.0.0.1:$APP_PORT}"
+  local existing_url=""
+  if [[ -f "$env_file" ]]; then
+    existing_url="$(sed -n 's/^BETTER_AUTH_URL="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' "$env_file" | head -n1)"
+  fi
+  # 升级时没有显式 --url 必须保留原 BETTER_AUTH_URL；否则会把线上域名重置成
+  # 127.0.0.1，导致更新后所有登录因 Origin 不一致失败。
+  local url="${SITE_URL:-${existing_url:-http://127.0.0.1:$APP_PORT}}"
   local site_host="" TRUSTED_ORIGINS=""
 
   if [[ -n "$SITE_URL" ]]; then
     site_host="${SITE_URL#*://}"
     site_host="${site_host%%/*}"
   fi
-  TRUSTED_ORIGINS="http://127.0.0.1:$APP_PORT,http://$SERVER_IP:$APP_PORT"
+  TRUSTED_ORIGINS="http://127.0.0.1:$APP_PORT,http://localhost:$APP_PORT"
+  for server_ip in $SERVER_IPS; do
+    TRUSTED_ORIGINS+=",http://$server_ip:$APP_PORT"
+  done
   # HTTPS 站点不额外信任 HTTP 域名，避免降级；初始化阶段可用 IP:端口 访问。
   if [[ -n "$site_host" && "$url" == http://* ]]; then
     TRUSTED_ORIGINS+=",http://$site_host"
@@ -583,7 +593,8 @@ purge_install() {
     fail "检测到数据库 $DIR/apps/server/local.db。确认要删除数据请加 --force"
   fi
 
-  if systemctl list-unit-files 2>/dev/null | grep -q "^$SERVICE_NAME.service"; then
+  if command -v systemctl >/dev/null 2>&1 &&
+    systemctl list-unit-files 2>/dev/null | grep -q "^$SERVICE_NAME.service"; then
     run systemctl stop "$SERVICE_NAME" || true
     run systemctl disable "$SERVICE_NAME" || true
     run rm -f "/etc/systemd/system/$SERVICE_NAME.service"
@@ -596,7 +607,11 @@ purge_install() {
     run userdel "$RUN_USER" 2>/dev/null || true
   fi
 
-  log "已清理 $DIR、服务与用户（如存在）。"
+  if [[ "$DRY_RUN" == "true" ]]; then
+    log "DRY-RUN：将清理 $DIR、服务与用户（如存在）。"
+  else
+    log "已清理 $DIR、服务与用户（如存在）。"
+  fi
 }
 
 migrate_database() {
