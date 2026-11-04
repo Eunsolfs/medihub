@@ -1,50 +1,299 @@
-# 1Panel 手工/进阶部署手册（v1.10.4）
+# MediHub 参考手册（安装器 · 手工部署 · 本地 Docker · v1.10.4）
 
-> **📌 大多数用户请先看 [1PANEL-FIRST-DEPLOY.md](./1PANEL-FIRST-DEPLOY.md)**
->
-> 那篇是首次部署主线（一键安装 + 反代 + HTTPS + `/install`），**照着做就能上线**。
-> 本文用于**不用一键脚本**或需要逐项控制的场景：
->
-> - 自定义安装目录、系统用户与权限（不用 `/opt/medihub`）
-> - 用 **Supervisor / PM2** 而不是 systemd 托管进程
-> - 手工配 Nginx/OpenResty 反代、证书、防火墙、真实 IP
-> - 逐项的备份/恢复、手工升级与回滚、完整的故障排查表、科室作用域
->
-> 安装器参数与行为参考见 [INSTALL-1PANEL.md](./INSTALL-1PANEL.md)；容器部署见 [DOCKER.md](./DOCKER.md)。
+**这是一本参考手册，不是入口。** 第一次部署看 [DEPLOY.md](./DEPLOY.md)；日常运维看 [OPERATIONS.md](./OPERATIONS.md)。
 
-本文面向一台 Linux 服务器，把 MediHub 以**单进程**方式部署在 1Panel 面板后面：1Panel 负责
-面板、OpenResty（Nginx）反向代理、证书、防火墙、计划任务与进程守护；MediHub 只监听
-一个本机端口（下文以 `127.0.0.1:3000` 举例），由 Nginx 以一个域名对外提供。
-
-> **版本与命令基线**：Node `24.22.1`、pnpm `12.15.0`（与仓库 `package.json` 的
-> `engines` / `devEngines` 一致）。1Panel 按社区版 v2 界面撰写；v1 的菜单位置在括号里注明。
+适合：要查安装器参数、要自定义目录/进程守护/反代、要手工部署、要用本地 Docker 或 GHCR 镜像。
 
 ## 目录
 
-1. [架构与端口](#1-架构与端口)
-2. [前置条件](#2-前置条件)
-3. [安装 1Panel](#3-安装-1panel)
-4. [安装 Node 24 与 pnpm 12](#4-安装-node-24-与-pnpm-12)
-5. [建目录、系统用户与代码](#5-建目录系统用户与代码)
-6. [环境变量 `apps/server/.env`](#6-环境变量-appsserverenv)
-7. [安装依赖、迁移、构建、初始化管理员](#7-安装依赖迁移构建初始化管理员)
-8. [进程守护（两套方案）](#8-进程守护两套方案)
-9. [Nginx 反向代理](#9-nginx-反向代理)
-10. [HTTPS 与强制跳转](#10-https-与强制跳转)
-11. [防火墙](#11-防火墙)
-12. [备份与恢复](#12-备份与恢复)
-13. [升级与回滚](#13-升级与回滚)
-14. [上线验收清单](#14-上线验收清单)
-15. [故障排查](#15-故障排查)
-16. [附录：与仓库现状的已知差异](#16-附录与仓库现状的已知差异)
-17. [科室作用域（`x-org-scope`）运维须知](#17-科室作用域x-org-scope运维须知)
+- [第一部分 安装器参考（`install-1panel.sh`）](#第一部分-安装器参考install-1panelsh)
+  - [怎么用（三步）](#怎么用三步)
+  - [常用参数](#常用参数)
+  - [OnlyOffice（已装好，稍后填参数）](#onlyoffice已装好稍后填参数)
+  - [日常升级](#日常升级)
+  - [脚本做了什么](#脚本做了什么)
+  - [常见问题](#常见问题)
+  - [账号与登录（参考）](#账号与登录参考)
+  - [卸载](#卸载)
+- [第二部分 手工 / 进阶部署（1Panel + systemd）](#第二部分-手工--进阶部署1panel--systemd)
+  - [1. 架构与端口](#1-架构与端口)
+  - [2. 前置条件](#2-前置条件)
+  - [3. 安装 1Panel](#3-安装-1panel)
+  - [4. 安装 Node 24 与 pnpm 12](#4-安装-node-24-与-pnpm-12)
+  - [5. 建目录、系统用户与代码](#5-建目录系统用户与代码)
+  - [6. 环境变量 `apps/server/.env`](#6-环境变量-appsserverenv)
+  - [7. 安装依赖、迁移、构建、初始化管理员](#7-安装依赖迁移构建初始化管理员)
+  - [8. 进程守护（两套方案）](#8-进程守护两套方案)
+  - [9. Nginx 反向代理](#9-nginx-反向代理)
+  - [10. HTTPS 与强制跳转](#10-https-与强制跳转)
+  - [11. 防火墙](#11-防火墙)
+  - [12. 备份与恢复](#12-备份与恢复)
+  - [13. 升级与回滚](#13-升级与回滚)
+  - [14. 上线验收清单](#14-上线验收清单)
+  - [15. 故障排查](#15-故障排查)
+  - [16. 附录：与仓库现状的已知差异](#16-附录与仓库现状的已知差异)
+  - [17. 科室作用域（`x-org-scope`）运维须知](#17-科室作用域x-org-scope运维须知)
+- [第三部分 本地 Docker / GHCR（手动 compose）](#第三部分-本地-docker--ghcr手动-compose)
+  - [快速开始](#快速开始)
+  - [换端口](#换端口)
+  - [确认版本 / 健康检查](#确认版本--健康检查)
+  - [数据持久化](#数据持久化)
+  - [环境变量](#环境变量)
+  - [重置密码](#重置密码)
+  - [从 GHCR 拉取镜像（可选）](#从-ghcr-拉取镜像可选)
+  - [能力边界](#能力边界)
+  - [常用命令](#常用命令)
+- [相关文档](#相关文档)
 
 ---
 
-## 1. 架构与端口
+## 第一部分 安装器参考（`install-1panel.sh`）
+
+> 第一次部署请先看 [DEPLOY.md](./DEPLOY.md)；本部分是**参数/行为/卸载参考**，以及手工与进阶部署。
+
+### 怎么用（三步）
+
+```bash
+# 1) 下载脚本（先看再跑）
+curl -fsSL https://raw.githubusercontent.com/Eunsolfs/medihub/main/scripts/install-1panel.sh -o install-medihub.sh
+
+# 2) 预览要做什么（不写盘、不下载源码包）
+sudo bash install-medihub.sh --url https://medihub.example.com --dry-run
+
+# 3) 正式安装（不传 --port 时自动挑 20000–29999 的空闲端口）
+sudo bash install-medihub.sh --url https://medihub.example.com
+```
+
+装完脚本会打印**监听端口**与 `/api/health` 地址，接着按
+[FIRST-DEPLOY §3–§6](DEPLOY.md#3-在-1panel-创建反向代理) 做反向代理、HTTPS、
+`/install` 建管理员、建第一个科室。
+
+> 也可以一条命令管道执行（不适合先审查脚本的场景）：
+> `curl -fsSL …/install-1panel.sh | sudo bash -s -- --url https://你的域名`
+
+### 常用参数
+
+| 参数                                       | 说明                                                                                         |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| `--dir /opt/medihub`                       | 安装目录（默认 `/opt/medihub`）                                                              |
+| `--url https://...`                        | 写入 `BETTER_AUTH_URL`，必须是浏览器访问地址                                                 |
+| `--port 3000`                              | API 端口，必须是 1–65535 的数字；默认自动选 20000–29999 的空闲端口；指定端口被占用会直接报错 |
+| `--tag v1.10.4`                            | 指定版本（默认取最新 Release）；也可以写 `vX.Y.Z`                                            |
+| `--user medihub`                           | 运行服务的系统用户（默认 `medihub`）                                                         |
+| `--update`                                 | 升级现有安装，保留 `.env`、SQLite、素材与升级备份                                            |
+| `--onlyoffice-url` / `--onlyoffice-secret` | OnlyOffice 地址与 JWT 密钥，可后填                                                           |
+| `--dry-run`                                | 只打印要执行的操作，不改系统                                                                 |
+| `--yes`                                    | 非交互确认                                                                                   |
+| `--version`                                | 打印安装脚本版本                                                                             |
+| `--purge`                                  | 清理一次失败/不再需要的安装（停服务、删目录与用户、删 sudoers 规则）                         |
+| `--force`                                  | 与 `--purge` 连用，允许连数据库一起删除                                                      |
+
+> v1.9.9 起：参数**缺值**会直接报「参数 X 缺少值」，不再是 unbound variable 之类的底层报错；
+> `--help` 会完整打印全部参数（包括 `--user`、`--dir` 等）。
+
+#### v1.9.x–v1.10.x 行为变化（老教程里容易踩的坑）
+
+| 版本    | 变化                                                                                                                                                              | 对运维的影响                                                             |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| v1.9.1  | 自动写 `/etc/sudoers.d/medihub-update`（`medihub` 免密 `systemctl restart medihub`）；systemd 单元加 `KillMode=process`                                           | 在线升级**不再被重启杀掉**；失败时能快速报「重启服务失败」而不是静默卡住 |
+| v1.9.2  | 自动生成 `BETTER_AUTH_TRUSTED_ORIGINS`（`http://127.0.0.1:<端口>`、`http://<服务器IP>:<端口>`；HTTP 站点额外加域名）                                              | 装完可以直接用 `IP:端口` 打开；用域名 + HTTPS 后仍要按反代章节补域名     |
+| v1.9.3  | **先停旧服务再选端口**；`--update` 不再误改端口；端口真被别的程序占用会**报错**而不是静默换端口                                                                   | 升级不会悄悄换端口导致反代 502；端口冲突时按提示释放端口或显式 `--port`  |
+| v1.9.4  | `DATABASE_URL` / `STORAGE_ROOT` 相对路径以 `apps/server` 为基准                                                                                                   | 命令行脚本可以从**任意 cwd** 运行，不再打开错误数据库                    |
+| v1.9.9  | 参数缺值报「参数 X 缺少值」；`--purge` 无论服务单元是否存在都清理 sudoers；用户/端口等参数校验更严                                                                | 失败/清理后不会留下「半套」权限规则                                      |
+| v1.10.0 | 移除 `--seed` 与全部演示数据：脚本**只建表、不建账号**；`--seed` 现在会直接报错说明已移除                                                                         | 装完必须打开 `/install` 创建管理员，再建第一个科室                       |
+| v1.10.1 | `--update` 未传 `--url` 时**保留原 `BETTER_AUTH_URL`**（不再把线上域名重置成本机地址）；`BETTER_AUTH_TRUSTED_ORIGINS` 自动包含 **服务器全部 IPv4** 与 `localhost` | 升级不会再把登录打回 403；多网卡/多 IP 机器用任意内网 IP 都能登录        |
+
+#### 安装失败 / 残留处理
+
+脚本是幂等的：**失败后修复原因，直接重跑同一条安装命令即可**，`.env`、数据库与素材不会被删除。
+脚本失败时会打印失败阶段，并尝试停掉半成品服务；临时目录会自动清理。
+
+先看是什么失败：
+
+```bash
+systemctl status medihub --no-pager
+journalctl -u medihub -n 100 --no-pager
+```
+
+常见残留与处理：
+
+```bash
+# 1) 源码目录不完整（例如 packages/storage 缺失）
+ls /opt/medihub/packages
+# 修复：重新下载最新安装脚本后重跑；不要手工删 node_modules
+
+# 2) 想彻底重来（会删数据库与素材！）
+sudo bash install-medihub.sh --purge --yes
+# 已有数据库时必须显式加 --force：
+sudo bash install-medihub.sh --purge --yes --force
+
+# 3) 只想保留数据、重装程序
+sudo bash install-medihub.sh --update --yes
+```
+
+> 旧版脚本有一个已修复的缺陷：同步代码时用小写 `storage` 当排除规则，会连
+> `packages/storage` 一起排除，导致构建报 `Cannot find package '@medihub/storage'`。
+> 升级到包含该修复的版本（v1.7.1+）后重跑即可。
+
+### OnlyOffice（已装好，稍后填参数）
+
+安装脚本不会改动你的 Document Server，只在 `.env` 里留了两个可选项：
+
+```ini
+ONLYOFFICE_URL="http://你的OnlyOffice地址:端口"
+ONLYOFFICE_JWT_SECRET="和 Document Server 里一致的 JWT 密钥"
+```
+
+填完执行 `systemctl restart medihub`，然后到「系统管理 → Office 集成」点「重新检测」，
+两项都显示「已配置」即可在桌面端在线编辑 Office 文档（手机端仅支持预览，属 OnlyOffice 授权限制）。
+
+> Document Server 与本站之间需要能互相访问：本站要能请求 OnlyOffice 的编辑接口，
+> OnlyOffice 也要能通过 `BETTER_AUTH_URL` 拉取文档。若两者不在同一台机器，
+> 请把 `ONLYOFFICE_URL` 填成 OnlyOffice 可访问、且本站也可访问的地址。
+
+#### 地址与密钥怎么找
+
+**Document Server 地址**：就是 OnlyOffice 自己的访问地址，不是医档通的地址。
+
+- 1Panel：「应用商店 → 已安装 → OnlyOffice」，详情里的「访问地址 / 端口」即是；
+  形如 `https://office.example.com` 或 `http://服务器IP:8080`，**不要带路径**。
+- 命令行（同一台机器）：
+
+  ```bash
+  docker ps --format '{{.Names}}\t{{.Ports}}' | grep -i onlyoffice
+  # 例如 0.0.0.0:8080->80/tcp，则地址是 http://服务器IP:8080
+  curl -fsS http://127.0.0.1:8080/healthcheck   # 返回 true 即可用
+  ```
+
+**JWT 密钥**：与 Document Server 的 `JWT_SECRET` 必须一致。
+
+- 1Panel：OnlyOffice 应用详情 →「环境变量 / 参数」，找 `JWT_SECRET`（安装时自动生成）；
+- 命令行：
+
+  ```bash
+  docker exec <onlyoffice容器名> env | grep -i jwt
+  ```
+
+- 也可以先留空：安装完成后到「系统管理 → Office 集成」看状态，再决定要不要配。
+
+**常见坑**：
+
+- 填了 `http://127.0.0.1:8080` 在**另一台机器**上不成立——OnlyOffice 和医档通不在同一容器/主机时，
+  必须填双方都能访问的地址；
+- 主站是 HTTPS、编辑器是 HTTP 时，浏览器会按混合内容拦截（白屏），需要给 OnlyOffice 也配 HTTPS；
+- 改完 `.env` 后必须 `systemctl restart medihub`，否则状态卡片仍显示「未配置」。
+
+### 日常升级
+
+- 界面：root 登录 → 系统管理 → 版本与升级 → 检查更新 → 升级（失败自动回滚）；
+- 命令行：`sudo bash install-medihub.sh --update`（保留数据，升级前自动备份数据库）。
+  **v1.10.1 起不传 `--url` 会保留原来的 `BETTER_AUTH_URL`**——只有换域名时才需要显式传
+  `--url https://新域名`，否则不要传（老版本会把它重置成本机地址，导致登录 403）。
+  注意：**命令行升级失败时不会自动回滚**，脚本会把升级前的数据库备份到
+  `.updates/backups/manual-<时间>/db.sqlite`，需要时手动恢复：
+
+  ```bash
+  sudo systemctl stop medihub
+  sudo cp /opt/medihub/.updates/backups/manual-<时间>/db.sqlite /opt/medihub/apps/server/local.db
+  sudo rm -rf /opt/medihub/apps/server/dist
+  sudo bash install-medihub.sh --update --tag <上一个版本>   # 重新铺回旧版本
+  ```
+
+  （完整自动回滚只在「系统管理 → 版本与升级」的在线升级里提供。）
+
+**升级失败怎么查**（v1.9.1+ 修了重启被杀的问题，先看状态文件再看日志）：
+
+```bash
+# 1) 在线升级/命令行升级的状态与日志
+sudo cat /opt/medihub/.updates/state.json | tail -40
+# 2) 服务日志
+sudo journalctl -u medihub -n 100 --no-pager
+# 3) 实在不行重跑 CLI（幂等，保留 .env / 数据库 / 素材）
+sudo bash install-medihub.sh --update --yes
+```
+
+升级与回滚细节见 [OPERATIONS.md](OPERATIONS.md)。
+
+> `--dry-run` 不会修改系统、不会下载源码包（但仍会执行一次 GitHub 版本查询）。
+> 先预览一遍再真跑：`sudo bash install-medihub.sh --url https://你的域名 --dry-run`。
+
+### 脚本做了什么
+
+1. 安装 `curl/tar/xz`（缺什么补什么）；
+2. 安装 Node.js 24 与 pnpm 12（已有且版本足够则跳过）；
+3. 创建系统用户 `medihub`；
+4. 写 `/etc/sudoers.d/medihub-update`：允许 `medihub` **免密** `systemctl restart medihub`
+   （在线升级执行器要用它重启服务；v1.9.1+）；
+5. 从 GitHub 下载目标版本源码包，解压到安装目录（保留 `.env`、`local.db`、`storage`、`.updates`）；
+6. 先停旧服务，再选端口（首次安装自动选 20000–29999；升级时沿用 `.env` 端口，被占则报错）；
+7. 生成/补齐 `.env`（随机 `BETTER_AUTH_SECRET`、`BETTER_AUTH_TRUSTED_ORIGINS`、
+   在线升级配置、OnlyOffice 占位）；相对路径以 `apps/server` 为基准（v1.9.4+）；
+8. `pnpm install --frozen-lockfile` + `pnpm run build`；
+9. 执行数据库迁移（只建表，**不写任何数据**；账号只能通过 `/install` 创建）；
+10. 写入 systemd 服务 `medihub.service`：`EnvironmentFile` + `WorkingDirectory=<dir>/apps/server` +
+    `Restart=always` + **`KillMode=process`**（重启时不杀在线升级执行器，v1.9.1+）；
+11. 启动并轮询 `/api/health`，失败时打印最近日志。
+
+### 常见问题
+
+| 现象                        | 处理                                                                                                                                                                                                                           |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 下载源码包失败              | 服务器访问 GitHub 受限；可先在能上网的机器下载 `tar.gz`，解压后手动 `--dir` 指向目录执行安装                                                                                                                                   |
+| `pnpm: command not found`   | 检查 `node -v` 是否 ≥24；脚本安装在 `/usr/local/bin`，确认 PATH 包含它                                                                                                                                                         |
+| 端口被占用                  | **首次安装**会自动换空闲端口；**`--update` 升级**时若原端口被占，脚本会**报错并要求你处理**（不静默换端口，避免反代失效）。先 `ss -lntp \| grep <端口>` 找到占用者，释放它或显式 `--port` 指定新端口（记得同步改 1Panel 反代） |
+| 健康检查失败                | `journalctl -u medihub -n 80 --no-pager` 看日志；常见是 `.env` 缺少 `BETTER_AUTH_SECRET`、端口被占                                                                                                                             |
+| 登录后 403 / Invalid origin | `BETTER_AUTH_URL` 必须与浏览器地址完全一致（含协议与端口）；用 `IP:端口` 访问时把该地址加进 `BETTER_AUTH_TRUSTED_ORIGINS`（逗号分隔）后重启服务                                                                                |
+| 登录提示「尝试过于频繁」    | v1.9.6+ 登录/注册/改密限流 10 次/分钟（按 IP，全局 120 次/分钟）；等一分钟再试                                                                                                                                                 |
+| OnlyOffice 编辑报错         | 检查 Document Server 与本站的双向可达性，以及 JWT 密钥是否一致                                                                                                                                                                 |
+
+### 账号与登录（参考）
+
+脚本**不会**创建任何账号（纯净版），站点处于「未初始化」状态——**完整步骤见
+[FIRST-DEPLOY §5–§6](DEPLOY.md#5-初始化第一个管理员)**，这里只列要点：
+
+1. 打开 `https://你的域名/install`（登录页也会显示「前往安装向导」）；
+2. 填超级管理员姓名 / 邮箱 / 密码（可选 OnlyOffice 参数）→「完成安装」→ 自动跳登录页；
+3. 登录后先到 **系统管理 → 科室** 新建第一个科室，否则创建不了患者/资料库/教学会议；
+4. 已有账号后 `/install` 接口返回 **409**，不会被用来重置管理员——忘记密码请用下面的命令。
+
+列账号 / 重置密码（在安装目录执行；v1.9.4+ 也可以从任意目录执行）：
+
+```bash
+# 方式一：包里的脚本（cwd 自动是 apps/server）
+pnpm --filter @medihub/server reset-password --list
+pnpm --filter @medihub/server reset-password <你的管理员邮箱> '新密码'
+
+# 方式二：直接跑 TS（Node 24 自带类型剥离）
+cd /opt/medihub/apps/server && node --env-file=.env src/reset-password.ts --list
+# 任意 cwd：
+node --env-file=/opt/medihub/apps/server/.env /opt/medihub/apps/server/src/reset-password.ts --list
+```
+
+不带密码时脚本会**随机生成并打印**；数据库还没迁移时会提示先执行 `pnpm run db:migrate`（不再直接抛裸 Drizzle 堆栈）。
+
+### 卸载
+
+```bash
+# 推荐：脚本自带清理（停服务、删目录与用户、删 /etc/sudoers.d/medihub-update）
+# 有数据库时必须加 --force；v1.9.9 起无论服务单元是否存在都会清理 sudoers 规则
+sudo bash install-medihub.sh --purge --yes --force
+```
+
+手工卸载：
+
+```bash
+sudo systemctl disable --now medihub
+sudo rm /etc/systemd/system/medihub.service
+sudo rm -f /etc/sudoers.d/medihub-update
+sudo rm -rf /opt/medihub   # 确认数据已备份
+```
+
+## 第二部分 手工 / 进阶部署（1Panel + systemd）
+
+### 1. 架构与端口
 
 > **端口从哪来**：本文的手工流程用 `PORT=3000` 举例。若你用
-> [INSTALL-1PANEL.md](./INSTALL-1PANEL.md) 的一键脚本安装，端口是脚本**自动挑选**的
+> [REFERENCE.md](REFERENCE.md) 的一键脚本安装，端口是脚本**自动挑选**的
 > （20000–29999 空闲端口）或你 `--port` 指定的值；反向代理目标必须以脚本打印的端口 /
 > `.env` 里的 `PORT` 为准（`grep '^PORT' /opt/medihub/apps/server/.env`）。
 
@@ -74,9 +323,9 @@
 
 ---
 
-## 2. 前置条件
+### 2. 前置条件
 
-### 2.1 服务器规格
+#### 2.1 服务器规格
 
 | 部署形态                                    | CPU      | 内存     | 磁盘      | 说明                                                                  |
 | ------------------------------------------- | -------- | -------- | --------- | --------------------------------------------------------------------- |
@@ -86,7 +335,7 @@
 
 存储容量按「原始素材体积 × 2」估算（备份另需一份）。
 
-### 2.2 系统与软件
+#### 2.2 系统与软件
 
 | 项目     | 要求                                                                               |
 | -------- | ---------------------------------------------------------------------------------- |
@@ -97,19 +346,19 @@
 | 反向代理 | 1Panel 自带的 OpenResty（不需要另装 Nginx）                                        |
 | 可选     | `git`、`sqlite3`（备份要用）、`libreoffice`（Office 转 PDF）、Docker（OnlyOffice） |
 
-### 2.3 端口
+#### 2.3 端口
 
-| 端口                   | 用途                                          | 对外                                            |
-| ---------------------- | --------------------------------------------- | ----------------------------------------------- |
-| 80                     | HTTP → HTTPS 跳转、Let's Encrypt HTTP-01 校验 | 是                                              |
-| 443                    | 站点 HTTPS                                    | 是                                              |
-| 面板端口（安装时自定） | 1Panel 管理界面                               | 建议只对固定 IP 开放                            |
-| 3000                   | MediHub server                                | **否**，只允许本机                              |
-| 8080 / 8443            | OnlyOffice（若部署）                          | 视方案而定，见 [ONLYOFFICE.md](./ONLYOFFICE.md) |
+| 端口                   | 用途                                          | 对外                                          |
+| ---------------------- | --------------------------------------------- | --------------------------------------------- |
+| 80                     | HTTP → HTTPS 跳转、Let's Encrypt HTTP-01 校验 | 是                                            |
+| 443                    | 站点 HTTPS                                    | 是                                            |
+| 面板端口（安装时自定） | 1Panel 管理界面                               | 建议只对固定 IP 开放                          |
+| 3000                   | MediHub server                                | **否**，只允许本机                            |
+| 8080 / 8443            | OnlyOffice（若部署）                          | 视方案而定，见 [ONLYOFFICE.md](ONLYOFFICE.md) |
 
 ---
 
-## 3. 安装 1Panel
+### 3. 安装 1Panel
 
 官方一键安装（需要联网）：
 
@@ -135,11 +384,11 @@ bash -c "$(curl -sSL https://resource.1panel.pro/v2/quick_start.sh)"
 
 ---
 
-## 4. 安装 Node 24 与 pnpm 12
+### 4. 安装 Node 24 与 pnpm 12
 
 两种做法，任选其一。**推荐方案 B**（版本可控、与仓库锁定版本一致），方案 A 适合只愿意在面板里点的人。
 
-### 方案 A：1Panel「运行环境 → Node.js」（图形化）
+#### 方案 A：1Panel「运行环境 → Node.js」（图形化）
 
 **界面：运行环境 → Node.js → 创建运行环境**（v1 在 `网站 → Node 环境`）。
 
@@ -154,7 +403,7 @@ bash -c "$(curl -sSL https://resource.1panel.pro/v2/quick_start.sh)"
   （字段名随面板版本不同，以面板显示为准）；
 - 或者干脆全部走方案 B，用「工具箱 → Supervisor」托管进程（§8 方案 A），效果完全等价。
 
-### 方案 B：官方 tar 包 + npm 安装 pnpm（推荐，可复制执行）
+#### 方案 B：官方 tar 包 + npm 安装 pnpm（推荐，可复制执行）
 
 ```bash
 # 1) 依赖
@@ -223,7 +472,7 @@ sudo dnf install -y curl xz git rsync sqlite ca-certificates
 
 ---
 
-## 5. 建目录、系统用户与代码
+### 5. 建目录、系统用户与代码
 
 约定：
 
@@ -269,9 +518,9 @@ sudo -u www -H git -C /opt/medihub log --oneline -1
 
 ---
 
-## 6. 环境变量 `apps/server/.env`
+### 6. 环境变量 `apps/server/.env`
 
-### 6.1 生成密钥
+#### 6.1 生成密钥
 
 ```bash
 openssl rand -hex 32
@@ -280,7 +529,7 @@ openssl rand -hex 32
 输出 64 位十六进制串，直接作为 `BETTER_AUTH_SECRET`。**它同时用于存储目标配置的 AES-256-GCM
 加密**（见 `apps/server/src/context.ts`），一旦更换，已入库的 NAS / S3 存储配置将无法解密，必须重新配置。
 
-### 6.2 变量清单
+#### 6.2 变量清单
 
 文件位置：`/opt/medihub/apps/server/.env`（`DATABASE_URL`、`STORAGE_ROOT` 等相对路径都以
 `apps/server` 为基准解析）。
@@ -303,7 +552,7 @@ openssl rand -hex 32
 > 在启动时报错，只在某个来源登录时才表现为 403。真正消费它的是 `packages/auth/src/index.ts`
 > （按英文逗号切分后并入 `trustedOrigins`）。上线前务必手工核对一遍。
 
-### 6.3 `.env` 全文示例
+#### 6.3 `.env` 全文示例
 
 ```bash
 # /opt/medihub/apps/server/.env
@@ -353,7 +602,7 @@ sudo chmod 600 /opt/medihub/apps/server/.env
 > `.gitignore` 已忽略 `.env`，`git pull` 不会覆盖它。
 > `apps/server/.env.example` 是模板，字段与上表一致。
 
-### 6.4 装 LibreOffice（可选，用于 Office 转 PDF）
+#### 6.4 装 LibreOffice（可选，用于 Office 转 PDF）
 
 ```bash
 # Ubuntu / Debian
@@ -371,7 +620,7 @@ sudo yum install -y libreoffice libreoffice-headless libreoffice-writer libreoff
 
 ---
 
-## 7. 安装依赖、迁移、构建、初始化管理员
+### 7. 安装依赖、迁移、构建、初始化管理员
 
 **全部命令以 `www` 用户、在 `/opt/medihub` 下执行**（用 root 装出来的 `node_modules` 与 dist
 会让 www 用户无法读取，是后面「502 / 权限」故障的常见原因）。
@@ -395,7 +644,7 @@ sudo -u www -H pnpm build
 ls -l /opt/medihub/apps/server/dist/public/index.html
 ```
 
-### 7.1 SPA 静态产物由构建自动复制
+#### 7.1 SPA 静态产物由构建自动复制
 
 `apps/server/src/index.ts` 只在 `dist/public` **存在**时才挂载静态服务：
 
@@ -433,7 +682,7 @@ curl -s -o /dev/null -w 'spa=%{http_code}\n' http://127.0.0.1:3000/patients
 > - 换用别的打包方式（自定义 Dockerfile、CI 里只跑 `vp pack`）时，记得仍然产出
 >   `apps/server/dist/public`，否则 `:3000` 上只有 API，访问 `/` 会 404。
 
-### 7.2 创建第一个管理员（必须）
+#### 7.2 创建第一个管理员（必须）
 
 纯净版安装后是**空库，没有任何账号**，所以必须走一次安装向导：
 
@@ -445,14 +694,14 @@ curl -s -o /dev/null -w 'spa=%{http_code}\n' http://127.0.0.1:3000/patients
    资料库 / 教学会议。
 
 向导只在「系统还没有任何账号」时可用；建好账号后该接口返回 **409**，不会被用来重置管理员。
-之后忘记密码，用 `reset-password`（见 [INSTALL-1PANEL.md](./INSTALL-1PANEL.md) 的「账号与登录」）：
+之后忘记密码，用 `reset-password`（见 [REFERENCE.md](REFERENCE.md) 的「账号与登录」）：
 
 ```bash
 cd /opt/medihub/apps/server && node --env-file=.env src/reset-password.ts --list
 cd /opt/medihub/apps/server && node --env-file=.env src/reset-password.ts <你的管理员邮箱> '新密码'
 ```
 
-### 7.3 启动前自检
+#### 7.3 启动前自检
 
 ```bash
 # 手工前台起一次，确认能监听并且 SPA 能返回
@@ -467,11 +716,11 @@ curl -s http://127.0.0.1:3000/api | head # OpenAPI 首页
 
 ---
 
-## 8. 进程守护（两套方案）
+### 8. 进程守护（两套方案）
 
 **只能选一套**。两套同时跑会启两个进程连同一个 SQLite 文件，直接踩 `SQLITE_BUSY`。
 
-### 方案 A：1Panel「工具箱 → Supervisor」
+#### 方案 A：1Panel「工具箱 → Supervisor」
 
 **界面：工具箱 → Supervisor**（v1：`主机 → 进程守护`）。
 
@@ -543,7 +792,7 @@ sudo supervisorctl status medihub
 > `stopasgroup/killasgroup` + `TERM` 很重要：`src/index.ts` 捕获 `SIGINT/SIGTERM` 后关服务、
 > 关 SQLite 连接；被 `SIGKILL` 硬杀会留下 `-wal` 碎片。
 
-### 方案 B：pm2
+#### 方案 B：pm2
 
 装 pm2（装到 Node 24 下，不要装到系统旧版本）：
 
@@ -622,7 +871,7 @@ sudo -u www -H pm2 restart medihub
 > 否则开机后 pm2 以 root 启动、进程写 `/data/medihub` 时权限错乱。
 > 若 `www` 没有 home 目录，改成 `--hp /opt/medihub`。
 
-### 方案 A 与 B 的取舍
+#### 方案 A 与 B 的取舍
 
 |                  | Supervisor（1Panel 工具箱） | pm2                              |
 | ---------------- | --------------------------- | -------------------------------- |
@@ -634,9 +883,9 @@ sudo -u www -H pm2 restart medihub
 
 ---
 
-## 9. Nginx 反向代理
+### 9. Nginx 反向代理
 
-### 9.1 在 1Panel 建站
+#### 9.1 在 1Panel 建站
 
 **界面：网站 → 网站 → 创建网站**（v1：`网站 → 创建网站`）。
 
@@ -653,7 +902,7 @@ sudo -u www -H pm2 restart medihub
 
 代理目标填 `http://127.0.0.1:3000`，发送域名填 `$host`。
 
-### 9.2 必须补的指令
+#### 9.2 必须补的指令
 
 面板的默认反代模板不够用，必须补下面这些。**界面：网站 → 网站 → 目标站点 → 配置文件**
 （有的版本叫「配置修改」，位置在站点右上角菜单或「其他设置」里；也可以直接编辑面板生成的
@@ -721,7 +970,7 @@ server {
 }
 ```
 
-### 9.3 每条指令为什么必须有
+#### 9.3 每条指令为什么必须有
 
 | 指令                                            | 为什么                                                                                                                      |
 | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
@@ -743,7 +992,7 @@ server {
 如果你把 SPA 改成由 Nginx 直接从 `apps/server/dist/public` 读文件，那要自己补 SPA 回落
 （`try_files $uri $uri/ /index.html;`），两条路选一条，别混用。
 
-### 9.4 生效
+#### 9.4 生效
 
 优先在面板里点站点的「保存 / 重载」，它会调 1Panel 自己的 OpenResty，路径与 systemd 服务名都由
 面板管理。要在命令行验证时，用面板实际使用的 OpenResty 可执行文件（**不要**用系统里另装的
@@ -759,9 +1008,9 @@ sudo "$OPENRESTY_BIN" -t && sudo "$OPENRESTY_BIN" -s reload
 
 ---
 
-## 10. HTTPS 与强制跳转
+### 10. HTTPS 与强制跳转
 
-### 10.1 申请 Let's Encrypt 证书
+#### 10.1 申请 Let's Encrypt 证书
 
 **界面：网站 → SSL 证书 → 申请证书**（v1：`网站 → SSL → 申请证书`）。
 
@@ -775,7 +1024,7 @@ sudo "$OPENRESTY_BIN" -t && sudo "$OPENRESTY_BIN" -s reload
 > DNS 未生效、80 被占用、安全组没放行，是 HTTP-01 校验失败的全部常见原因。
 > 内网无法校验时改用 DNS 校验（1Panel 支持 DNS 账号）。
 
-### 10.2 在站点启用 HTTPS
+#### 10.2 在站点启用 HTTPS
 
 回到站点 **设置 → HTTPS**：
 
@@ -784,7 +1033,7 @@ sudo "$OPENRESTY_BIN" -t && sudo "$OPENRESTY_BIN" -s reload
 - HSTS：可选，确认全站 https 后再开
 - 协议版本：TLSv1.2 / TLSv1.3
 
-### 10.3 改 `BETTER_AUTH_URL` 并重启
+#### 10.3 改 `BETTER_AUTH_URL` 并重启
 
 ```bash
 sudo -u www -H sed -i 's|^BETTER_AUTH_URL=.*|BETTER_AUTH_URL="https://medihub.summerecho.cn"|' \
@@ -800,18 +1049,18 @@ sudo -u www -H pm2 restart medihub
 **顺序不能反**：先有可用的 https，再把 `BETTER_AUTH_URL` 改成 https。反过来会得到
 「页面能打开、一登录就 403」。
 
-### 10.4 混合内容
+#### 10.4 混合内容
 
 站点一旦是 `https://`，浏览器会拦掉页面上所有 `http://` 资源：
 
 - OnlyOffice 若不是 https，编辑器 iframe 会被直接拦，控制台报
   `Mixed Content: ... was loaded over HTTPS, but requested an insecure frame`；
 - 因此 `ONLYOFFICE_URL` 必须是**带证书的 https 地址**，详见
-  [ONLYOFFICE.md](./ONLYOFFICE.md#7-反向代理到-httpsofficeexamplecom)。
+  [ONLYOFFICE.md](ONLYOFFICE.md#7-反向代理到-httpsofficeexamplecom)。
 
 ---
 
-## 11. 防火墙
+### 11. 防火墙
 
 **界面：主机 → 防火墙**（v1：`主机 → 防火墙`）。
 
@@ -849,158 +1098,26 @@ sudo setsebool -P httpd_can_network_connect 1
 
 ---
 
-## 12. 备份与恢复
+### 12. 备份与恢复
 
-### 12.1 备份什么
+> 已并入 [OPERATIONS.md](./OPERATIONS.md) 第二部分 §2.1（systemd 手工部署的备份与恢复），此处不再重复。
 
-| 对象   | 路径                                       | 说明                                                                   |
-| ------ | ------------------------------------------ | ---------------------------------------------------------------------- |
-| 数据库 | `/data/medihub/local.db`                   | WAL 模式，**必须带上 `-wal` / `-shm` 或用 `.backup` 才能拿到一致快照** |
-| 素材   | `$STORAGE_ROOT`（`/data/medihub/storage`） | 本地驱动的原始文件与 `.office-cache` 转换缓存                          |
-| 密钥   | `apps/server/.env`                         | `BETTER_AUTH_SECRET` 丢了，存储配置就解不开                            |
-
-### 12.2 备份脚本
-
-`/opt/medihub/scripts/backup.sh`（新建脚本目录，属于运维产物，不进版本库）：
-
-```bash
-#!/usr/bin/env bash
-# MediHub 备份：SQLite 在线备份 + 素材目录打包，保留 7 天
-set -euo pipefail
-
-APP_DIR="/opt/medihub"
-DB_FILE="/data/medihub/local.db"
-STORAGE_DIR="/data/medihub/storage"
-ENV_FILE="$APP_DIR/apps/server/.env"
-DEST="/www/backup/medihub"
-KEEP_DAYS=7
-
-STAMP="$(date +%F-%H%M)"
-mkdir -p "$DEST"
-
-# 1) 数据库：sqlite3 .backup 是唯一能在线拿到一致快照的办法。
-#    它会把 WAL 里的内容合并进输出文件，恢复时不需要 -wal/-shm。
-if command -v sqlite3 >/dev/null 2>&1; then
-  sqlite3 "$DB_FILE" ".backup '$DEST/local-$STAMP.db'"
-else
-  # 没装 sqlite3 的退路：连 -wal/-shm 一起打包。
-  # 但必须停服或用 .backup，直接 tar 一个活跃的库可能拿到撕裂的快照。
-  tar -czf "$DEST/local-$STAMP.tar.gz" \
-    -C "$(dirname "$DB_FILE")" "$(basename "$DB_FILE")" \
-    "$(basename "$DB_FILE")-wal" "$(basename "$DB_FILE")-shm" 2>/dev/null \
-    || tar -czf "$DEST/local-$STAMP.tar.gz" -C "$(dirname "$DB_FILE")" "$(basename "$DB_FILE")"
-fi
-
-# 2) 素材目录（排除转换缓存，随时可重建）
-tar -czf "$DEST/storage-$STAMP.tar.gz" \
-  --exclude='.office-cache' \
-  -C "$(dirname "$STORAGE_DIR")" "$(basename "$STORAGE_DIR")"
-
-# 3) 配置与密钥
-tar -czf "$DEST/env-$STAMP.tar.gz" -C "$(dirname "$ENV_FILE")" "$(basename "$ENV_FILE")"
-
-# 4) 只留最近 7 天
-find "$DEST" -type f -mtime +"$KEEP_DAYS" -delete
-
-echo "[$(date '+%F %T')] backup ok -> $DEST (stamp=$STAMP)"
-```
-
-```bash
-sudo -u www -H mkdir -p /opt/medihub/scripts
-# 用编辑器写入：把上面代码块里的内容整段放进这个文件
-sudo -u www -H vi /opt/medihub/scripts/backup.sh
-# 也可以走面板：主机 → 文件，定位到 /opt/medihub/scripts/backup.sh 直接编辑
-sudo -u www -H chmod +x /opt/medihub/scripts/backup.sh
-
-# 手工跑一次，确认三个产物都在
-sudo -u www -H /opt/medihub/scripts/backup.sh
-ls -lh /www/backup/medihub/
-```
-
-**注意点**：
-
-- `sqlite3` 需要 `apt-get install -y sqlite3`；
-- 脚本以 `www` 运行，`/www/backup/medihub` 的属主必须是 `www`；
-- 磁盘上要留出「素材总量 × 1 + 7 天增量」的空间，否则备份会撑满磁盘（见 §15）；
-- 建议再加一层：1Panel **计划任务 → 备份账号** 把 `/www/backup/medihub` 同步到对象存储，避免整机损坏。
-
-### 12.3 挂到 1Panel 计划任务
-
-**界面：计划任务 → 创建计划任务**（v1：`主机 → 计划任务`）。
-
-| 字段     | 值                                                                    |
-| -------- | --------------------------------------------------------------------- |
-| 任务类型 | Shell 脚本                                                            |
-| 名称     | `medihub-backup`                                                      |
-| 执行周期 | 自定义 cron：`0 3 * * *`（每天 03:00）                                |
-| 脚本内容 | `bash /opt/medihub/scripts/backup.sh`                                 |
-| 执行用户 | `www`（面板若无此选项，脚本内部已用绝对路径，注意备份目录属主为 www） |
-
-cron 对照：
-
-| 表达式        | 含义                     |
-| ------------- | ------------------------ |
-| `0 3 * * *`   | 每天 03:00（推荐）       |
-| `0 */6 * * *` | 每 6 小时                |
-| `30 2 * * *`  | 每天 02:30，错开其他任务 |
-
-先在面板里点「执行」跑一次，看「执行记录」里是否 `exit 0`，再等定时。
-
-### 12.4 恢复步骤
-
-```bash
-# 0) 停服务（先停，避免覆盖正在写的库）
-sudo supervisorctl stop medihub       # 或 sudo -u www -H pm2 stop medihub
-
-# 1) 把现有数据库三件套改名保留（只 mv .db 会把 -wal 留在原地，容易污染新库）
-sudo mkdir -p /data/medihub/broken-$(date +%s)
-BROKEN=$(ls -dt /data/medihub/broken-* | head -1)
-sudo mv /data/medihub/local.db /data/medihub/local.db-wal /data/medihub/local.db-shm "$BROKEN"/ 2>/dev/null || true
-
-# 2) 恢复数据库（用 .backup 产物时不需要 -wal/-shm，旧的 WAL 必须删掉）
-sudo -u www -H cp /www/backup/medihub/local-2026-10-24-0300.db /data/medihub/local.db
-sudo rm -f /data/medihub/local.db-wal /data/medihub/local.db-shm
-
-# 3) 恢复素材（建议先把当前目录改名保留）
-sudo mv /data/medihub/storage /data/medihub/storage.broken
-sudo -u www -H tar -xzf /www/backup/medihub/storage-2026-10-24-0300.tar.gz -C /data/medihub
-
-# 4) 恢复 .env（仅当密钥也丢了）
-sudo -u www -H tar -xzf /www/backup/medihub/env-2026-10-24-0300.tar.gz -C /opt/medihub/apps/server
-sudo chmod 600 /opt/medihub/apps/server/.env
-
-# 5) 校正属主后启动
-sudo chown -R www:www /data/medihub
-sudo supervisorctl start medihub
-
-# 6) 验证
-curl -I https://medihub.summerecho.cn/
-# 登录后随机点开一个素材，确认图片/文档能打开（说明 storageKey 与文件对得上）
-```
-
-> **恢复必须连同 `-wal` 一起处理**：如果你拿的是老式 `tar` 备份（含 `-wal`），解压后
-> 三个文件要一起放回同一目录；只放 `.db` 会丢最近写入的事务。
-> **只恢复 storage 里的文件名与 storageKey 是对应的**：素材行里存的是
-> `storageTargetId + storageKey`，所以目录层级必须整体还原，不能只挑几个文件。
-
----
-
-## 13. 升级与回滚
+### 13. 升级与回滚
 
 本节是**命令行手工流程**，适合改过配置、看过源码、或在线升级不可用时使用。
 
 > 更省事的替代：用一键安装脚本升级（幂等、保留 `.env` / 数据库 / 素材，升级前自动备份数据库）：
 > `sudo bash /opt/medihub/scripts/install-1panel.sh --update --yes`
-> （脚本不在安装目录时重新下载，见 [INSTALL-1PANEL.md](./INSTALL-1PANEL.md)）。
+> （脚本不在安装目录时重新下载，见 [REFERENCE.md](REFERENCE.md)）。
 > 1.9.1+ 的 systemd 单元带 `KillMode=process`，在线升级不会再被重启杀掉。
 
 > 已经在跑稳定版本、只想换版本号？优先用内置的在线升级：
 > **系统管理 → 版本与升级**（仅 root 可见），一键完成备份、构建、迁移、切换、重启与健康检查，
-> 失败会自动回滚。配置与注意事项见 [UPGRADE.md](./UPGRADE.md)。
+> 失败会自动回滚。配置与注意事项见 [OPERATIONS.md](OPERATIONS.md)。
 > 两种方式**不要混用**（在线升级只替换 `apps/server/dist`，不更新源码，见
-> [UPGRADE.md §10.2](./UPGRADE.md#102-与手工升级流程的关系)）。
+> [OPERATIONS.md §10.2](OPERATIONS.md#102-与手工升级流程的关系)）。
 
-### 13.1 升级（标准流程）
+#### 13.1 升级（标准流程）
 
 ```bash
 cd /opt/medihub
@@ -1039,7 +1156,7 @@ sudo supervisorctl tail -200 medihub   # pm2 方案改：sudo -u www -H pm2 logs
 升级窗口建议放在非门诊时段。迁移是幂等的（`migrate` 会记录已应用的版本），
 重复执行不会重复建表。
 
-### 13.2 回滚
+#### 13.2 回滚
 
 服务器上的这份 checkout 只用来跑服务，不允许有本地改动，所以回滚用 `reset --hard`
 （比 `checkout` 干净：分支指针一起退，之后还要能再前进）。
@@ -1065,7 +1182,7 @@ sudo supervisorctl restart medihub        # 或 sudo -u www -H pm2 restart medih
 回滚后想再升到最新，直接走 §13.1 第 2 步的 `git pull --ff-only` 即可（分支指针已在原位，
 快进会回到最新提交）。
 
-### 13.3 数据库迁移不可逆时怎么办
+#### 13.3 数据库迁移不可逆时怎么办
 
 Drizzle 的迁移是**单向**的：`packages/db/src/migrations` 里只有 `up`，没有 `down`。
 所以：
@@ -1085,7 +1202,7 @@ Drizzle 的迁移是**单向**的：`packages/db/src/migrations` 里只有 `up`�
 
 ---
 
-## 14. 上线验收清单
+### 14. 上线验收清单
 
 按顺序逐条打勾，任何一条不过都不要对外宣布上线。
 
@@ -1107,12 +1224,12 @@ Drizzle 的迁移是**单向**的：`packages/db/src/migrations` 里只有 `up`�
 - [ ] 计划任务手工执行一次 `exit 0`，备份文件大小合理
 - [ ] `curl -m 3 http://<公网IP>:3000/` 超时（3000 没有暴露）
 - [ ] `public` 产物存在：`ls -l apps/server/dist/public/index.html`；若开启在线升级，再确认
-      `ls -l apps/server/dist/scripts/updater.mjs`（见 [UPGRADE.md §3.6](./UPGRADE.md#36-构建产物里带着执行器脚本)）
+      `ls -l apps/server/dist/scripts/updater.mjs`（见 [OPERATIONS.md §3.6](OPERATIONS.md#36-构建产物里带着执行器脚本)）
 - [ ] 重启服务器后，站点与进程都自动恢复（`systemctl status supervisord` / `pm2 status`）
 
 ---
 
-## 15. 故障排查
+### 15. 故障排查
 
 | 现象                                                                       | 根因                                                                                                             | 定位                                                                                                        | 处理                                                                                                                                                                                                                                                    |
 | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1125,7 +1242,7 @@ Drizzle 的迁移是**单向**的：`packages/db/src/migrations` 里只有 `up`�
 | 图片/文档全 404，或 `/` 直接 404 但 `/api/health` 正常                     | `apps/server/dist/public` 不存在（只跑了 `vp pack`、或 web 没先构建、或自定义了构建流程）                        | `ls -l apps/server/dist/public/index.html`；构建日志里有没有 `SPA 已复制到 dist/public`                     | 在仓库根执行 `pnpm build`（根 build 会先 web 后 server，服务端 build 末尾自动复制），重启                                                                                                                                                               |
 | 切换「科室」后数据没变                                                     | oRPC / 上传请求的 `x-org-scope` 请求头被中间层丢了                                                               | F12 Network 看该请求是否带 `x-org-scope`；对比响应内容                                                      | 见 [§17 科室作用域](#17-科室作用域x-org-scope运维须知)：Nginx 默认透传自定义头，但 CDN/WAF 或显式 `proxy_set_header` 白名单会吞掉                                                                                                                       |
 | 页面能开，登录后立刻掉登录态                                               | Cookie 没被标记为 Secure，或 `X-Forwarded-Proto` 缺失导致后端以为是 http                                         | F12 → Application → Cookies，看 `Secure` 与 `SameSite`                                                      | 补 `proxy_set_header X-Forwarded-Proto $scheme;`，`BETTER_AUTH_URL` 用 https，清 cookie 重登                                                                                                                                                            |
-| **OnlyOffice 混合内容**：编辑器区域空白，控制台 `Mixed Content`            | 主站 https，`ONLYOFFICE_URL` 是 http                                                                             | F12 Console 里的被拦 URL                                                                                    | 给 OnlyOffice 配 https 子域名（同证书体系），把 `ONLYOFFICE_URL` 改成 https，重启。详见 [ONLYOFFICE.md](./ONLYOFFICE.md#7-反向代理到-httpsofficeexamplecom)                                                                                             |
+| **OnlyOffice 混合内容**：编辑器区域空白，控制台 `Mixed Content`            | 主站 https，`ONLYOFFICE_URL` 是 http                                                                             | F12 Console 里的被拦 URL                                                                                    | 给 OnlyOffice 配 https 子域名（同证书体系），把 `ONLYOFFICE_URL` 改成 https，重启。详见 [ONLYOFFICE.md](ONLYOFFICE.md#7-反向代理到-httpsofficeexamplecom)                                                                                               |
 | 在线编辑能打开，保存后内容没变                                             | OnlyOffice 回调到不了主站（`callbackUrl` 是 `BETTER_AUTH_URL` + `/api/office/:id/callback`）                     | OnlyOffice 容器日志 `docker logs onlyoffice \| tail -100`；主站访问日志有没有 `POST /api/office/*/callback` | 保证 OnlyOffice 容器能访问 `BETTER_AUTH_URL`（DNS/出网）；跨机时不要用内网 IP 且未开 `ALLOW_PRIVATE_IP_ADDRESS`                                                                                                                                         |
 | 时间显示差 8 小时                                                          | 进程或系统时区不是 `Asia/Shanghai`                                                                               | `date`；`curl -s https://medihub.summerecho.cn/api/...` 看返回时间戳                                        | `sudo timedatectl set-timezone Asia/Shanghai`；`.env` 加 `TZ="Asia/Shanghai"`；守护配置里也带上 `TZ`（Supervisor `environment=` / pm2 `env`）。注意：库里时间戳是毫秒整数，前端按浏览器时区渲染，**改系统时区不会改历史数据**，只影响新记录与服务端日志 |
 | **磁盘满**：上传失败、SQLite 报 `disk I/O error`、备份脚本失败             | 素材/备份/日志把数据盘写满                                                                                       | `df -h`、`du -sh /data/medihub/* /www/backup/medihub /www/wwwlogs`                                          | 清理过期备份（脚本已保留 7 天）、清 `.office-cache`（可随时重建）、压缩旧日志。要把素材挪到更大的盘：停服 → `rsync` 目录 → 改 `.env` 的 `STORAGE_ROOT` → 启动（`storageKey` 不含根路径，换根目录不影响历史数据）                                        |
@@ -1138,7 +1255,7 @@ Drizzle 的迁移是**单向**的：`packages/db/src/migrations` 里只有 `up`�
 
 ---
 
-## 16. 附录：与仓库现状的已知差异
+### 16. 附录：与仓库现状的已知差异
 
 这里只保留**至今仍然存在**、且运维必须知道的差异。曾经列在这里的两条已经在仓库修好，
 不再需要人工兜底：
@@ -1150,7 +1267,7 @@ Drizzle 的迁移是**单向**的：`packages/db/src/migrations` 里只有 `up`�
 > 构建链与脚本随时可能再变。升级到新版本后，花 30 秒核对 §14 里
 > 「`ls -l apps/server/dist/public/index.html` 存在」那一条，比事后排查 404 便宜得多。
 
-### 16.1 根脚本与真实定义
+#### 16.1 根脚本与真实定义
 
 | 命令               | 实际定义                                                                      |
 | ------------------ | ----------------------------------------------------------------------------- |
@@ -1166,7 +1283,7 @@ Drizzle 的迁移是**单向**的：`packages/db/src/migrations` 里只有 `up`�
 
 生产部署只需要 `install` / `db:migrate` / `build`；`check`、`test`、`test:e2e` 在本地或 CI 跑。
 
-### 16.2 `advanced.ipAddress` 已配置 headers，但没有 `trustedProxies`
+#### 16.2 `advanced.ipAddress` 已配置 headers，但没有 `trustedProxies`
 
 v1.9.6 起 `packages/auth/src/index.ts` 已经显式配置：
 
@@ -1201,13 +1318,13 @@ advanced: {
 
 改完 Nginx 才可以用 `$proxy_add_x_forwarded_for`。
 
-### 16.3 `BETTER_AUTH_TRUSTED_ORIGINS` 只是字符串
+#### 16.3 `BETTER_AUTH_TRUSTED_ORIGINS` 只是字符串
 
 它已在 `apps/server/src/env.ts` 的 Zod schema 里声明（`z.string().optional()`），
 但**值本身不做格式校验**：写成中文逗号、留空格、带多余引号都不会在启动时报错，
 只会在某个来源登录时表现为 403。改完务必按 §6.2 手工核对一遍。
 
-### 16.4 生产进程不要包一层 shell
+#### 16.4 生产进程不要包一层 shell
 
 `apps/server` 的 `start` 只有 `node --env-file-if-exists=.env dist/index.mjs` 一条。
 Supervisor / pm2 里如果再套 `bash -c "cd ... && node ..."`，停止信号会落在 bash 上，
@@ -1217,13 +1334,13 @@ pm2 的 `script` + `node_args` + `cwd` 三件套。
 
 ---
 
-## 17. 科室作用域（`x-org-scope`）运维须知
+### 17. 科室作用域（`x-org-scope`）运维须知
 
 新版本的权限模型里，`root`（超级管理员）**可以不归属任何科室**，作为全局管理员跨科室查看。
 「当前在看哪个科室」不是服务端会话状态，而是**每个请求带一个自定义请求头**——所以反向代理
 必须原样透传它。
 
-### 17.1 机制
+#### 17.1 机制
 
 | 环节   | 行为                                                                                                                  |
 | ------ | --------------------------------------------------------------------------------------------------------------------- |
@@ -1235,7 +1352,7 @@ pm2 的 `script` + `node_args` + `cwd` 三件套。
 | 回落   | 没有该头（或值无效）时，服务端回落到「第一个科室 / 自己的科室」                                                       |
 | 切换时 | 前端会取消并重置已挂载的查询、`router.invalidate()` 重新取数，所以正常表现是「立刻换数据」                            |
 
-### 17.2 反向代理必须透传
+#### 17.2 反向代理必须透传
 
 Nginx / OpenResty **默认会把客户端发来的、自己没显式设置的头原样转发**，本项目的 `x-org-scope`
 属于这一类，正常不需要额外配置。会在链路上把它吞掉的是：
@@ -1257,7 +1374,7 @@ proxy_set_header x-org-scope $http_x_org_scope;
 > 顺带一条相邻的坑：Nginx 默认**丢弃名字里带下划线**的请求头（`underscores_in_headers off`）。
 > 本项目的 `x-org-scope` 用连字符，不受影响；将来若有人改成 `x_org_scope`，会静默失效。
 
-### 17.3 排查：切换科室后数据看起来没变
+#### 17.3 排查：切换科室后数据看起来没变
 
 按这个顺序查，别先怀疑业务逻辑：
 
@@ -1270,10 +1387,123 @@ proxy_set_header x-org-scope $http_x_org_scope;
 3. **服务端**：确认该账号是 `root`。非 root 的这个头按设计会被忽略——这不是 bug。
 4. **数据本身**：该科室里是否真的没有数据（换一个确定有素材的科室再试）。
 
+## 第三部分 本地 Docker / GHCR（手动 compose）
+
+> 生产容器化推荐用一键运维脚本，见 [DEPLOY.md](./DEPLOY.md) 的 Docker 安装与 [OPERATIONS.md](./OPERATIONS.md)；本部分是本地试运行与手动 compose。
+> v1.10.4 起镜像解压后约 **340MB**（基础 Node 镜像 ~333MB，应用 `dist` 约 7MB）。
+
+### 快速开始
+
+```bash
+docker compose up -d --build
+```
+
+默认映射到 `http://localhost:8080`（宿主 `MEDIHUB_PORT` → 容器内固定 `3000`）。
+首次启动**只做数据库迁移，是一台空库**：不写入任何演示账号或演示数据。打开
+`http://localhost:8080/install` 创建第一个超级管理员，即可登录使用。
+
+### 换端口
+
+```bash
+MEDIHUB_PORT=18080 docker compose up -d
+```
+
+`BETTER_AUTH_URL` 与可信来源会同步使用该端口。
+
+### 确认版本 / 健康检查
+
+```bash
+curl -fsS http://localhost:8080/api/health        # {"status":"ok","version":"1.10.4"}
+docker compose exec medihub sh -c 'grep "\"version\"" /app/package.json'
+```
+
+### 数据持久化
+
+SQLite、素材文件都在命名卷 `medihub-data` 的 `/data` 下：
+
+```bash
+docker compose exec medihub ls -lh /data
+docker compose exec medihub ls -lh /data/storage | head
+```
+
+备份：
+
+```bash
+docker compose exec medihub sh -c 'tar czf - -C /data .' > medihub-data.tar.gz
+```
+
+恢复前先 `docker compose down`，解包回卷后再启动。
+
+### 环境变量
+
+在 `docker-compose.yml` 的 `environment` 中修改；生产必须替换：
+
+- `BETTER_AUTH_SECRET`：至少 32 字符随机值（`openssl rand -hex 32`）——默认值仅供本地测试，
+  对外提供服务前必须替换；
+
+其余变量含义见 [REFERENCE.md](REFERENCE.md) 的环境变量章节。
+
+### 重置密码
+
+```bash
+# 列出账号（使用镜像里已打包的 dist 入口）
+docker compose exec medihub node apps/server/dist/reset-password.mjs --list
+# 重置（不传密码会随机生成并打印）
+docker compose exec medihub node apps/server/dist/reset-password.mjs <你的管理员邮箱> '新密码'
+```
+
+> 容器里**没有** pnpm（构建阶段的全局 pnpm 不会带进运行时镜像），所以不要用
+> `pnpm --filter ... reset-password`；上面的 `node ...mjs` 才是容器里的正确写法。
+
+### 从 GHCR 拉取镜像（可选）
+
+仓库的 `docker-ghcr` workflow 会把镜像发布到 GitHub Container Registry：
+
+```bash
+docker pull ghcr.io/eunsolfs/medihub:latest
+# 或指定版本
+docker pull ghcr.io/eunsolfs/medihub:1.10.4
+```
+
+不想在本机构建时，用仓库里的 GHCR compose：
+
+```bash
+# 先修改 docker-compose.ghcr.yml 里的 BETTER_AUTH_SECRET 和端口
+docker compose -f docker-compose.ghcr.yml up -d
+```
+
+- 镜像只包含 amd64；
+- 本仓库的包当前是 **public**，可直接匿名拉取；如果你 fork 后自己构建，包默认可能是 private，
+  需要在 GitHub Package settings 改为 public，或先登录：
+  `echo $GHCR_TOKEN | docker login ghcr.io -u 你的GitHub用户名 --password-stdin`；
+- 镜像同样是**纯净版空库**：首次打开 `/install` 创建管理员，再建第一个科室；
+- 升级镜像：`docker compose -f docker-compose.ghcr.yml pull && docker compose -f docker-compose.ghcr.yml up -d`；
+- 数据仍在命名卷 `medihub-data:/data`，换镜像不会丢数据。
+
+### 能力边界
+
+- 镜像内**没有** LibreOffice 与 OnlyOffice，docx/xlsx/pptx 只能下载后本地打开；
+- Docker 模式**不启用**在线升级（镜像层会被重启覆盖）；升级用
+  `docker compose build --pull && docker compose up -d`，详见 [OPERATIONS.md §5.3](OPERATIONS.md#53-1panel-与容器容器方案不适用本机制)；
+- 反向代理/HTTPS 由宿主机 Nginx/1Panel 负责；跨域登录需把外部地址加入
+  `BETTER_AUTH_TRUSTED_ORIGINS`。
+
+### 常用命令
+
+```bash
+docker compose logs -f medihub        # 日志
+docker compose exec medihub node apps/server/dist/reset-password.mjs --list
+docker compose exec medihub node apps/server/dist/reset-password.mjs <你的管理员邮箱> '新密码'
+docker compose exec medihub node apps/server/dist/migrate.mjs   # 手工补迁移
+docker compose down                   # 停止（保留数据）
+docker compose down -v                # 停止并删除数据卷（清空重来）
+```
+
 ---
 
 ## 相关文档
 
-- [在线升级与回滚](./UPGRADE.md)
-- [ONLYOFFICE 是否免费与接入方案](./ONLYOFFICE.md)
-- [文档索引](./README.md)
+- [部署（首次部署）](./DEPLOY.md)
+- [运维手册](./OPERATIONS.md)
+- [手机端](./MOBILE.md)
+- [OnlyOffice](./ONLYOFFICE.md)

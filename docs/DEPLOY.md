@@ -1,21 +1,40 @@
-# 1Panel 首次部署（v1.10.4 纯净版）
+# 1Panel 部署（首次部署主入口 · v1.10.4）
 
-面向第一次把医档通部署到 1Panel 服务器的人。照着做即可，不需要先懂 Node.js 或 Nginx。
+**第一次部署从这里开始。** 两条主路径（systemd 一键 / Docker 一键）任选其一，一台机器只选一种；
+装完都要打开 `/install` 创建管理员，再建第一个科室。
 
-> **这是首次部署的主入口**。只想上线就照着本文从头做到尾；
-> 安装器的参数/行为/卸载见 [INSTALL-1PANEL.md](./INSTALL-1PANEL.md)，
-> 自定义目录 / Supervisor / PM2 / 手工反代见 [DEPLOY-1PANEL.md](./DEPLOY-1PANEL.md)。
->
-> 更想用 **Docker 统一运维**（安装/升级/回滚/备份/恢复一个脚本搞定）→
-> [DOCKER-OPS.md](./DOCKER-OPS.md)（`medihub-ops.sh`）。那是**互斥的另一条路**：
-> 它装在 `/opt/medihub-docker`，本文装的是 systemd + `/opt/medihub`，一台机器只选一种。
->
-> 不想用脚本？也可以直接用 **Docker / GHCR 镜像**跑（[DOCKER.md](./DOCKER.md)），
-> 那条路不需要 systemd，也不需要本文的 Node 安装步骤。
+> 只想先看看参数或手工装？→ [REFERENCE.md](./REFERENCE.md)；装完之后怎么升级/备份/归档？→ [OPERATIONS.md](./OPERATIONS.md)。
 
-> **纯净版说明**：v1.10.0 起安装脚本**不创建任何账号、不写入演示数据**。
-> 装完是一台空库：先打开 `/install` 创建超级管理员，再登录创建第一个科室。
-> 旧教程里的 `--seed` 已移除，不要再用。
+## 目录
+
+- [0. 开始前准备](#0-开始前准备)
+- [1. 登录服务器](#1-登录服务器)
+- [2. 一键安装（不带任何演示参数）](#2-一键安装不带任何演示参数)
+- [3. 在 1Panel 创建反向代理](#3-在-1panel-创建反向代理)
+  - [3.1 加上传与超时配置](#31-加上传与超时配置)
+- [4. 申请 HTTPS 证书](#4-申请-https-证书)
+- [5. 初始化第一个管理员](#5-初始化第一个管理员)
+- [6. 创建第一个科室（必须）](#6-创建第一个科室必须)
+- [7. 创建日常账号](#7-创建日常账号)
+- [8. 首次功能验收](#8-首次功能验收)
+- [9. 备份（强烈建议）](#9-备份强烈建议)
+- [10. 日常升级](#10-日常升级)
+  - [方式 A：网页](#方式-a网页)
+  - [方式 B：命令行（推荐，最稳）](#方式-b命令行推荐最稳)
+- [11. 常见问题](#11-常见问题)
+  - [重置密码](#重置密码)
+  - [查看日志](#查看日志)
+  - [检查端口和版本](#检查端口和版本)
+- [12. 安全清单](#12-安全清单)
+- [13. 常用命令速查](#13-常用命令速查)
+- [14. 方式 B：Docker 一键安装（`medihub-ops.sh`）](#14-方式-bdocker-一键安装medihub-opssh)
+  - [14.1 三条路径怎么选](#141-三条路径怎么选)
+  - [14.2 前置条件](#142-前置条件)
+  - [14.3 安装](#143-安装)
+  - [14.4 数据卷、目录与迁移](#144-数据卷目录与迁移)
+  - [14.5 Docker 的反向代理](#145-docker-的反向代理)
+  - [14.6 Docker 不能用页面在线升级](#146-docker-不能用页面在线升级)
+- [相关文档](#相关文档)
 
 ---
 
@@ -71,7 +90,7 @@ sudo bash install-medihub.sh --url https://medihub.example.com
 - 建议固定版本时加 `--tag v1.10.4`；不写默认取最新 Release。
 - **不要加 `--seed`**：纯净版没有这个参数，脚本会直接提示已移除。
 - 不想在本机跑 systemd？可以改用 GHCR 镜像（`docker pull ghcr.io/eunsolfs/medihub:1.10.4`），
-  步骤见 [DOCKER.md](./DOCKER.md)；本文其余步骤（反代/HTTPS/`/install`）同样适用。
+  步骤见 [REFERENCE.md](REFERENCE.md)；本文其余步骤（反代/HTTPS/`/install`）同样适用。
 
 安装过程会：
 
@@ -364,10 +383,149 @@ cd /opt && sudo bash install-medihub.sh --update --yes
 
 ---
 
-## 14. 相关文档
+## 14. 方式 B：Docker 一键安装（`medihub-ops.sh`）
 
-- [INSTALL-1PANEL.md](./INSTALL-1PANEL.md)：安装器参考（参数、1.9.x–1.10.x 行为变化、卸载）
-- [DEPLOY-1PANEL.md](./DEPLOY-1PANEL.md)：手工/进阶部署（自定义目录、Nginx 细节、备份恢复、完整排障）
-- [UPGRADE.md](./UPGRADE.md)：在线升级与回滚
-- [DOCKER.md](./DOCKER.md)：Docker / GHCR 容器部署（本地试运行或免 systemd）
-- [ONLYOFFICE.md](./ONLYOFFICE.md)：需要 Office 在线编辑时再看
+> 本机已装 Docker（1Panel 应用商店装过 Docker 即可）。与 systemd 方式**互斥**：
+> 一台机器只选一种，Docker 默认目录 `/opt/medihub-docker`、数据卷 `medihub_data`。
+
+> 镜像版本以 `:1.10.4` 为例；完整运维（备份/恢复/升级/回滚）见 [OPERATIONS.md](./OPERATIONS.md)。
+> v1.10.4 起运行镜像已精简到约 **340MB**（只打包 `dist`，不含 `node_modules` 与源码）。
+
+### 14.1 三条路径怎么选
+
+一台机器**只能选一种**安装方式，别混用：
+
+| 方式                                                 | 装在哪                                                  | 谁管升级                                         | 适合                                   |
+| ---------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------ | -------------------------------------- |
+| **systemd 一键（install-1panel.sh）**                | 宿主机 `/opt/medihub`，Node 24 + pnpm                   | 「系统管理 → 版本与升级」在线升级，或 `--update` | 1Panel 上长期运行，想用页面点升级      |
+| **手工 Docker（docker-compose.yml / GHCR compose）** | 你自己建 compose 文件                                   | 手动 `docker compose pull && up -d`              | 本地演示、验收、已有编排体系           |
+| **Docker 一键运维（本文脚本）**                      | `/opt/medihub-docker`，Compose project `medihub-docker` | `ops.sh upgrade`（自动备份、失败回滚镜像配置）   | 想用容器统一管理、又要有备份/回滚/自检 |
+
+为什么 Docker 下不能用页面里的在线升级：那套机制要在安装目录里替换 `apps/server/dist` 并重启
+systemd 服务；容器里 `dist` 属于镜像层，一重启就还原。**Docker 的升级入口只有 `ops.sh upgrade`。**
+
+> ⚠️ 本脚本与 systemd 一键安装**互斥**：它生成的 `.env` 与 `docker-compose.yml` 放在
+> `/opt/medihub-docker`，而 systemd 安装在 `/opt/medihub`。同一台机器请只保留一种；
+> 如果误把 `MH_DIR` 指到 systemd 的目录，脚本会直接拒绝（检测到非本脚本生成的 `.env`）。
+
+---
+
+### 14.2 前置条件
+
+| 项目    | 要求                                                                              |
+| ------- | --------------------------------------------------------------------------------- |
+| 系统    | Linux（Debian / Ubuntu / Rocky / Alma / CentOS Stream 均可）                      |
+| Docker  | **Engine 24+**，且当前用户有权限（脚本一般用 `sudo` 运行）                        |
+| Compose | **Docker Compose v2**（`docker compose version` 可用；不是老的 `docker-compose`） |
+| 网络    | 能访问 `ghcr.io`（拉镜像）、`github.com`（下载脚本）                              |
+| 1Panel  | 已装 1Panel 且其 Docker 可用（脚本只用一个 compose project，不依赖 1Panel API）   |
+| 端口    | 一个宿主端口（默认 `8080`，可改）；公网只需放行 80/443                            |
+
+自查：
+
+```bash
+docker --version
+docker compose version
+docker info >/dev/null && echo "Docker 权限 OK"
+```
+
+装完脚本后也可以让它自查：
+
+```bash
+sudo bash /opt/medihub-docker/ops.sh doctor
+```
+
+---
+
+### 14.3 安装
+
+#### 3.1 下载并安装（推荐）
+
+```bash
+curl -fsSL https://github.com/Eunsolfs/medihub/releases/latest/download/medihub-ops.sh -o /tmp/medihub-ops.sh
+sudo bash /tmp/medihub-ops.sh install
+```
+
+交互式会问你两项：
+
+1. **对外访问地址**（域名或 `http://IP:端口`）→ 写入 `MH_URL` 与 `BETTER_AUTH_URL`；
+2. **宿主机端口**（默认 8080）。
+
+脚本随后会：生成 `/opt/medihub-docker/.env` 与 `docker-compose.yml` → 拉镜像 → `compose up -d`
+→ 轮询 `/api/health` → 打印访问地址、数据卷与后续命令，并把脚本自身复制成
+`/opt/medihub-docker/ops.sh`（以后用它做运维）。
+
+#### 3.2 非交互安装
+
+```bash
+sudo bash /tmp/medihub-ops.sh install --url https://medihub.summerecho.cn --port 18080
+```
+
+| 参数           | 说明                                                    |
+| -------------- | ------------------------------------------------------- |
+| `--url URL`    | 对外访问地址（必须是 `http(s)://`；结尾斜杠会去掉）     |
+| `--port 端口`  | 宿主端口，1–65535 的数字                                |
+| `--tag 版本`   | 用 `ghcr.io/eunsolfs/medihub:<版本>`，如 `--tag 1.10.4` |
+| `--image 镜像` | 直接用完整镜像地址（私有仓库/自建镜像时用）             |
+| `--dir 目录`   | 安装目录（默认 `/opt/medihub-docker`）                  |
+| `--yes`        | 自动确认                                                |
+
+也可以用环境变量覆盖：`MH_DIR` / `MH_IMAGE` / `MH_PORT` / `MH_URL` / `MH_YES` /
+`MH_DRY_RUN` / `MH_SKIP_PULL`。
+
+#### 3.3 先看它要做什么（不写盘、不启动）
+
+```bash
+MH_DIR=/tmp/medihub-docker MH_DRY_RUN=1 \
+  sudo -E bash /tmp/medihub-ops.sh install --url https://medihub.example.com --port 18080
+# 只生成 /tmp/medihub-docker 下的 .env 与 docker-compose.yml，不拉镜像、不启动容器
+```
+
+> `MH_DRY_RUN=1` 会真的写 `.env` 与 compose 文件（方便你 review），但不会 pull/up。
+
+#### 3.4 生成的文件
+
+```
+/opt/medihub-docker/
+├─ .env                 # MH_IMAGE / MH_PORT / MH_URL / MH_SERVER_IP / BETTER_AUTH_SECRET / TZ / UPLOAD_MAX_BYTES（chmod 600）
+├─ docker-compose.yml   # project 名 medihub-docker，端口 ${MH_PORT}:3000，卷 medihub_data:/data
+├─ ops.sh               # 脚本自身的副本（以后运维用它）
+└─ backups/             # 备份产物
+```
+
+> `.env` 里有会话密钥，**不要**提交到 Git，也不要随备份发到不安全的位置（备份包本身是 `chmod 600`）。
+
+---
+
+### 14.4 数据卷、目录与迁移
+
+| 对象            | 名字                              | 内容                                                                          |
+| --------------- | --------------------------------- | ----------------------------------------------------------------------------- |
+| 数据卷          | `medihub_data`                    | `/data/local.db`、`/data/local.db-wal`、`/data/local.db-shm`、`/data/storage` |
+| 安装目录        | `/opt/medihub-docker`（`MH_DIR`） | `.env`、`docker-compose.yml`、`ops.sh`、`backups/`                            |
+| Compose project | `medihub-docker`                  | 一个 service：`app`                                                           |
+
+- **换机器 / 前移数据**：备份 → 新机器装好 → `restore` 备份包（`.env` 不会跟着覆盖，
+  新机器上重新填 `MH_URL`/端口即可）；
+- **`down` 不会删数据卷**；`uninstall` 才会问你要不要删；
+- 想在 1Panel 里看到它：**容器 → 容器 / 编排**里能看到 `medihub-docker` 这个 project 的容器；
+  不要在 1Panel 里手工改它的 compose 文件——下次 `install/upgrade` 会被重写；
+- **不要**把 `MH_DIR` 设成 systemd 安装目录（`/opt/medihub`）：脚本会检测 `.env` 不是自己生成的并拒绝。
+
+---
+
+### 14.5 Docker 的反向代理
+
+反代目标同样是 `127.0.0.1:<MH_PORT>`（默认 8080），上传/超时/证书与 §3、§4 完全一致，只是端口换成 `MH_PORT`。
+
+### 14.6 Docker 不能用页面在线升级
+
+容器里没有 systemd 与源码目录，**不要**在「系统管理 → 版本与升级」里点升级；请用 `sudo bash ops.sh upgrade`，
+详见 [OPERATIONS.md](./OPERATIONS.md)。
+
+## 相关文档
+
+- [OPERATIONS.md](./OPERATIONS.md) —— 日常运维与升级
+- [REFERENCE.md](./REFERENCE.md) —— 参数与手工部署
+- [MOBILE.md](./MOBILE.md) —— 手机端
+- [ONLYOFFICE.md](./ONLYOFFICE.md) —— 在线编辑

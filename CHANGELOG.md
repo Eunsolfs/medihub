@@ -2,6 +2,20 @@
 
 本项目从第一版起的所有对外变更。版本号遵循 `MAJOR.MINOR.PATCH`。
 
+## 未发布 — 文档合并
+
+- 用户文档由 11 篇合并为 6 篇：`README.md`、`docs/DEPLOY.md`、`docs/OPERATIONS.md`、
+  `docs/REFERENCE.md`、`docs/MOBILE.md`、`docs/ONLYOFFICE.md`。
+- 入口重排：`DEPLOY` = 首次部署主入口（systemd 一键 / Docker 一键）；`OPERATIONS` = 升级回滚 +
+  备份恢复 + 容量与归档 + 定时任务 + 排障；`REFERENCE` = 安装器参数与行为 + 手工/进阶部署 +
+  本地 Docker/GHCR；`MOBILE` = PWA + 安卓 APK。
+- 内容保留：原 `UPGRADE`、`ARCHIVE`、`DEPLOY-1PANEL` 的细节表格与命令全部并入新文档，只做去重、
+  层级调整与跨文档链接重写。
+- 删除旧文件：`1PANEL-FIRST-DEPLOY.md`、`INSTALL-1PANEL.md`、`DEPLOY-1PANEL.md`、
+  `DOCKER-OPS.md`、`DOCKER.md`、`UPGRADE.md`、`ARCHIVE.md`、`MOBILE-PWA.md`、
+  `ANDROID-APK.md`、`docs/README.md`。
+- 本条目只记录文档整理，不新增版本号/tag。
+
 ## v1.10.4 — 2026-11-05
 
 ### Docker 镜像精简（2.05GB → 340MB）

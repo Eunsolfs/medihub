@@ -571,5 +571,7 @@ X-Forwarded-Proto 三者缺一不可**，且必须与主站同协议。
 
 ## 相关文档
 
-- [1Panel 单机部署手册](./DEPLOY-1PANEL.md)
-- [文档索引](./README.md)
+- [首次部署](./DEPLOY.md) —— 装站点、反代、HTTPS、`/install`
+- [运维手册](./OPERATIONS.md) —— 升级/备份/容量与归档
+- [参考手册](./REFERENCE.md) —— 安装器参数、手工部署、本地 Docker
+- [手机端](./MOBILE.md) —— 移动端 Office 能力说明
