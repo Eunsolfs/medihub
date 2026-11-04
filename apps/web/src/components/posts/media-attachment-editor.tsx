@@ -187,7 +187,7 @@ export const MediaAttachmentEditor = ({
   const bilibiliBv = extractBilibiliBv(bilibiliInput);
 
   return (
-    <div className="grid gap-3">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3">
       <div
         aria-label="添加媒体类型"
         className="bg-muted grid grid-cols-3 gap-1 rounded-lg p-1"
@@ -336,7 +336,7 @@ export const MediaAttachmentEditor = ({
 
       <Separator />
 
-      <div className="grid gap-2">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
         <p className="text-muted-foreground flex items-center justify-between text-xs">
           <span>媒体附件</span>
           <span className="tabular-nums">
@@ -354,8 +354,11 @@ export const MediaAttachmentEditor = ({
           const key = `${item.provider}-${item.assetId ?? item.url ?? index}`;
 
           return (
-            <div className="bg-card grid gap-2 rounded-lg border p-2" key={key}>
-              <div className="flex items-start gap-2">
+            <div
+              className="bg-card grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2 rounded-lg border p-2"
+              key={key}
+            >
+              <div className="flex min-w-0 items-start gap-2">
                 <div className="bg-muted relative size-14 shrink-0 overflow-hidden rounded-md">
                   {item.provider === "asset" && item.assetId ? (
                     <AssetThumb

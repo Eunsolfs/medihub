@@ -80,7 +80,7 @@ const AdminRouteError = ({ error }: ErrorComponentProps) => {
   const router = useRouter();
 
   return (
-    <div className="grid gap-5">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5">
       <PageHeader description="账号、科室与存储配置。" title="系统管理" />
       <EmptyState
         action={
@@ -115,7 +115,7 @@ const AdminPage = () => {
   const isRoot = viewer.role === "root";
 
   return (
-    <div className="grid gap-5">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5">
       <PageHeader
         description="管理账号与角色、科室内存储后端，并查看敏感操作审计。"
         meta={

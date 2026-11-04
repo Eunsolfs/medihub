@@ -100,8 +100,8 @@ const Section = ({
   description?: string;
   children: ReactNode;
 }) => (
-  <section className="bg-card ring-foreground/10 grid gap-3 rounded-xl p-4 ring-1">
-    <div className="grid gap-0.5">
+  <section className="bg-card ring-foreground/10 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3 rounded-xl p-4 ring-1">
+    <div className="grid min-w-0 gap-0.5">
       <h2 className="text-sm font-medium">{title}</h2>
       {description ? (
         <p className="text-muted-foreground text-xs leading-relaxed">
@@ -466,7 +466,7 @@ const PostEditorForm = ({ initial, postId, profile }: PostEditorFormProps) => {
   };
 
   return (
-    <div className="grid gap-6">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
       <PageHeader
         actions={
           <span className="flex flex-wrap items-center gap-2">
@@ -520,8 +520,8 @@ const PostEditorForm = ({ initial, postId, profile }: PostEditorFormProps) => {
         </p>
       ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="grid content-start gap-4">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="grid min-w-0 content-start gap-4">
           <div className="grid gap-1.5">
             <Label htmlFor="post-title">标题</Label>
             <Input
@@ -593,7 +593,7 @@ const PostEditorForm = ({ initial, postId, profile }: PostEditorFormProps) => {
           </div>
         </div>
 
-        <aside className="grid content-start gap-4 lg:sticky lg:top-4 lg:self-start">
+        <aside className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-4 lg:sticky lg:top-4 lg:self-start">
           <Section
             description={
               status === "published"
@@ -686,7 +686,7 @@ const PostEditorForm = ({ initial, postId, profile }: PostEditorFormProps) => {
                     </div>
                     <Input
                       autoComplete="new-password"
-                      className="h-11"
+                      className="h-11 text-base md:text-sm"
                       disabled={isBusy || draft.removePassword}
                       id="post-access-password"
                       maxLength={ACCESS_PASSWORD_MAX}

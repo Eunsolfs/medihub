@@ -229,7 +229,7 @@ export const MarkdownEditor = ({
           }}
           placeholder={placeholder}
           spellCheck={false}
-          className="placeholder:text-muted-foreground w-full resize-y bg-transparent p-3 font-mono text-sm leading-relaxed outline-none lg:min-h-full"
+          className="placeholder:text-muted-foreground w-full resize-y bg-transparent p-3 font-mono text-base leading-relaxed outline-none md:text-sm lg:min-h-full"
           style={{ minHeight }}
         />
         <div className="min-w-0 overflow-auto p-3">

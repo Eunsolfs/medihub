@@ -25,11 +25,11 @@ interface SourceTabsProps {
   value: LibrarySource;
 }
 
-/** 来源分类切换：桌面是分段控件，窄屏横向滚动（不换行、不裁切）。 */
+/** 来源分类切换：桌面是分段控件，窄屏换行，保证每个分类都可见。 */
 export const SourceTabs = ({ onChange, value }: SourceTabsProps) => (
   <div
     aria-label="素材来源"
-    className="bg-muted/50 flex [scrollbar-width:none] gap-1 overflow-x-auto rounded-lg p-1 [&::-webkit-scrollbar]:hidden"
+    className="bg-muted/50 flex flex-wrap gap-1 rounded-lg p-1"
     role="tablist"
   >
     {LIBRARY_SOURCES.map((source) => {
