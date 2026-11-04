@@ -29,7 +29,7 @@ MEDIHUB_PORT=18080 docker compose up -d
 ## 确认版本 / 健康检查
 
 ```bash
-curl -fsS http://localhost:8080/api/health        # {"status":"ok","version":"1.10.3"}
+curl -fsS http://localhost:8080/api/health        # {"status":"ok","version":"1.10.4"}
 docker compose exec medihub sh -c 'grep "\"version\"" /app/package.json'
 ```
 
@@ -62,14 +62,14 @@ docker compose exec medihub sh -c 'tar czf - -C /data .' > medihub-data.tar.gz
 ## 重置密码
 
 ```bash
-# 列出账号（Node 24 直接跑 TS，走容器里已有的 DATABASE_URL）
-docker compose exec medihub node apps/server/src/reset-password.ts --list
+# 列出账号（使用镜像里已打包的 dist 入口）
+docker compose exec medihub node apps/server/dist/reset-password.mjs --list
 # 重置（不传密码会随机生成并打印）
-docker compose exec medihub node apps/server/src/reset-password.ts <你的管理员邮箱> '新密码'
+docker compose exec medihub node apps/server/dist/reset-password.mjs <你的管理员邮箱> '新密码'
 ```
 
 > 容器里**没有** pnpm（构建阶段的全局 pnpm 不会带进运行时镜像），所以不要用
-> `pnpm --filter ... reset-password`；上面的 `node ...ts` 才是容器里的正确写法。
+> `pnpm --filter ... reset-password`；上面的 `node ...mjs` 才是容器里的正确写法。
 
 ## 从 GHCR 拉取镜像（可选）
 
@@ -78,7 +78,7 @@ docker compose exec medihub node apps/server/src/reset-password.ts <你的管理
 ```bash
 docker pull ghcr.io/eunsolfs/medihub:latest
 # 或指定版本
-docker pull ghcr.io/eunsolfs/medihub:1.10.3
+docker pull ghcr.io/eunsolfs/medihub:1.10.4
 ```
 
 不想在本机构建时，用仓库里的 GHCR compose：
@@ -108,8 +108,8 @@ docker compose -f docker-compose.ghcr.yml up -d
 
 ```bash
 docker compose logs -f medihub        # 日志
-docker compose exec medihub node apps/server/src/reset-password.ts --list
-docker compose exec medihub node apps/server/src/reset-password.ts <你的管理员邮箱> '新密码'
+docker compose exec medihub node apps/server/dist/reset-password.mjs --list
+docker compose exec medihub node apps/server/dist/reset-password.mjs <你的管理员邮箱> '新密码'
 docker compose exec medihub node apps/server/dist/migrate.mjs   # 手工补迁移
 docker compose down                   # 停止（保留数据）
 docker compose down -v                # 停止并删除数据卷（清空重来）

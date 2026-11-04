@@ -1,4 +1,4 @@
-# 安装器参考（v1.10.3）
+# 安装器参考（v1.10.4）
 
 > **📌 第一次部署请先看 [1PANEL-FIRST-DEPLOY.md](./1PANEL-FIRST-DEPLOY.md)**
 >
@@ -10,7 +10,7 @@
 > - 想用容器（安装/升级/备份一条命令）→ [DOCKER-OPS.md](./DOCKER-OPS.md)（**推荐**，`medihub-ops.sh`）
 > - 只想本机跑一下 / 手动 compose → [DOCKER.md](./DOCKER.md)（**不要**运行本脚本）
 
-本文对应脚本 **v1.10.3**（纯净版：脚本不创建账号、不写入任何演示数据）。
+本文对应脚本 **v1.10.4**（纯净版：脚本不创建账号、不写入任何演示数据）。
 
 > **不适用 Docker**：容器部署请用仓库的 `Dockerfile` / `docker-compose.yml`
 > （见 [DOCKER.md](./DOCKER.md)），**不要**运行本脚本——容器里没有可写的 systemd/安装目录。
@@ -45,7 +45,7 @@ sudo bash install-medihub.sh --url https://medihub.example.com
 | `--dir /opt/medihub`                       | 安装目录（默认 `/opt/medihub`）                                                              |
 | `--url https://...`                        | 写入 `BETTER_AUTH_URL`，必须是浏览器访问地址                                                 |
 | `--port 3000`                              | API 端口，必须是 1–65535 的数字；默认自动选 20000–29999 的空闲端口；指定端口被占用会直接报错 |
-| `--tag v1.10.3`                            | 指定版本（默认取最新 Release）；也可以写 `vX.Y.Z`                                            |
+| `--tag v1.10.4`                            | 指定版本（默认取最新 Release）；也可以写 `vX.Y.Z`                                            |
 | `--user medihub`                           | 运行服务的系统用户（默认 `medihub`）                                                         |
 | `--update`                                 | 升级现有安装，保留 `.env`、SQLite、素材与升级备份                                            |
 | `--onlyoffice-url` / `--onlyoffice-secret` | OnlyOffice 地址与 JWT 密钥，可后填                                                           |

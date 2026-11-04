@@ -33,11 +33,16 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-# 运行时保留工作区与依赖（dist 中仍有 workspace 包的外部引用）
-COPY --from=build /app /app
+# 只复制运行所需的构建产物：dist 已经 bundle 了服务端依赖与 SPA，
+# 不再把整个 build stage 的 node_modules / 源码 / 测试搬进运行镜像。
+COPY --chown=node:node --from=build /app/package.json /app/package.json
+COPY --chown=node:node --from=build /app/apps/server/package.json /app/apps/server/package.json
+COPY --chown=node:node --from=build /app/apps/server/dist /app/apps/server/dist
+COPY --chown=node:node docker/entrypoint.sh /app/docker/entrypoint.sh
 
+# /app 已通过 COPY --chown 设置属主；这里只处理可写数据目录，避免 chown 整个 /app 产生额外镜像层。
 RUN mkdir -p /data/storage \
-  && chown -R node:node /app /data
+  && chown node:node /data /data/storage
 
 USER node
 
@@ -55,6 +60,3 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=5 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 CMD ["sh", "/app/docker/entrypoint.sh"]
-
-
-

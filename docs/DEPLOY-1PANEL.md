@@ -1,4 +1,4 @@
-# 1Panel 手工/进阶部署手册（v1.10.3）
+# 1Panel 手工/进阶部署手册（v1.10.4）
 
 > **📌 大多数用户请先看 [1PANEL-FIRST-DEPLOY.md](./1PANEL-FIRST-DEPLOY.md)**
 >

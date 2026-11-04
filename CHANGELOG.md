@@ -2,6 +2,21 @@
 
 本项目从第一版起的所有对外变更。版本号遵循 `MAJOR.MINOR.PATCH`。
 
+## v1.10.4 — 2026-11-05
+
+### Docker 镜像精简（2.05GB → 340MB）
+
+- runtime 阶段不再复制整个构建工作区：
+  - 移除 `node_modules`（原 `.pnpm` 约 687MB，服务端依赖已由 tsdown bundle）；
+  - 移除源码、测试、文档、构建脚本；
+  - 只复制 `apps/server/dist`、根 `package.json`、服务端 `package.json` 与 `entrypoint.sh`。
+- 移除 `chown -R node:node /app`（原 735MB 镜像层），改用 `COPY --chown`，只 chown `/data`。
+- 新增 `reset-password.mjs` 构建入口；Docker 文档中的重置密码命令改为
+  `node apps/server/dist/reset-password.mjs`，不再依赖源码与 pnpm。
+- 验证：精简镜像启动、迁移、`/install` 创建管理员、登录、`reset-password` 列出/重置账号、
+  健康检查全部通过；`/app` 内无 `node_modules` 与 `src`。
+- 镜像仍为 Debian bookworm slim（保留 glibc 兼容性），不换 Alpine。
+
 ## v1.10.3 — 2026-11-04
 
 ### Docker 运维脚本修复与真实备份验证

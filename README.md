@@ -1,6 +1,6 @@
 # 医档通 MediHub
 
-> 当前版本：**v1.10.3**（纯净版，不含演示数据；变更记录见 [CHANGELOG.md](CHANGELOG.md)）
+> 当前版本：**v1.10.4**（纯净版，不含演示数据；变更记录见 [CHANGELOG.md](CHANGELOG.md)）
 
 科室内部的多媒体与病历资料管理平台。把患者的伤口/术中/术后照片、病历资料、科室培训与讲课材料集中存起来，按「患者 → 某次入院 → 时间线」组织，并为科研、宣传、病例汇报提供可筛选、可打包导出的数据底座。
 
@@ -44,7 +44,7 @@ docker compose up -d --build      # 默认 http://localhost:8080，首次启动�
 数据在命名卷 `medihub-data:/data`；换端口用 `MEDIHUB_PORT=18080`。容器内**没有** LibreOffice /
 OnlyOffice，也**不启用在线升级**；首次启动是空库，打开 `http://localhost:8080/install` 创建管理员。
 完整说明见 [docs/DOCKER.md](docs/DOCKER.md)。也支持直接从 GHCR 拉取（public，无需登录）：
-`docker pull ghcr.io/eunsolfs/medihub:1.10.3`（或 `:latest`），见文档内「从 GHCR 拉取镜像」。
+`docker pull ghcr.io/eunsolfs/medihub:1.10.4`（或 `:latest`），见文档内「从 GHCR 拉取镜像」。
 
 > 想用容器长期跑生产？用 **Docker 一键运维**（`medihub-ops.sh`）：安装、升级、回滚、备份、
 > 恢复、自检都由一个脚本负责 → [docs/DOCKER-OPS.md](docs/DOCKER-OPS.md)。

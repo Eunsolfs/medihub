@@ -4,6 +4,6 @@ export default defineConfig({
   pack: {
     copy: [{ from: "../../packages/db/src/migrations", to: "dist" }],
     deps: { alwaysBundle: [/./u] },
-    entry: ["src/index.ts", "src/migrate.ts"],
+    entry: ["src/index.ts", "src/migrate.ts", "src/reset-password.ts"],
   },
 });

@@ -1,4 +1,4 @@
-# 1Panel 首次部署（v1.10.3 纯净版）
+# 1Panel 首次部署（v1.10.4 纯净版）
 
 面向第一次把医档通部署到 1Panel 服务器的人。照着做即可，不需要先懂 Node.js 或 Nginx。
 
@@ -68,9 +68,9 @@ sudo bash install-medihub.sh --url https://medihub.example.com
   域名还没配 HTTPS 时，可以先用 `--url http://服务器IP:3000 --port 3000` 临时验证，
   同时要在安全组/防火墙临时放行 3000；验证完再关掉端口并改成正式域名。
 - 不传 `--port` 时脚本会自动挑一个 20000–29999 的空闲端口，安装结束会打印出来。
-- 建议固定版本时加 `--tag v1.10.3`；不写默认取最新 Release。
+- 建议固定版本时加 `--tag v1.10.4`；不写默认取最新 Release。
 - **不要加 `--seed`**：纯净版没有这个参数，脚本会直接提示已移除。
-- 不想在本机跑 systemd？可以改用 GHCR 镜像（`docker pull ghcr.io/eunsolfs/medihub:1.10.3`），
+- 不想在本机跑 systemd？可以改用 GHCR 镜像（`docker pull ghcr.io/eunsolfs/medihub:1.10.4`），
   步骤见 [DOCKER.md](./DOCKER.md)；本文其余步骤（反代/HTTPS/`/install`）同样适用。
 
 安装过程会：
@@ -85,7 +85,7 @@ sudo bash install-medihub.sh --url https://medihub.example.com
 看到下面类似内容说明成功：
 
 ```text
-医档通 MediHub 安装完成（v1.10.3）
+医档通 MediHub 安装完成（v1.10.4）
 ────────────────────────────────
 安装目录：/opt/medihub
 监听端口：127.0.0.1:21451
@@ -104,7 +104,7 @@ curl -s "http://127.0.0.1:$PORT/api/health"
 应返回：
 
 ```json
-{ "status": "ok", "version": "1.10.3" }
+{ "status": "ok", "version": "1.10.4" }
 ```
 
 如果这里失败，先看日志：
@@ -283,7 +283,7 @@ root 登录 →「系统管理 → 版本与升级」→ 检查更新 → 升级
 ```bash
 cd /opt
 curl -fsSL https://raw.githubusercontent.com/Eunsolfs/medihub/main/scripts/install-1panel.sh -o install-medihub.sh
-sudo bash install-medihub.sh --update --yes --tag v1.10.3
+sudo bash install-medihub.sh --update --yes --tag v1.10.4
 ```
 
 升级会保留 `.env`、SQLite、`storage` 和升级备份，不会清空数据，也不会重新写入演示数据。
