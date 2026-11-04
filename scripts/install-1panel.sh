@@ -15,7 +15,7 @@
 #
 # 常用参数：
 #   --dir /opt/medihub          安装目录（默认 /opt/medihub）
-#   --tag v1.10.2               指定版本（默认最新 Release）
+#   --tag v1.10.3               指定版本（默认最新 Release）
 #   --url https://...           浏览器访问地址（写入 BETTER_AUTH_URL）
 #   --port <port>               API 端口（默认自动选择空闲端口）
 #   --user medihub              运行服务的系统用户
@@ -49,7 +49,7 @@ FORCE="false"
 ONLYOFFICE_URL=""
 ONLYOFFICE_SECRET=""
 SERVICE_NAME="medihub"
-SCRIPT_VERSION="1.10.2"
+SCRIPT_VERSION="1.10.3"
 TMP_DIR=""
 PHASE="准备"
 INSTALL_STARTED="false"

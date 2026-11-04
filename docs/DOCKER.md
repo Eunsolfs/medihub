@@ -29,7 +29,7 @@ MEDIHUB_PORT=18080 docker compose up -d
 ## 确认版本 / 健康检查
 
 ```bash
-curl -fsS http://localhost:8080/api/health        # {"status":"ok","version":"1.10.2"}
+curl -fsS http://localhost:8080/api/health        # {"status":"ok","version":"1.10.3"}
 docker compose exec medihub sh -c 'grep "\"version\"" /app/package.json'
 ```
 
@@ -78,7 +78,7 @@ docker compose exec medihub node apps/server/src/reset-password.ts <你的管理
 ```bash
 docker pull ghcr.io/eunsolfs/medihub:latest
 # 或指定版本
-docker pull ghcr.io/eunsolfs/medihub:1.10.2
+docker pull ghcr.io/eunsolfs/medihub:1.10.3
 ```
 
 不想在本机构建时，用仓库里的 GHCR compose：

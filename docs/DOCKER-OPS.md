@@ -3,7 +3,7 @@
 用**一个脚本 + Docker Compose** 把医档通装起来，并且顺手把日常运维也包了：升级、回滚、备份、
 恢复、看日志、环境自检。不自建 Node、不碰 systemd，容器里跑的就是 GHCR 上的镜像。
 
-- 脚本：`scripts/medihub-ops.sh`，随每个 Release 发布为资产 `medihub-ops.sh`（v1.10.2）；
+- 脚本：`scripts/medihub-ops.sh`，随每个 Release 发布为资产 `medihub-ops.sh`（v1.10.3）；
 - 镜像：`ghcr.io/eunsolfs/medihub:<tag>`（public，可直接匿名拉取）；
 - 默认：安装目录 `/opt/medihub-docker`、宿主端口 `8080`、Compose project `medihub-docker`、
   数据卷 `medihub_data`（`/data/local.db` + `/data/storage`）。
@@ -102,7 +102,7 @@ sudo bash /tmp/medihub-ops.sh install --url https://medihub.summerecho.cn --port
 | -------------- | ------------------------------------------------------- |
 | `--url URL`    | 对外访问地址（必须是 `http(s)://`；结尾斜杠会去掉）     |
 | `--port 端口`  | 宿主端口，1–65535 的数字                                |
-| `--tag 版本`   | 用 `ghcr.io/eunsolfs/medihub:<版本>`，如 `--tag 1.10.2` |
+| `--tag 版本`   | 用 `ghcr.io/eunsolfs/medihub:<版本>`，如 `--tag 1.10.3` |
 | `--image 镜像` | 直接用完整镜像地址（私有仓库/自建镜像时用）             |
 | `--dir 目录`   | 安装目录（默认 `/opt/medihub-docker`）                  |
 | `--yes`        | 自动确认                                                |
@@ -206,7 +206,7 @@ proxy_buffering off;
 sudo bash /opt/medihub-docker/ops.sh status
 sudo bash /opt/medihub-docker/ops.sh logs
 sudo bash /opt/medihub-docker/ops.sh backup nightly
-sudo bash /opt/medihub-docker/ops.sh upgrade 1.10.2
+sudo bash /opt/medihub-docker/ops.sh upgrade 1.10.3
 ```
 
 ---
@@ -261,8 +261,8 @@ sudo bash /opt/medihub-docker/ops.sh restore /opt/medihub-docker/backups/medihub
 
 ```bash
 sudo bash /opt/medihub-docker/ops.sh upgrade            # 升到 latest
-sudo bash /opt/medihub-docker/ops.sh upgrade 1.10.2     # 指定版本
-sudo bash /opt/medihub-docker/ops.sh upgrade ghcr.io/eunsolfs/medihub:1.10.2   # 完整镜像地址
+sudo bash /opt/medihub-docker/ops.sh upgrade 1.10.3     # 指定版本
+sudo bash /opt/medihub-docker/ops.sh upgrade ghcr.io/eunsolfs/medihub:1.10.3   # 完整镜像地址
 ```
 
 脚本会：
@@ -326,7 +326,7 @@ sudo bash /opt/medihub-docker/ops.sh restore /opt/medihub-docker/backups/<...>-p
 
 ```bash
 sudo bash /opt/medihub-docker/ops.sh status
-curl -fsS http://127.0.0.1:8080/api/health      # {"status":"ok","version":"1.10.2"}
+curl -fsS http://127.0.0.1:8080/api/health      # {"status":"ok","version":"1.10.3"}
 sudo bash /opt/medihub-docker/ops.sh doctor
 ```
 

@@ -20,7 +20,7 @@
 # 可通过环境变量覆盖：MH_DIR / MH_IMAGE / MH_PORT / MH_URL / MH_YES / MH_DRY_RUN
 set -Eeuo pipefail
 
-SCRIPT_VERSION="1.10.2"
+SCRIPT_VERSION="1.10.3"
 MH_REPO="${MH_REPO:-Eunsolfs/medihub}"
 MH_DIR="${MH_DIR:-/opt/medihub-docker}"
 IMAGE_REPO="ghcr.io/$(printf '%s' "$MH_REPO" | tr '[:upper:]' '[:lower:]')"

@@ -2,6 +2,17 @@
 
 本项目从第一版起的所有对外变更。版本号遵循 `MAJOR.MINOR.PATCH`。
 
+## v1.10.3 — 2026-11-04
+
+### Docker 运维脚本修复与真实备份验证
+
+- 修复 `medihub-ops.sh backup` 在非 root 用户下清理临时目录失败：
+  `docker run` 导出 SQLite/素材后，按调用者 UID/GID 修正临时文件属主；root 下行为不变。
+- 修复 `ops-script` CI 备份校验的 `tar | grep -q` SIGPIPE 误判，并实际跑通
+  **安装 → 备份 → 删除素材 → 恢复 → 校验素材 → 状态检查 → 卸载** 全链路。
+- Docker 镜像同时提供 `1.10.3`、`latest`、`main`、`sha-*` 标签；Release 资产包含
+  `medihub-ops.sh`、APK 与源码包。
+
 ## v1.10.2 — 2026-11-04
 
 ### 容器化一键安装/运维（HandoverKit 风格）
