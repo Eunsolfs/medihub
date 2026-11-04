@@ -43,7 +43,7 @@ docker compose up -d --build      # 默认 http://localhost:8080，首次启动�
 
 数据在命名卷 `medihub-data:/data`；换端口用 `MEDIHUB_PORT=18080`。容器内**没有** LibreOffice /
 OnlyOffice，也**不启用在线升级**；首次启动是空库，打开 `http://localhost:8080/install` 创建管理员。
-完整说明见 [docs/DOCKER.md](docs/DOCKER.md)。
+完整说明见 [docs/DOCKER.md](docs/DOCKER.md)。也支持从 GHCR 拉取：`docker pull ghcr.io/eunsolfs/medihub:latest`（见文档内「从 GHCR 拉取镜像」）。
 
 > 1Panel 一键脚本是给**宿主机 + systemd** 用的；Docker 部署请用仓库的 Dockerfile / compose，
 > 不要跑 `install-1panel.sh`。

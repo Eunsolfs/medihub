@@ -66,6 +66,30 @@ docker compose exec medihub node apps/server/src/reset-password.ts <你的管理
 > 容器里**没有** pnpm（构建阶段的全局 pnpm 不会带进运行时镜像），所以不要用
 > `pnpm --filter ... reset-password`；上面的 `node ...ts` 才是容器里的正确写法。
 
+## 从 GHCR 拉取镜像（可选）
+
+仓库的 `docker-ghcr` workflow 会把镜像发布到 GitHub Container Registry：
+
+```bash
+docker pull ghcr.io/eunsolfs/medihub:latest
+# 或指定版本
+docker pull ghcr.io/eunsolfs/medihub:1.10.0
+```
+
+不想在本机构建时，用仓库里的 GHCR compose：
+
+```bash
+# 先修改 docker-compose.ghcr.yml 里的 BETTER_AUTH_SECRET 和端口
+docker compose -f docker-compose.ghcr.yml up -d
+```
+
+- 镜像只包含 amd64；
+- GHCR 包默认可能是 private：需要在 GitHub 的 Package settings 里改成 public，
+  或先登录再拉：`echo $GHCR_TOKEN | docker login ghcr.io -u 你的GitHub用户名 --password-stdin`；
+- 镜像同样是**纯净版空库**：首次打开 `/install` 创建管理员，再建第一个科室；
+- 升级镜像：`docker compose -f docker-compose.ghcr.yml pull && docker compose -f docker-compose.ghcr.yml up -d`；
+- 数据仍在命名卷 `medihub-data:/data`，换镜像不会丢数据。
+
 ## 能力边界
 
 - 镜像内**没有** LibreOffice 与 OnlyOffice，docx/xlsx/pptx 只能下载后本地打开；
