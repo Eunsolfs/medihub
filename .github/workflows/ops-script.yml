@@ -83,8 +83,9 @@ jobs:
           docker exec medihub-docker-app-1 sh -c 'mkdir -p /data/storage && echo ci-marker > /data/storage/ci-marker'
           BACKUP="$(bash scripts/medihub-ops.sh backup ci | grep -E '^/.*\.tar\.gz$' | tail -n 1)"
           test -f "$BACKUP"
-          tar -tzf "$BACKUP" | grep -q './local.db'
-          tar -tzf "$BACKUP" | grep -q './storage/ci-marker'
+          tar -tzf "$BACKUP" > "$RUNNER_TEMP/backup-list.txt"
+          grep -q './local.db' "$RUNNER_TEMP/backup-list.txt"
+          grep -q './storage/ci-marker' "$RUNNER_TEMP/backup-list.txt"
           docker exec medihub-docker-app-1 rm -f /data/storage/ci-marker
           bash scripts/medihub-ops.sh restore "$BACKUP"
           docker exec medihub-docker-app-1 test -f /data/storage/ci-marker
