@@ -1,66 +1,41 @@
-# 在 1Panel 服务器上一键安装
+# 安装器参考（v1.10.1）
 
-适用：已安装 1Panel 的 Linux 服务器（Debian / Ubuntu / Rocky / Alma / CentOS Stream）。
-脚本会装好 Node.js 24、pnpm、systemd 服务，并把网站跑起来；OnlyOffice 参数可以稍后填。
-
-> 本文对应脚本 **v1.10.0**（纯净版：**不再写入任何演示数据**；`--seed` 已移除）。
+> **📌 第一次部署请先看 [1PANEL-FIRST-DEPLOY.md](./1PANEL-FIRST-DEPLOY.md)**
 >
+> 那篇是**从零到上线**的主线教程（DNS → 一键安装 → 反代 → HTTPS → `/install` → 建首个科室 →
+> 验收 → 备份 → 升级 → 排障）。**本文只是安装器 `scripts/install-1panel.sh` 的参数、行为与卸载参考**，
+> 不再重复完整开箱流程——遇到「这个参数干什么 / 某版本改了什么 / 怎么卸干净」再回来查。
+>
+> - 想改安装目录、用 Supervisor/PM2、手工配反代与证书 → [DEPLOY-1PANEL.md](./DEPLOY-1PANEL.md)（手工/进阶）
+> - 想用容器部署 → [DOCKER.md](./DOCKER.md)（**不要**运行本脚本）
+
+本文对应脚本 **v1.10.1**（纯净版：脚本不创建账号、不写入任何演示数据）。
+
 > **不适用 Docker**：容器部署请用仓库的 `Dockerfile` / `docker-compose.yml`
 > （见 [DOCKER.md](./DOCKER.md)），**不要**运行本脚本——容器里没有可写的 systemd/安装目录。
 
 > 需要 root 或 sudo。下载依赖 + 构建通常 **5–15 分钟**（取决于服务器带宽；国内机器可能更久）。
 > 脚本**不会**替你创建 1Panel 站点与证书，也不会改你的 Nginx 配置——反向代理那一步需要在面板里点一次。
 
-## 一条命令（真正的一行）
+## 怎么用（三步）
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Eunsolfs/medihub/main/scripts/install-1panel.sh | sudo bash -s -- --url https://medihub.summerecho.cn
-```
-
-不想用管道，也可以先下载再执行（脚本内容可先看一眼）：
-
-```bash
+# 1) 下载脚本（先看再跑）
 curl -fsSL https://raw.githubusercontent.com/Eunsolfs/medihub/main/scripts/install-1panel.sh -o install-medihub.sh
-less install-medihub.sh   # 看完再跑
-sudo bash install-medihub.sh --url https://medihub.summerecho.cn
+
+# 2) 预览要做什么（不写盘、不下载源码包）
+sudo bash install-medihub.sh --url https://medihub.example.com --dry-run
+
+# 3) 正式安装（不传 --port 时自动挑 20000–29999 的空闲端口）
+sudo bash install-medihub.sh --url https://medihub.example.com
 ```
 
-- `--url` 换成你准备绑定的域名（还没配 HTTPS 也可以先写 `http://服务器IP:实际端口`，端口在安装结束时打印）。
-- **纯净版**：脚本不创建任何账号、不写演示数据；装完打开 `https://你的域名/install`
-  创建第一个超级管理员（这一步必须在浏览器里做）。
+装完脚本会打印**监听端口**与 `/api/health` 地址，接着按
+[FIRST-DEPLOY §3–§6](./1PANEL-FIRST-DEPLOY.md#3-在-1panel-创建反向代理) 做反向代理、HTTPS、
+`/install` 建管理员、建第一个科室。
 
-安装完成后：
-
-1. 在 1Panel「网站 → 反向代理」新建站点，目标填 `http://127.0.0.1:<安装结束时打印的端口>`，申请 HTTPS；
-2. **同站点配置里加上传与超时设置**（否则大视频/PPT 上传会 413 或 502）：
-
-   ```nginx
-   client_max_body_size 300m;
-   proxy_read_timeout 300s;
-   proxy_set_header X-Forwarded-For $remote_addr;
-   ```
-
-   Better Auth 按客户端 IP 限流，`X-Forwarded-For` 只接受单值；详细原因见
-   [DEPLOY-1PANEL.md §9](./DEPLOY-1PANEL.md)。1Panel 的「网站 → 配置」里可直接加这几行。
-
-3. 打开 `https://你的域名/install`，创建第一个超级管理员（姓名 / 邮箱 / 密码）；
-4. 创建完自动跳登录页，用它登录；**先到「系统管理 → 科室」新建第一个科室**，再创建患者/资料库/教学会议；之后可在「我的 → 修改密码」修改。
-5. **登录后先建第一个科室**：空库还没有科室，工作台会提示「先创建第一个科室」并给出
-   「去系统管理创建科室」按钮。到 **系统管理 → 科室** 新建一个科室，之后才能创建患者 /
-   资料库 / 教学会议（root 可用顶部「科室」下拉切换查看）。
-
-## 方式二：网页安装向导（不写命令行参数）
-
-安装脚本**不会创建任何账号**（纯净版），站点处于「未初始化」状态：
-
-1. 部署完成后直接打开 `https://你的域名/install`（登录页也会出现「前往安装向导」按钮）；
-2. 填写超级管理员姓名 / 邮箱 / 密码，可选填写 OnlyOffice 地址与 JWT 密钥；
-3. 点「完成安装」→ 看到「配置完成」后自动跳到登录页，用刚创建的账号登录即可；
-4. 登录后先到 **系统管理 → 科室** 新建第一个科室——空库没有科室，工作台会提示
-   「先创建第一个科室」，没有科室之前无法创建患者 / 资料库 / 教学会议。
-
-向导只在「系统还没有任何账号」时可用；安装完成后该接口返回 409，不会被用来重置管理员。
-OnlyOffice 参数写入 `.env` 后需要重启服务才生效（页面会提示）。
+> 也可以一条命令管道执行（不适合先审查脚本的场景）：
+> `curl -fsSL …/install-1panel.sh | sudo bash -s -- --url https://你的域名`
 
 ## 常用参数
 
@@ -69,7 +44,7 @@ OnlyOffice 参数写入 `.env` 后需要重启服务才生效（页面会提示�
 | `--dir /opt/medihub`                       | 安装目录（默认 `/opt/medihub`）                                                              |
 | `--url https://...`                        | 写入 `BETTER_AUTH_URL`，必须是浏览器访问地址                                                 |
 | `--port 3000`                              | API 端口，必须是 1–65535 的数字；默认自动选 20000–29999 的空闲端口；指定端口被占用会直接报错 |
-| `--tag v1.10.0`                            | 指定版本（默认取最新 Release）；也可以写 `vX.Y.Z`                                            |
+| `--tag v1.10.1`                            | 指定版本（默认取最新 Release）；也可以写 `vX.Y.Z`                                            |
 | `--user medihub`                           | 运行服务的系统用户（默认 `medihub`）                                                         |
 | `--update`                                 | 升级现有安装，保留 `.env`、SQLite、素材与升级备份                                            |
 | `--onlyoffice-url` / `--onlyoffice-secret` | OnlyOffice 地址与 JWT 密钥，可后填                                                           |
@@ -82,15 +57,17 @@ OnlyOffice 参数写入 `.env` 后需要重启服务才生效（页面会提示�
 > v1.9.9 起：参数**缺值**会直接报「参数 X 缺少值」，不再是 unbound variable 之类的底层报错；
 > `--help` 会完整打印全部参数（包括 `--user`、`--dir` 等）。
 
-### v1.9.x 行为变化（老教程里容易踩的坑）
+### v1.9.x–v1.10.x 行为变化（老教程里容易踩的坑）
 
-| 版本   | 变化                                                                                                                    | 对运维的影响                                                             |
-| ------ | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| v1.9.1 | 自动写 `/etc/sudoers.d/medihub-update`（`medihub` 免密 `systemctl restart medihub`）；systemd 单元加 `KillMode=process` | 在线升级**不再被重启杀掉**；失败时能快速报「重启服务失败」而不是静默卡住 |
-| v1.9.2 | 自动生成 `BETTER_AUTH_TRUSTED_ORIGINS`（`http://127.0.0.1:<端口>`、`http://<服务器IP>:<端口>`；HTTP 站点额外加域名）    | 装完可以直接用 `IP:端口` 打开；用域名 + HTTPS 后仍要按 §反向代理 补域名  |
-| v1.9.3 | **先停旧服务再选端口**；`--update` 不再误改端口；端口真被别的程序占用会**报错**而不是静默换端口                         | 升级不会悄悄换端口导致反代 502；端口冲突时按提示释放端口或显式 `--port`  |
-| v1.9.4 | `DATABASE_URL` / `STORAGE_ROOT` 相对路径以 `apps/server` 为基准                                                         | 命令行脚本可以从**任意 cwd** 运行，不再打开错误数据库                    |
-| v1.9.9 | 参数缺值报「参数 X 缺少值」；`--purge` 无论服务单元是否存在都清理 sudoers；用户/端口等参数校验更严                      | 失败/清理后不会留下「半套」权限规则                                      |
+| 版本    | 变化                                                                                                                                                              | 对运维的影响                                                             |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| v1.9.1  | 自动写 `/etc/sudoers.d/medihub-update`（`medihub` 免密 `systemctl restart medihub`）；systemd 单元加 `KillMode=process`                                           | 在线升级**不再被重启杀掉**；失败时能快速报「重启服务失败」而不是静默卡住 |
+| v1.9.2  | 自动生成 `BETTER_AUTH_TRUSTED_ORIGINS`（`http://127.0.0.1:<端口>`、`http://<服务器IP>:<端口>`；HTTP 站点额外加域名）                                              | 装完可以直接用 `IP:端口` 打开；用域名 + HTTPS 后仍要按反代章节补域名     |
+| v1.9.3  | **先停旧服务再选端口**；`--update` 不再误改端口；端口真被别的程序占用会**报错**而不是静默换端口                                                                   | 升级不会悄悄换端口导致反代 502；端口冲突时按提示释放端口或显式 `--port`  |
+| v1.9.4  | `DATABASE_URL` / `STORAGE_ROOT` 相对路径以 `apps/server` 为基准                                                                                                   | 命令行脚本可以从**任意 cwd** 运行，不再打开错误数据库                    |
+| v1.9.9  | 参数缺值报「参数 X 缺少值」；`--purge` 无论服务单元是否存在都清理 sudoers；用户/端口等参数校验更严                                                                | 失败/清理后不会留下「半套」权限规则                                      |
+| v1.10.0 | 移除 `--seed` 与全部演示数据：脚本**只建表、不建账号**；`--seed` 现在会直接报错说明已移除                                                                         | 装完必须打开 `/install` 创建管理员，再建第一个科室                       |
+| v1.10.1 | `--update` 未传 `--url` 时**保留原 `BETTER_AUTH_URL`**（不再把线上域名重置成本机地址）；`BETTER_AUTH_TRUSTED_ORIGINS` 自动包含 **服务器全部 IPv4** 与 `localhost` | 升级不会再把登录打回 403；多网卡/多 IP 机器用任意内网 IP 都能登录        |
 
 ### 安装失败 / 残留处理
 
@@ -176,6 +153,8 @@ ONLYOFFICE_JWT_SECRET="和 Document Server 里一致的 JWT 密钥"
 
 - 界面：root 登录 → 系统管理 → 版本与升级 → 检查更新 → 升级（失败自动回滚）；
 - 命令行：`sudo bash install-medihub.sh --update`（保留数据，升级前自动备份数据库）。
+  **v1.10.1 起不传 `--url` 会保留原来的 `BETTER_AUTH_URL`**——只有换域名时才需要显式传
+  `--url https://新域名`，否则不要传（老版本会把它重置成本机地址，导致登录 403）。
   注意：**命令行升级失败时不会自动回滚**，脚本会把升级前的数据库备份到
   `.updates/backups/manual-<时间>/db.sqlite`，需要时手动恢复：
 
@@ -233,13 +212,15 @@ sudo bash install-medihub.sh --update --yes
 | 登录提示「尝试过于频繁」    | v1.9.6+ 登录/注册/改密限流 10 次/分钟（按 IP，全局 120 次/分钟）；等一分钟再试                                                                                                                                                 |
 | OnlyOffice 编辑报错         | 检查 Document Server 与本站的双向可达性，以及 JWT 密钥是否一致                                                                                                                                                                 |
 
-## 账号与登录
+## 账号与登录（参考）
 
-脚本**不会**创建任何账号（纯净版），站点处于「未初始化」状态：
+脚本**不会**创建任何账号（纯净版），站点处于「未初始化」状态——**完整步骤见
+[FIRST-DEPLOY §5–§6](./1PANEL-FIRST-DEPLOY.md#5-初始化第一个管理员)**，这里只列要点：
 
 1. 打开 `https://你的域名/install`（登录页也会显示「前往安装向导」）；
 2. 填超级管理员姓名 / 邮箱 / 密码（可选 OnlyOffice 参数）→「完成安装」→ 自动跳登录页；
-3. 已有账号后 `/install` 接口返回 **409**，不会被用来重置管理员——忘记密码请用下面的命令。
+3. 登录后先到 **系统管理 → 科室** 新建第一个科室，否则创建不了患者/资料库/教学会议；
+4. 已有账号后 `/install` 接口返回 **409**，不会被用来重置管理员——忘记密码请用下面的命令。
 
 列账号 / 重置密码（在安装目录执行；v1.9.4+ 也可以从任意目录执行）：
 

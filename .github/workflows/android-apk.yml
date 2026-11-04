@@ -71,6 +71,13 @@ jobs:
           esac
           echo "CAPACITOR_SERVER_URL=$URL" >> "$GITHUB_ENV"
 
+      - name: Sync Android version
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          VERSION_CODE="$(node -e "const [a,b,c]=require('./package.json').version.split('.').map(Number); console.log(a*10000+b*100+c)")"
+          sed -i -E "s/versionCode [0-9]+/versionCode ${VERSION_CODE}/" apps/mobile/android/app/build.gradle
+          sed -i -E "s/versionName \"[^\"]+\"/versionName \"${VERSION}\"/" apps/mobile/android/app/build.gradle
+          grep -E 'versionCode|versionName' apps/mobile/android/app/build.gradle
       - name: Sync Capacitor
         working-directory: apps/mobile
         run: pnpm run sync:android

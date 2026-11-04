@@ -1,67 +1,64 @@
-# MediHub 部署与运维文档
+# MediHub 文档地图
 
-仓库 `docs/` 下的运维文档索引。**v1.10.0 起是纯净版**：安装后是空库，必须先访问 `/install`
-创建管理员，本文不含任何演示账号或 `--seed` 用法。八份文档都按「可以直接照做」的标准写：命令可复制、界面路径给出
-1Panel 的具体位置、关键结论标注来源。
+当前版本 **v1.10.1**（纯净版：安装后是空库，**必须先访问 `/install` 创建管理员**）。
 
-| 文档                                               | 内容                                                                                                                                                                                                                                                                                                                                                                           | 适合谁                                                                         |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
-| [1PANEL-FIRST-DEPLOY.md](./1PANEL-FIRST-DEPLOY.md) | **1Panel 首次部署教程**：从服务器/域名准备、一键安装、反向代理、Let's Encrypt、`/install` 建管理员、建第一个科室、验收、备份到升级，按顺序照做                                                                                                                                                                                                                                 | 第一次部署、不想先读长手册的人                                                 | **1Panel 服务器一键安装**：一条命令装好 Node/pnpm/服务/站点依赖，装完打开 `/install` 建管理员（纯净版无演示数据），OnlyOffice 参数可后填，`--update` 升级；含参数表、常见问题、卸载 | 不想逐节读部署手册、想尽快把站点跑起来的人 |
-| [DEPLOY-1PANEL.md](./DEPLOY-1PANEL.md)             | **1Panel + Nginx 反向代理 + HTTPS 单机部署手册**：服务器规格、Node 24 / pnpm 12 安装（面板与手动两种）、目录与系统用户、`apps/server/.env` 全字段、构建与迁移、进程守护（Supervisor / pm2 两套完整配置）、反向代理必需指令与原因、证书、防火墙、备份与恢复、手工升级与回滚、上线验收清单、故障排查表、科室作用域                                                               | 第一次把 MediHub 部署到一台 Linux 服务器的人；接手运维的人                     |
-| [UPGRADE.md](./UPGRADE.md)                         | **在线升级与回滚**（系统管理 → 版本与升级，**v1.1.0+，当前 v1.10.0**）：适用与不适用清单、执行器原理与时序、`UPDATE_*` 环境变量表、三种部署方式（systemd / PM2 / 1Panel）的重启命令与 sudoers 配置、操作步骤、回滚边界、常见问题、安全说明                                                                                                                                     | 负责发版与线上运维的人；被「升级失败/自动回滚」卡住的人                        |
-| [ONLYOFFICE.md](./ONLYOFFICE.md)                   | **ONLYOFFICE 是否免费与接入方案**：AGPLv3 与商用边界、9.4 起取消 20 并发限制、社区版 / 企业版 / 开发者版能力对照、与 Collabora / Microsoft WOPI 的门槛对比、1Panel Docker 编排全文、`https://office.example.com` 反代要点、本项目 `.env` 两个变量与完整验证流程、常见报错、不部署时的降级路径                                                                                  | 正在决定「Office 文档要不要在线编辑、要花多少钱」的人；负责接入排错的人        |
-| [ARCHIVE.md](./ARCHIVE.md)                         | **容量与冷数据归档**（存储配额 / 冷数据归档 / 定时计划 / 镜像备份）：容量规划、GB↔字节与 413/507 排查、手工归档与分片选择、**定时归档计划**（频率/整点/本地目标 200MB 规则）、**镜像备份**（SQLite 快照 + 可选素材、每目标**只留 2 份**、从指定镜像一键恢复与回滚）、归档包内容（`manifest.json` / `viewer.html`）、归档后如何取回、桌面端离线查看、大文件断点续传、运维与备份 | 磁盘快满、要给科室设上传上限、要把旧素材下线归档、或需要一份能恢复的冷备份的人 |
-| [DOCKER.md](./DOCKER.md)                           | **本地 Docker 部署**（试运行 / 验收）：`docker compose up -d --build`、默认 8080 与 `MEDIHUB_PORT`、首次自动迁移（空库，`/install` 建管理员）、数据卷备份/恢复、GHCR 拉取、重置密码、能力边界（无 LibreOffice/OnlyOffice、不支持在线升级）                                                                                                                                     | 想在本机或演示机上快速跑起来的人                                               |
-| [MOBILE-PWA.md](./MOBILE-PWA.md)                   | **手机端使用与安装（PWA）**：安装到安卓桌面（两个入口）、手机能做什么/不能做什么、拍照录像上传、HTTPS 硬要求、iOS 差异、为什么先做 PWA、什么时候值得上原生（Expo / Electron 壳，含 VibeStart 命令示例但未实现）、常见问题自检清单                                                                                                                                              | 要在手机上拍照上传的科室、负责上线 HTTPS 与答疑的人                            |
-| [ANDROID-APK.md](./ANDROID-APK.md)                 | **安卓 APK（Capacitor 套壳）**：GitHub Actions 一键构建（workflow_dispatch 填站点地址，或 tag + 仓库变量）、Artifacts 下载 `app-debug.apk`、本地构建命令（JDK 21 / Android SDK 35）、远程加载 vs 本地资源、安装与更新、debug 签名与上架说明、常见问题                                                                                                                          | 需要独立 APK 分发给同事、或要上架应用商店的人                                  |
+文档按「你想做什么」分组。第一次来，只看第一组；日常运维查第二组；改功能/选型再看第三组。
 
-## 阅读顺序建议
+---
 
-1. 想最快跑起来：[INSTALL-1PANEL.md](./INSTALL-1PANEL.md) 的一条命令，然后回来按需补
-   [UPGRADE.md](./UPGRADE.md) 的在线升级配置。
-2. 需要逐项控制（自定义目录、Supervisor、证书细节）：按 [DEPLOY-1PANEL.md](./DEPLOY-1PANEL.md)
-   从 §1 顺序做到 §13。
-3. 上线前逐条过一遍 §14「上线验收清单」，别跳过 §16「与仓库现状的已知差异」
-   和 §17「科室作用域」——后者解释了「切换科室后数据没变」这类只会在反代后面才出现的现象。
-4. 要开启「系统管理 → 版本与升级」的在线升级，先读 [UPGRADE.md](./UPGRADE.md) 的 §3
-   前置条件与 §5 重启命令——九成失败都出在这两节。
-5. 磁盘开始紧张、或要给科室设上传上限时，读 [ARCHIVE.md](./ARCHIVE.md)：§1 容量规划、
-   §2 配额（含 413/507 排查）、§3 归档操作与 §3.7 定时计划 / §3.8 镜像备份；
-   动手前务必看清 §9「限制与注意事项」。
-6. 需要独立 APK（而不是 PWA）时，读 [ANDROID-APK.md](./ANDROID-APK.md)：先配站点地址，再从 Actions Artifacts 下载；签名与上架见 §5。
-7. 只想本机看效果：读 [DOCKER.md](./DOCKER.md)，`docker compose up -d --build` 后打开 http://localhost:8080。
-8. 要让医生在手机上拍照上传，读 [MOBILE-PWA.md](./MOBILE-PWA.md)：先确认 HTTPS（§5.1），
-   再按 §2 教他们装到桌面；能力边界见 §4。
+## 一、只想把站跑起来（首次上线）
 
-## 三个最容易踩的坑
+| 顺序  | 文档                                                                        | 什么时候看                                                                                                                 |
+| ----- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| **1** | [1PANEL-FIRST-DEPLOY.md](./1PANEL-FIRST-DEPLOY.md) — **首次部署（主入口）** | 第一次部署。DNS → 一键安装 → 反向代理 → HTTPS → `/install` 建管理员 → 建第一个科室 → 验收 → 备份 → 升级 → 排障，一条线走完 |
+| 2     | [INSTALL-1PANEL.md](./INSTALL-1PANEL.md) — **安装器参考**                   | 查 `install-1panel.sh` 的参数含义、1.9.x–1.10.x 行为变化、卸载命令。**不重复开箱流程**                                     |
+| 3     | [DEPLOY-1PANEL.md](./DEPLOY-1PANEL.md) — **手工/进阶部署**                  | 不用一键脚本：自定义目录/用户、Supervisor 或 PM2、手工 Nginx 与证书、逐项备份恢复与排障                                    |
+| 4     | [DOCKER.md](./DOCKER.md) — **Docker / GHCR**                                | 本地演示、验收，或想用容器部署（GHCR 镜像 public）。没有 systemd，也就**没有在线升级**                                     |
 
-| 坑                                     | 说明                                                                                                                                                                                                                                                                                                     | 详见                                                                                           |
-| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| 构建流程被改动后 SPA 没进静态目录      | 现在 `pnpm build` 会自动把 `apps/web/dist` 复制到 `apps/server/dist/public`（服务端 build 末尾跑 `scripts/copy-spa.mjs`）。**只有在你换掉构建方式**（自定义 Dockerfile / CI 只跑 `vp pack` / 单独跑 `--filter @medihub/server build` 而 web 未构建）时才会缺这一步，表现为站点 404 而 `/api/health` 正常 | [DEPLOY-1PANEL.md §7.1](./DEPLOY-1PANEL.md#71-spa-静态产物由构建自动复制)                      |
-| `BETTER_AUTH_URL` 与实际访问地址不一致 | 结果是「页面能打开、一登录就 403」，因为 Better Auth 按 Origin 校验                                                                                                                                                                                                                                      | [DEPLOY-1PANEL.md §6.2](./DEPLOY-1PANEL.md#62-变量清单)、[§15](./DEPLOY-1PANEL.md#15-故障排查) |
-| OnlyOffice 与主站不同协议              | 主站 https、编辑器 http，浏览器按混合内容直接拦掉，表现为白屏                                                                                                                                                                                                                                            | [ONLYOFFICE.md §4.4](./ONLYOFFICE.md#44-为什么必须与主站同协议https)                           |
+> 部署只有**三条路**：一键脚本（推荐，第 1 行）/ 手工部署（第 3 行）/ Docker（第 4 行）；
+> 第 2 行是安装器的**参考手册**，不是另一条部署路径。三条路的
+> 「反代 + HTTPS + `/install` 建管理员 + 建第一个科室」完全一样。
 
-> 在线升级另有两个当前版本的行为约束（「点了升级没反应」与「升级后自动回滚」），
-> 都写在 [UPGRADE.md §8](./UPGRADE.md#8-常见问题) 里。开启升级功能前请先读那一节，
-> 并在首次使用前按 [UPGRADE.md §3.6](./UPGRADE.md#36-构建产物里带着执行器脚本)、
-> [§3.7](./UPGRADE.md#37-版本号随产物一起切换) 做两项自检。
+## 二、日常运维
 
-## 与仓库脚本的对应关系
+| 文档                                                     | 用途                                                                                            |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| [UPGRADE.md](./UPGRADE.md) — **在线升级与回滚**          | 系统管理 →「版本与升级」一键升级、失败自动回滚、`.updates/state.json` 读日志、回滚边界          |
+| [ARCHIVE.md](./ARCHIVE.md) — **容量与归档**              | 存储配额（科室/全站、413/507 排查）、冷数据归档与定时计划、镜像备份（每目标留 2 份 + 一键恢复） |
+| [DEPLOY-1PANEL.md §12](./DEPLOY-1PANEL.md#12-备份与恢复) | 备份/恢复的具体命令（SQLite `.backup` + 素材目录）                                              |
+| [DEPLOY-1PANEL.md §15](./DEPLOY-1PANEL.md#15-故障排查)   | 完整故障排查表（403 Origin / 413 / 502 / SQLite 锁 / 时区 / 权限 / 429）                        |
 
-文档里引用的命令都来自根 `package.json` 与 `apps/server/package.json`：
+## 三、功能深挖与端侧
 
-| 文档里的命令                                      | 实际定义                                                                                          |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `pnpm install` / `pnpm install --frozen-lockfile` | pnpm 原生命令（仓库有 `pnpm-lock.yaml`）                                                          |
-| `pnpm dev`                                        | `vp run -r --parallel dev`                                                                        |
-| `pnpm build`                                      | `vp run --filter @medihub/web build && vp run --filter @medihub/server build`（先 web 后 server） |
-| `pnpm check`                                      | `vp check`                                                                                        |
-| `pnpm test`                                       | `vp test`（unit + integration 两个 project）                                                      |
-| `pnpm test:e2e`                                   | `vp run --filter @medihub/web test:e2e`                                                           |
-| `pnpm db:generate`                                | `vp run --filter @medihub/db db:generate`                                                         |
-| `pnpm db:migrate`                                 | `vp run --filter @medihub/server db:migrate`                                                      |
-| `pnpm run ready`                                  | `vp check && vp run knip && vp test && vp run test:e2e && vp run build`                           |
-| 生产启动（Supervisor / pm2）                      | 等价于 `apps/server` 的 `start`：`node --env-file-if-exists=.env dist/index.mjs`                  |
+| 文档                               | 用途                                                                 |
+| ---------------------------------- | -------------------------------------------------------------------- |
+| [ONLYOFFICE.md](./ONLYOFFICE.md)   | Office 在线编辑选型：许可证、免费边界、Docker 部署、反代与排错       |
+| [MOBILE-PWA.md](./MOBILE-PWA.md)   | 手机端：安装成桌面 App（PWA）、拍照上传、能力边界、iOS 差异          |
+| [ANDROID-APK.md](./ANDROID-APK.md) | 需要独立安装包时：Capacitor 套壳 + GitHub Actions 出 APK、签名与上架 |
 
-> 生产部署只需要 `pnpm install --frozen-lockfile`、`pnpm db:migrate`、`pnpm build`
-> 三步；`check` / `test` / `test:e2e` 属于本地与 CI。
+---
+
+## 最常见的四个坑
+
+| 坑                                  | 说明                                                                                                                        | 详见                                                                                                           |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| 装完打不开账号页 / 以为坏了         | 纯净版是**空库**：先打开 `https://域名/install` 建管理员，再建第一个科室                                                    | [FIRST §5](./1PANEL-FIRST-DEPLOY.md#5-初始化第一个管理员)、[§6](./1PANEL-FIRST-DEPLOY.md#6-创建第一个科室必须) |
+| 登录 403 / Invalid origin           | 用 `IP:端口` 打开但 `BETTER_AUTH_URL` 是域名 → Better Auth 拒绝；改成同一地址，或把该地址加进 `BETTER_AUTH_TRUSTED_ORIGINS` | [FIRST §11](./1PANEL-FIRST-DEPLOY.md#11-常见问题)                                                              |
+| 上传 413 / 502                      | Nginx `client_max_body_size 300m`、`proxy_read_timeout 300s`，且 `X-Forwarded-For` 传**单值**                               | [FIRST §3.1](./1PANEL-FIRST-DEPLOY.md#31-加上传与超时配置)                                                     |
+| 在线升级点了没反应 / 升级后自动回滚 | 先看 `.updates/state.json` 与 `journalctl -u medihub`；升级执行器需要 sudoers 免密重启与 `KillMode=process`                 | [UPGRADE §8](./UPGRADE.md#8-常见问题)                                                                          |
+
+## 命令与仓库脚本的对应关系
+
+| 文档里的命令                                                    | 实际定义                                                                                          |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `pnpm install` / `pnpm install --frozen-lockfile`               | pnpm 原生命令（仓库有 `pnpm-lock.yaml`）                                                          |
+| `pnpm dev`                                                      | `vp run -r --parallel dev`（web :5173 / api :3000）                                               |
+| `pnpm build`                                                    | `vp run --filter @medihub/web build && vp run --filter @medihub/server build`（先 web 后 server） |
+| `pnpm db:migrate`                                               | `vp run --filter @medihub/server db:migrate`                                                      |
+| `pnpm --filter @medihub/server reset-password --list`           | `apps/server` 的 `reset-password` 脚本                                                            |
+| 生产启动                                                        | 等价 `apps/server` 的 `start`：`node --env-file-if-exists=.env dist/index.mjs`                    |
+| `pnpm check` / `pnpm test` / `pnpm test:e2e` / `pnpm run ready` | `vp check` / `vp test` / `vp run --filter @medihub/web test:e2e` / 上述组合链                     |
+
+> 生产部署只需要 `pnpm install --frozen-lockfile`、`pnpm db:migrate`、`pnpm build` 三步
+> （一键脚本会自动做完）；`check` / `test` / `test:e2e` 属于本地与 CI。
+> **管理员账号**只能通过 `/install` 或管理端创建——`v1.10.0` 起已移除 `seed` 脚本与演示数据。

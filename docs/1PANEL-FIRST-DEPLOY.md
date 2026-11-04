@@ -1,6 +1,13 @@
-# 1Panel 首次部署教程（v1.10.0 纯净版）
+# 1Panel 首次部署（v1.10.1 纯净版）
 
 面向第一次把医档通部署到 1Panel 服务器的人。照着做即可，不需要先懂 Node.js 或 Nginx。
+
+> **这是首次部署的主入口**。只想上线就照着本文从头做到尾；
+> 安装器的参数/行为/卸载见 [INSTALL-1PANEL.md](./INSTALL-1PANEL.md)，
+> 自定义目录 / Supervisor / PM2 / 手工反代见 [DEPLOY-1PANEL.md](./DEPLOY-1PANEL.md)。
+>
+> 不想用脚本？也可以直接用 **Docker / GHCR 镜像**跑（[DOCKER.md](./DOCKER.md)），
+> 那条路不需要 systemd，也不需要本文的 Node 安装步骤。
 
 > **纯净版说明**：v1.10.0 起安装脚本**不创建任何账号、不写入演示数据**。
 > 装完是一台空库：先打开 `/install` 创建超级管理员，再登录创建第一个科室。
@@ -57,8 +64,10 @@ sudo bash install-medihub.sh --url https://medihub.example.com
   域名还没配 HTTPS 时，可以先用 `--url http://服务器IP:3000 --port 3000` 临时验证，
   同时要在安全组/防火墙临时放行 3000；验证完再关掉端口并改成正式域名。
 - 不传 `--port` 时脚本会自动挑一个 20000–29999 的空闲端口，安装结束会打印出来。
-- 建议固定版本时加 `--tag v1.10.0`；不写默认取最新 Release。
+- 建议固定版本时加 `--tag v1.10.1`；不写默认取最新 Release。
 - **不要加 `--seed`**：纯净版没有这个参数，脚本会直接提示已移除。
+- 不想在本机跑 systemd？可以改用 GHCR 镜像（`docker pull ghcr.io/eunsolfs/medihub:1.10.1`），
+  步骤见 [DOCKER.md](./DOCKER.md)；本文其余步骤（反代/HTTPS/`/install`）同样适用。
 
 安装过程会：
 
@@ -72,7 +81,7 @@ sudo bash install-medihub.sh --url https://medihub.example.com
 看到下面类似内容说明成功：
 
 ```text
-医档通 MediHub 安装完成（v1.10.0）
+医档通 MediHub 安装完成（v1.10.1）
 ────────────────────────────────
 安装目录：/opt/medihub
 监听端口：127.0.0.1:21451
@@ -91,7 +100,7 @@ curl -s "http://127.0.0.1:$PORT/api/health"
 应返回：
 
 ```json
-{ "status": "ok", "version": "1.10.0" }
+{ "status": "ok", "version": "1.10.1" }
 ```
 
 如果这里失败，先看日志：
@@ -270,7 +279,7 @@ root 登录 →「系统管理 → 版本与升级」→ 检查更新 → 升级
 ```bash
 cd /opt
 curl -fsSL https://raw.githubusercontent.com/Eunsolfs/medihub/main/scripts/install-1panel.sh -o install-medihub.sh
-sudo bash install-medihub.sh --update --yes --tag v1.10.0
+sudo bash install-medihub.sh --update --yes --tag v1.10.1
 ```
 
 升级会保留 `.env`、SQLite、`storage` 和升级备份，不会清空数据，也不会重新写入演示数据。
@@ -353,8 +362,8 @@ cd /opt && sudo bash install-medihub.sh --update --yes
 
 ## 14. 相关文档
 
-- [INSTALL-1PANEL.md](./INSTALL-1PANEL.md)：安装脚本全部参数与卸载
-- [DEPLOY-1PANEL.md](./DEPLOY-1PANEL.md)：手工部署、Nginx 细节、备份恢复
+- [INSTALL-1PANEL.md](./INSTALL-1PANEL.md)：安装器参考（参数、1.9.x–1.10.x 行为变化、卸载）
+- [DEPLOY-1PANEL.md](./DEPLOY-1PANEL.md)：手工/进阶部署（自定义目录、Nginx 细节、备份恢复、完整排障）
 - [UPGRADE.md](./UPGRADE.md)：在线升级与回滚
-- [DOCKER.md](./DOCKER.md)：本地 Docker 试运行
+- [DOCKER.md](./DOCKER.md)：Docker / GHCR 容器部署（本地试运行或免 systemd）
 - [ONLYOFFICE.md](./ONLYOFFICE.md)：需要 Office 在线编辑时再看

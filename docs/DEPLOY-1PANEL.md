@@ -1,8 +1,20 @@
-# 医档通 MediHub 单机部署手册（1Panel + Nginx 反向代理 + HTTPS）
+# 1Panel 手工/进阶部署手册（v1.10.1）
+
+> **📌 大多数用户请先看 [1PANEL-FIRST-DEPLOY.md](./1PANEL-FIRST-DEPLOY.md)**
+>
+> 那篇是首次部署主线（一键安装 + 反代 + HTTPS + `/install`），**照着做就能上线**。
+> 本文用于**不用一键脚本**或需要逐项控制的场景：
+>
+> - 自定义安装目录、系统用户与权限（不用 `/opt/medihub`）
+> - 用 **Supervisor / PM2** 而不是 systemd 托管进程
+> - 手工配 Nginx/OpenResty 反代、证书、防火墙、真实 IP
+> - 逐项的备份/恢复、手工升级与回滚、完整的故障排查表、科室作用域
+>
+> 安装器参数与行为参考见 [INSTALL-1PANEL.md](./INSTALL-1PANEL.md)；容器部署见 [DOCKER.md](./DOCKER.md)。
 
 本文面向一台 Linux 服务器，把 MediHub 以**单进程**方式部署在 1Panel 面板后面：1Panel 负责
 面板、OpenResty（Nginx）反向代理、证书、防火墙、计划任务与进程守护；MediHub 只监听
-`127.0.0.1:3000` 之外的唯一端口，由 Nginx 以一个域名对外提供。
+一个本机端口（下文以 `127.0.0.1:3000` 举例），由 Nginx 以一个域名对外提供。
 
 > **版本与命令基线**：Node `24.22.1`、pnpm `12.15.0`（与仓库 `package.json` 的
 > `engines` / `devEngines` 一致）。1Panel 按社区版 v2 界面撰写；v1 的菜单位置在括号里注明。

@@ -2,6 +2,29 @@
 
 本项目从第一版起的所有对外变更。版本号遵循 `MAJOR.MINOR.PATCH`。
 
+## v1.10.1 — 2026-11-04
+
+### 文档重整与安装器修复
+
+- 文档重整：
+  - `1PANEL-FIRST-DEPLOY.md` 作为首次部署主入口；
+  - `INSTALL-1PANEL.md` 改为安装器参数/行为/卸载参考；
+  - `DEPLOY-1PANEL.md` 改为手工/进阶部署手册；
+  - `docs/README.md` 重写文档地图与阅读顺序；README 部署表按场景拆分；
+  - Docker/GHCR、UPGRADE 文档同步 1.10.1 与 GHCR 镜像。
+- 安装器修复：
+  - `--update` 未显式传 `--url` 时保留原 `BETTER_AUTH_URL`，不再把线上域名重置成
+    `127.0.0.1` 导致升级后登录 Invalid origin；
+  - `BETTER_AUTH_TRUSTED_ORIGINS` 纳入服务器**所有 IPv4** 与 `localhost`，多网卡/多公网 IP
+    服务器用第二个 IP 访问也能登录；
+  - `--purge` 的 systemctl 判断加保护，dry-run 输出改为“将清理”。
+- GHCR：
+  - `ghcr.io/eunsolfs/medihub` 支持 `latest`、`1.10.1`、`main`、`sha-*`；
+  - docker-ghcr workflow 增加镜像启动 smoke test，构建后实际请求 `/api/health`，
+    防止再出现“镜像能推但起不来”的问题。
+- 验证：installer `--help/--version/--seed 拒绝/port/缺值/dry-run/purge-dry-run`；
+  升级 URL 保留与多 IP 可信来源模拟验证；`pnpm run ready` 全绿；GHCR 镜像实际启动成功。
+
 ## v1.10.0 — 2026-11-04
 
 ### 纯净发布版：移除所有演示数据与演示账号
@@ -428,4 +451,3 @@
 - 生产部署见 `docs/DEPLOY-1PANEL.md`，Office 选型与配置见 `docs/ONLYOFFICE.md`。
 - `/api/health` 返回 `{ status, version }`，可在部署后核对版本。
 - docx / xlsx / OnlyOffice 预览器按需加载，media 首包由约 590 KB 降至约 162 KB。
-
