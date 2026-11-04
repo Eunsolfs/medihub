@@ -475,10 +475,12 @@ cmd_backup() {
 
   info "导出 SQLite 与素材目录..."
   docker run --rm -u 0 \
+    -e BACKUP_UID="$(id -u)" \
+    -e BACKUP_GID="$(id -g)" \
     -v "$DATA_VOLUME:/data:ro" \
     -v "$tmp:/backup" \
     "$image" \
-    sh -c 'cp /data/local.db /backup/local.db || exit 1; cp /data/local.db-wal /backup/local.db-wal 2>/dev/null || true; cp /data/local.db-shm /backup/local.db-shm 2>/dev/null || true; if [ -d /data/storage ]; then cp -a /data/storage /backup/storage; fi'
+    sh -c 'cp /data/local.db /backup/local.db || exit 1; cp /data/local.db-wal /backup/local.db-wal 2>/dev/null || true; cp /data/local.db-shm /backup/local.db-shm 2>/dev/null || true; if [ -d /data/storage ]; then cp -a /data/storage /backup/storage; fi; chown -R "$BACKUP_UID:$BACKUP_GID" /backup'
   cp "$ENV_FILE" "$tmp/env.bak"
 
   file="$BACKUP_DIR/medihub-$(date +%Y%m%d-%H%M%S)-$label.tar.gz"
