@@ -114,7 +114,7 @@ export const MobileTabBar = ({ role, onOpenSearch }: MobileTabBarProps) => {
                 <SearchIcon />
                 搜索与跳转
               </Button>
-              <ThemeMenu />
+              <ThemeMenu placement="top" />
             </div>
             <UserMenu variant="sidebar" />
           </div>

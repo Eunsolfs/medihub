@@ -240,6 +240,28 @@ describe("素材", () => {
 
     expect(before.total).toBe(1);
 
+    const fetched = await doctor.assets.get({ id: row.id });
+
+    expect(fetched.patientName).toBe("素材患者");
+
+    await expect(
+      doctor.assets.get({ id: crypto.randomUUID() })
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+    const otherDepartment = await signUpDepartment();
+
+    const otherPatient = await otherDepartment.client.patients.create({
+      name: "别科患者",
+    });
+
+    await expect(
+      doctor.assets.move({ ids: [row.id], patientId: otherPatient.id })
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+    await expect(
+      doctor.assets.move({ ids: [row.id], patientId: crypto.randomUUID() })
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+
     const removed = await doctor.assets.remove({ ids: [row.id] });
     expect(removed.deleted).toBe(1);
 
@@ -605,6 +627,47 @@ it("批量修改状态、统计与删除患者", async () => {
   await expect(
     admin.client.patients.get({ id: second.id })
   ).resolves.toBeTruthy();
+});
+
+it("科室管理员可以批量操作成员创建的患者", async () => {
+  const admin = await signUpDepartment("dept_admin");
+  const member = await signUpAccount();
+  const profile = await member.client.me.profile();
+
+  if (!profile) {
+    throw new Error("缺少会话");
+  }
+
+  await testDb
+    .update(user)
+    .set({ organizationId: admin.organizationId, role: "member" })
+    .where(eq(user.id, profile.viewer.id));
+
+  const memberClient = await clientForEmail(member.email);
+
+  const created = await memberClient.patients.create({
+    name: "r46-成员患者",
+  });
+
+  const summary = await admin.client.patients.batchSummary({
+    ids: [created.id],
+  });
+
+  expect(summary.totals.patientCount).toBe(1);
+
+  const updated = await admin.client.patients.bulkStatus({
+    ids: [created.id],
+    status: "archived",
+  });
+
+  expect(updated.updated).toBe(1);
+
+  const deleted = await admin.client.patients.bulkDelete({
+    deleteFiles: false,
+    ids: [created.id],
+  });
+
+  expect(deleted.deleted).toBe(1);
 });
 
 describe("无科室账号", () => {

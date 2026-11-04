@@ -241,6 +241,62 @@ describe("users", () => {
   });
 });
 
+it("root 创建 individual 时自动分配个人空间", async () => {
+  const root = await signInAs("root", null);
+  const email = `individual-${crypto.randomUUID()}@example.com`;
+
+  const created = await root.client.users.create({
+    email,
+    name: "个人用户",
+    password: PASSWORD,
+    role: "individual",
+  });
+
+  expect(created.organizationId).toBeTruthy();
+
+  const { headers } = await auth.api.signInEmail({
+    body: { email, password: PASSWORD },
+    returnHeaders: true,
+  });
+
+  const cookie = headers
+    .getSetCookie()
+    .map((header) => header.split(";")[0])
+    .join("; ");
+
+  const session = await auth.api.getSession({
+    headers: new Headers({ cookie }),
+  });
+
+  if (!session) {
+    throw new Error("个人账号登录失败");
+  }
+
+  const individual = createClientFor(session);
+  const profile = await individual.me.profile();
+
+  expect(profile?.viewer.organizationId).toBe(created.organizationId);
+
+  const collections = await individual.collections.list({});
+
+  expect(collections).toBeTruthy();
+});
+
+it("root 不能把 individual 账号分配科室", async () => {
+  const root = await signInAs("root", null);
+  const department = await createOrganization("个人测试科室");
+
+  await expect(
+    root.client.users.create({
+      email: `individual-${crypto.randomUUID()}@example.com`,
+      name: "个人用户",
+      organizationId: department.id,
+      password: PASSWORD,
+      role: "individual",
+    })
+  ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+});
+
 describe("orgs", () => {
   it("只有 root 能管理科室", async () => {
     const organizationA = await createOrganization("整形外科");

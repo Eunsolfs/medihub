@@ -59,7 +59,23 @@ export const createAuth = ({ db, baseURL, secret }: AuthOptions) =>
       },
     },
     emailAndPassword: { enabled: true, minPasswordLength: 8 },
+    // 默认 3 次/10 秒（按 IP）对医院内网共享出口太紧，任意一人连续输错
+    // 密码就会把同一 IP 的其他人一起锁住；放宽到 10 次/分钟。
+    rateLimit: {
+      customRules: {
+        "/change-password": { max: 10, window: 60 },
+        "/sign-in/email": { max: 10, window: 60 },
+        "/sign-up/email": { max: 10, window: 60 },
+      },
+      max: 120,
+      window: 60,
+    },
     secret,
+    // 1Panel/Nginx 会覆盖 X-Forwarded-For；Better Auth 需要显式信任这个头，
+    // 否则所有用户会被当成同一个 IP 共享限流桶。
+    advanced: {
+      ipAddress: { ipAddressHeaders: ["x-forwarded-for"] },
+    },
     // 开发时同一台机器可能通过 localhost / 127.0.0.1 / 局域网 IP 访问，
     // 这些都应当被当作同一个站点，否则 Better Auth 会拒绝请求。
     trustedOrigins: [

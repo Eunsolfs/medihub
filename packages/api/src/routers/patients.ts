@@ -54,6 +54,7 @@ const loadBulkPatients = async (input: {
       createdBy: patient.createdBy,
       id: patient.id,
       name: patient.name,
+      organizationId: patient.organizationId,
     })
     .from(patient)
     .where(

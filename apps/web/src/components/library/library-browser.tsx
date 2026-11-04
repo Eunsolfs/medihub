@@ -209,7 +209,11 @@ export const LibraryBrowser = ({
         upload={
           <LibraryUpload
             collectionId={collectionId}
-            onUploaded={onUploaded}
+            onUploaded={async () => {
+              // 上传会让当前目录的素材列表与目录树计数同时变化。
+              await refreshAssets();
+              onUploaded();
+            }}
             source={source}
           />
         }

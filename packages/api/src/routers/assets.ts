@@ -21,9 +21,10 @@ import {
   assetKind,
   assetVisibility,
   clinicalStage,
+  collection,
 } from "@medihub/db/schema/content";
 import { learningSession } from "@medihub/db/schema/learning";
-import { patient } from "@medihub/db/schema/patients";
+import { admission, patient } from "@medihub/db/schema/patients";
 
 import type { Viewer } from "#src/access.ts";
 import {
@@ -258,8 +259,20 @@ export const assetsRouter = {
           .select(assetSummary)
           .from(asset)
           .leftJoin(user, eq(asset.ownerId, user.id))
-          .leftJoin(patient, eq(asset.patientId, patient.id))
-          .leftJoin(learningSession, eq(asset.sessionId, learningSession.id))
+          .leftJoin(
+            patient,
+            and(
+              eq(asset.patientId, patient.id),
+              eq(patient.organizationId, asset.organizationId)
+            )
+          )
+          .leftJoin(
+            learningSession,
+            and(
+              eq(asset.sessionId, learningSession.id),
+              eq(learningSession.organizationId, asset.organizationId)
+            )
+          )
           .where(where)
           .orderBy(...orderBy)
           .limit(input.pageSize)
@@ -267,8 +280,20 @@ export const assetsRouter = {
         context.db
           .select({ total: count() })
           .from(asset)
-          .leftJoin(patient, eq(asset.patientId, patient.id))
-          .leftJoin(learningSession, eq(asset.sessionId, learningSession.id))
+          .leftJoin(
+            patient,
+            and(
+              eq(asset.patientId, patient.id),
+              eq(patient.organizationId, asset.organizationId)
+            )
+          )
+          .leftJoin(
+            learningSession,
+            and(
+              eq(asset.sessionId, learningSession.id),
+              eq(learningSession.organizationId, asset.organizationId)
+            )
+          )
           .where(where),
       ]);
 
@@ -298,6 +323,20 @@ export const assetsRouter = {
         })
         .from(asset)
         .leftJoin(user, eq(asset.ownerId, user.id))
+        .leftJoin(
+          patient,
+          and(
+            eq(asset.patientId, patient.id),
+            eq(patient.organizationId, asset.organizationId)
+          )
+        )
+        .leftJoin(
+          learningSession,
+          and(
+            eq(asset.sessionId, learningSession.id),
+            eq(learningSession.organizationId, asset.organizationId)
+          )
+        )
         .where(
           and(eq(asset.id, input.id), eq(asset.organizationId, organizationId))
         );
@@ -434,18 +473,105 @@ export const assetsRouter = {
 
       await assertAssetPatientAccess(context, rows, viewer);
 
+      // 目标也要校验归属：否则可以把素材 move 到其他科室的患者/就诊/资料库，
+      // 之后按当前归属再也移不回来。
+      let linkedPatientId = input.patientId;
+
+      if (input.admissionId) {
+        const [admissionRow] = await context.db
+          .select({
+            organizationId: admission.organizationId,
+            patientId: admission.patientId,
+          })
+          .from(admission)
+          .where(eq(admission.id, input.admissionId));
+
+        if (
+          !admissionRow ||
+          admissionRow.organizationId !== organizationId ||
+          input.patientId === null
+        ) {
+          throw new ORPCError("NOT_FOUND", { message: "就诊不存在" });
+        }
+
+        if (input.patientId && input.patientId !== admissionRow.patientId) {
+          throw new ORPCError("BAD_REQUEST", {
+            message: "就诊与患者不匹配",
+          });
+        }
+
+        if (linkedPatientId === undefined) {
+          linkedPatientId = admissionRow.patientId;
+        }
+      }
+
+      if (linkedPatientId) {
+        const [patientRow] = await context.db
+          .select({
+            createdBy: patient.createdBy,
+            organizationId: patient.organizationId,
+          })
+          .from(patient)
+          .where(eq(patient.id, linkedPatientId));
+
+        if (
+          !patientRow ||
+          patientRow.organizationId !== organizationId ||
+          !canAccessPatient(viewer, patientRow)
+        ) {
+          throw new ORPCError("NOT_FOUND", { message: "患者不存在" });
+        }
+      }
+
+      if (input.collectionId) {
+        const [collectionRow] = await context.db
+          .select({ id: collection.id })
+          .from(collection)
+          .where(
+            and(
+              eq(collection.id, input.collectionId),
+              eq(collection.organizationId, organizationId)
+            )
+          );
+
+        if (!collectionRow) {
+          throw new ORPCError("NOT_FOUND", { message: "资料库不存在" });
+        }
+      }
+
+      if (input.sessionId) {
+        const [sessionRow] = await context.db
+          .select({ id: learningSession.id })
+          .from(learningSession)
+          .where(
+            and(
+              eq(learningSession.id, input.sessionId),
+              eq(learningSession.organizationId, organizationId)
+            )
+          );
+
+        if (!sessionRow) {
+          throw new ORPCError("NOT_FOUND", { message: "学习会议不存在" });
+        }
+      }
+
+      const clearAdmission =
+        input.patientId !== undefined && input.admissionId === undefined;
+
       await context.db
         .update(asset)
         .set({
           ...(input.admissionId === undefined
-            ? {}
+            ? clearAdmission
+              ? { admissionId: null }
+              : {}
             : { admissionId: input.admissionId ?? null }),
           ...(input.collectionId === undefined
             ? {}
             : { collectionId: input.collectionId ?? null }),
-          ...(input.patientId === undefined
+          ...(linkedPatientId === undefined
             ? {}
-            : { patientId: input.patientId ?? null }),
+            : { patientId: linkedPatientId }),
           ...(input.sessionId === undefined
             ? {}
             : { sessionId: input.sessionId ?? null }),

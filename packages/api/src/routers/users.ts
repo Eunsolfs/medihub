@@ -276,7 +276,7 @@ export const usersRouter = {
         throw new ORPCError("UNAUTHORIZED");
       }
 
-      const organizationId =
+      let organizationId =
         viewer.role === "root"
           ? (input.organizationId ?? null)
           : scopedOrganizationId(viewer);
@@ -303,6 +303,18 @@ export const usersRouter = {
         }
       }
 
+      // 个人账号没有科室，但同样需要一个 personal 工作空间；否则登录后
+      // collections/patients/stats 等全部 412，等于创建了一个不可用账号。
+      if (input.role === "individual") {
+        if (organizationId) {
+          throw new ORPCError("BAD_REQUEST", {
+            message: "个人账号不能分配科室",
+          });
+        }
+
+        organizationId = crypto.randomUUID();
+      }
+
       const [existing] = await context.db
         .select({ id: user.id })
         .from(user)
@@ -318,6 +330,18 @@ export const usersRouter = {
       // 直接写 user + account：创建账号是管理员动作，不经过 Better Auth 的注册接口，
       // 密码哈希沿用 Better Auth 的凭证格式，创建后即可用 sign-in/email 登录。
       context.db.transaction((tx) => {
+        if (input.role === "individual" && organizationId) {
+          tx.insert(organization)
+            .values({
+              code: `personal-${organizationId.slice(0, 8)}`,
+              description: "管理员创建的个人工作空间",
+              id: organizationId,
+              kind: "personal",
+              name: `${input.name} 的个人空间`,
+            })
+            .run();
+        }
+
         tx.insert(user)
           .values({
             email: input.email,

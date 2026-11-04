@@ -9,11 +9,13 @@ import type { ShareAudience, Viewer } from "@medihub/api";
 import {
   asset,
   clinicalStage,
+  collection,
   post,
   postMedia,
 } from "@medihub/db/schema/content";
+import { learningSession } from "@medihub/db/schema/learning";
 import { organization } from "@medihub/db/schema/organization";
-import { patient } from "@medihub/db/schema/patients";
+import { admission, patient } from "@medihub/db/schema/patients";
 import { storageTarget } from "@medihub/db/schema/system";
 import { buildStorageKey, detectAssetKind } from "@medihub/storage";
 import type { StorageDriver, StorageTargetLike } from "@medihub/storage";
@@ -420,6 +422,128 @@ export const filesRoute = new Hono()
       return c.json({ error: "当前账号没有可用的工作空间" }, 400);
     }
 
+    // 关联的 id 必须属于本次上传解析出的科室：否则可以把文件挂到其他科室的
+    // 患者/就诊/帖子下，造成跨租户数据与患者姓名泄漏。
+    const requestedPatientId = c.req.query("patientId") || null;
+    const requestedAdmissionId = c.req.query("admissionId") || null;
+    const requestedCollectionId = c.req.query("collectionId") || null;
+    const requestedSessionId = c.req.query("sessionId") || null;
+    const requestedPostId = c.req.query("postId") || null;
+    let linkedPatientId = requestedPatientId;
+
+    const canAccessPatientRecord = (row: {
+      createdBy: string | null;
+      organizationId: string;
+    }) =>
+      viewer.role === "root" ||
+      row.createdBy === viewer.id ||
+      (viewer.role === "dept_admin" &&
+        row.organizationId === viewer.organizationId);
+
+    const loadPatient = async (patientId: string) => {
+      const [row] = await db
+        .select({
+          createdBy: patient.createdBy,
+          organizationId: patient.organizationId,
+        })
+        .from(patient)
+        .where(eq(patient.id, patientId));
+
+      if (
+        !row ||
+        row.organizationId !== organizationId ||
+        !canAccessPatientRecord(row)
+      ) {
+        return null;
+      }
+
+      return row;
+    };
+
+    if (requestedPatientId && !(await loadPatient(requestedPatientId))) {
+      return c.json({ error: "患者不存在" }, 404);
+    }
+
+    if (requestedAdmissionId) {
+      const [row] = await db
+        .select({
+          organizationId: admission.organizationId,
+          patientId: admission.patientId,
+        })
+        .from(admission)
+        .where(eq(admission.id, requestedAdmissionId));
+
+      if (!row || row.organizationId !== organizationId) {
+        return c.json({ error: "就诊不存在" }, 404);
+      }
+
+      if (linkedPatientId && linkedPatientId !== row.patientId) {
+        return c.json({ error: "就诊与患者不匹配" }, 400);
+      }
+
+      if (!linkedPatientId) {
+        linkedPatientId = row.patientId;
+
+        if (!(await loadPatient(linkedPatientId))) {
+          return c.json({ error: "患者不存在" }, 404);
+        }
+      }
+    }
+
+    if (requestedCollectionId) {
+      const [row] = await db
+        .select({ id: collection.id })
+        .from(collection)
+        .where(
+          and(
+            eq(collection.id, requestedCollectionId),
+            eq(collection.organizationId, organizationId)
+          )
+        );
+
+      if (!row) {
+        return c.json({ error: "资料库不存在" }, 404);
+      }
+    }
+
+    if (requestedSessionId) {
+      const [row] = await db
+        .select({ id: learningSession.id })
+        .from(learningSession)
+        .where(
+          and(
+            eq(learningSession.id, requestedSessionId),
+            eq(learningSession.organizationId, organizationId)
+          )
+        );
+
+      if (!row) {
+        return c.json({ error: "学习会议不存在" }, 404);
+      }
+    }
+
+    if (requestedPostId) {
+      const [row] = await db
+        .select({
+          authorId: post.authorId,
+          organizationId: post.organizationId,
+        })
+        .from(post)
+        .where(eq(post.id, requestedPostId));
+
+      if (!row || row.organizationId !== organizationId) {
+        return c.json({ error: "帖子不存在" }, 404);
+      }
+
+      if (
+        viewer.role !== "root" &&
+        viewer.role !== "dept_admin" &&
+        row.authorId !== viewer.id
+      ) {
+        return c.json({ error: "没有编辑该帖子的权限" }, 403);
+      }
+    }
+
     const declaredSize = Number(c.req.header("content-length") ?? 0);
 
     if (declaredSize > env.UPLOAD_MAX_BYTES) {
@@ -488,20 +612,20 @@ export const filesRoute = new Hono()
     const [created] = await db
       .insert(asset)
       .values({
-        admissionId: c.req.query("admissionId") || null,
+        admissionId: requestedAdmissionId,
         byteSize: body.byteLength,
         capturedAt: capturedAtParam ? new Date(capturedAtParam) : new Date(),
         checksum,
-        collectionId: c.req.query("collectionId") || null,
+        collectionId: requestedCollectionId,
         description: c.req.query("description") || null,
         kind,
         mimeType,
         organizationId,
         originalName: fileName,
         ownerId: viewer.id,
-        patientId: c.req.query("patientId") || null,
-        postId: c.req.query("postId") || null,
-        sessionId: c.req.query("sessionId") || null,
+        patientId: linkedPatientId,
+        postId: requestedPostId,
+        sessionId: requestedSessionId,
         stage:
           stageParam && clinicalStage.includes(stageParam as never)
             ? (stageParam as (typeof clinicalStage)[number])

@@ -46,7 +46,7 @@ const mount =
 
     return matched
       ? c.newResponse(response.body, response)
-      : await c.notFound();
+      : c.json({ error: "接口不存在" }, 404);
   };
 
 export const rpc = mount(
