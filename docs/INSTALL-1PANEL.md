@@ -1,7 +1,12 @@
 # 在 1Panel 服务器上一键安装
 
 适用：已安装 1Panel 的 Linux 服务器（Debian / Ubuntu / Rocky / Alma / CentOS Stream）。
-脚本会装好 Node.js 24、pnpm、系统服务，并把网站跑起来；OnlyOffice 参数可以稍后填。
+脚本会装好 Node.js 24、pnpm、systemd 服务，并把网站跑起来；OnlyOffice 参数可以稍后填。
+
+> 本文对应脚本 **v1.9.9**（含 `--tag` 示例、参数校验、`--purge`、`--seed` 回退等修复）。
+>
+> **不适用 Docker**：容器部署请用仓库的 `Dockerfile` / `docker-compose.yml`
+> （见 [DOCKER.md](./DOCKER.md)），**不要**运行本脚本——容器里没有可写的 systemd/安装目录。
 
 > 需要 root 或 sudo。下载依赖 + 构建通常 **5–15 分钟**（取决于服务器带宽；国内机器可能更久）。
 > 脚本**不会**替你创建 1Panel 站点与证书，也不会改你的 Nginx 配置——反向代理那一步需要在面板里点一次。
@@ -54,19 +59,34 @@ OnlyOffice 参数写入 `.env` 后需要重启服务才生效（页面会提示�
 
 ## 常用参数
 
-| 参数                                       | 说明                                                              |
-| ------------------------------------------ | ----------------------------------------------------------------- |
-| `--dir /opt/medihub`                       | 安装目录（默认 `/opt/medihub`）                                   |
-| `--url https://...`                        | 写入 `BETTER_AUTH_URL`，必须是浏览器访问地址                      |
-| `--port 3000`                              | API 端口；默认自动选 20000–29999 的空闲端口，指定端口被占用会报错 |
-| `--tag v1.1.0`                             | 指定版本（默认取最新 Release）                                    |
-| `--seed`                                   | 写入演示数据 + 超级管理员（随机密码）                             |
-| `--update`                                 | 升级现有安装，保留 `.env`、SQLite、素材与升级备份                 |
-| `--onlyoffice-url` / `--onlyoffice-secret` | OnlyOffice 地址与 JWT 密钥，可后填                                |
-| `--dry-run`                                | 只打印要执行的操作，不改系统                                      |
-| `--yes`                                    | 非交互确认                                                        |
-| `--purge`                                  | 清理一次失败/不再需要的安装（停服务、删目录与用户）               |
-| `--force`                                  | 与 `--purge` 连用，允许连数据库一起删除                           |
+| 参数                                       | 说明                                                                                         |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| `--dir /opt/medihub`                       | 安装目录（默认 `/opt/medihub`）                                                              |
+| `--url https://...`                        | 写入 `BETTER_AUTH_URL`，必须是浏览器访问地址                                                 |
+| `--port 3000`                              | API 端口，必须是 1–65535 的数字；默认自动选 20000–29999 的空闲端口；指定端口被占用会直接报错 |
+| `--tag v1.9.9`                             | 指定版本（默认取最新 Release）；也可以写 `vX.Y.Z`                                            |
+| `--user medihub`                           | 运行服务的系统用户（默认 `medihub`）                                                         |
+| `--seed`                                   | 写入演示数据 + 超级管理员（随机密码只打印一次）                                              |
+| `--update`                                 | 升级现有安装，保留 `.env`、SQLite、素材与升级备份                                            |
+| `--onlyoffice-url` / `--onlyoffice-secret` | OnlyOffice 地址与 JWT 密钥，可后填                                                           |
+| `--dry-run`                                | 只打印要执行的操作，不改系统                                                                 |
+| `--yes`                                    | 非交互确认                                                                                   |
+| `--version`                                | 打印安装脚本版本                                                                             |
+| `--purge`                                  | 清理一次失败/不再需要的安装（停服务、删目录与用户、删 sudoers 规则）                         |
+| `--force`                                  | 与 `--purge` 连用，允许连数据库一起删除                                                      |
+
+> v1.9.9 起：参数**缺值**会直接报「参数 X 缺少值」，不再是 unbound variable 之类的底层报错；
+> `--help` 会完整打印全部参数（包括 `--user`、`--dir` 等）。
+
+### v1.9.x 行为变化（老教程里容易踩的坑）
+
+| 版本   | 变化                                                                                                                                                | 对运维的影响                                                             |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| v1.9.1 | 自动写 `/etc/sudoers.d/medihub-update`（`medihub` 免密 `systemctl restart medihub`）；systemd 单元加 `KillMode=process`                             | 在线升级**不再被重启杀掉**；失败时能快速报「重启服务失败」而不是静默卡住 |
+| v1.9.2 | 自动生成 `BETTER_AUTH_TRUSTED_ORIGINS`（`http://127.0.0.1:<端口>`、`http://<服务器IP>:<端口>`；HTTP 站点额外加域名）                                | 装完可以直接用 `IP:端口` 打开；用域名 + HTTPS 后仍要按 §反向代理 补域名  |
+| v1.9.3 | **先停旧服务再选端口**；`--update` 不再误改端口；端口真被别的程序占用会**报错**而不是静默换端口                                                     | 升级不会悄悄换端口导致反代 502；端口冲突时按提示释放端口或显式 `--port`  |
+| v1.9.4 | `DATABASE_URL` / `STORAGE_ROOT` 相对路径以 `apps/server` 为基准                                                                                     | 命令行脚本可以从**任意 cwd** 运行，不再打开错误数据库                    |
+| v1.9.9 | 参数缺值报「参数 X 缺少值」；`--purge` 无论服务单元是否存在都清理 sudoers；`--seed` 在 openssl 不可用时回退 `/dev/urandom`；用户/端口等参数校验更严 | 失败/清理后不会留下「半套」权限规则；最小化系统上 seed 也能生成密码      |
 
 ### 安装失败 / 残留处理
 
@@ -162,40 +182,90 @@ ONLYOFFICE_JWT_SECRET="和 Document Server 里一致的 JWT 密钥"
   sudo bash install-medihub.sh --update --tag <上一个版本>   # 重新铺回旧版本
   ```
 
-  （系统磁盘上的完整自动回滚只在「系统管理 → 版本与升级」的在线升级里提供。）
+  （完整自动回滚只在「系统管理 → 版本与升级」的在线升级里提供。）
+
+**升级失败怎么查**（v1.9.1+ 修了重启被杀的问题，先看状态文件再看日志）：
+
+```bash
+# 1) 在线升级/命令行升级的状态与日志
+sudo cat /opt/medihub/.updates/state.json | tail -40
+# 2) 服务日志
+sudo journalctl -u medihub -n 100 --no-pager
+# 3) 实在不行重跑 CLI（幂等，保留 .env / 数据库 / 素材）
+sudo bash install-medihub.sh --update --yes
+```
 
 升级与回滚细节见 [UPGRADE.md](UPGRADE.md)。
 
 > `--dry-run` 不会修改系统、不会下载源码包（但仍会执行一次 GitHub 版本查询）；
 > `--update` 与 `--seed` 不能同时使用（避免重复写入演示数据）。
+> 先预览一遍再真跑：`sudo bash install-medihub.sh --url https://你的域名 --dry-run`。
 
 ## 脚本做了什么
 
 1. 安装 `curl/tar/xz`（缺什么补什么）；
 2. 安装 Node.js 24 与 pnpm 12（已有且版本足够则跳过）；
 3. 创建系统用户 `medihub`；
-4. 从 GitHub 下载目标版本源码包，解压到安装目录（保留 `.env`、`local.db`、`storage`、`.updates`）；
-5. 生成 `.env`（含随机 `BETTER_AUTH_SECRET`、在线升级配置、OnlyOffice 占位）；
-6. `pnpm install --frozen-lockfile` + `pnpm run build`；
-7. 执行数据库迁移，可选写入演示数据；
-8. 写入 systemd 服务 `medihub.service`（开机自启、崩溃自动重启）；
-9. 启动并轮询 `/api/health`，失败时打印最近日志。
+4. 写 `/etc/sudoers.d/medihub-update`：允许 `medihub` **免密** `systemctl restart medihub`
+   （在线升级执行器要用它重启服务；v1.9.1+）；
+5. 从 GitHub 下载目标版本源码包，解压到安装目录（保留 `.env`、`local.db`、`storage`、`.updates`）；
+6. 先停旧服务，再选端口（首次安装自动选 20000–29999；升级时沿用 `.env` 端口，被占则报错）；
+7. 生成/补齐 `.env`（随机 `BETTER_AUTH_SECRET`、`BETTER_AUTH_TRUSTED_ORIGINS`、
+   在线升级配置、OnlyOffice 占位）；相对路径以 `apps/server` 为基准（v1.9.4+）；
+8. `pnpm install --frozen-lockfile` + `pnpm run build`；
+9. 执行数据库迁移，可选写入演示数据（`--seed` 生成随机密码，openssl 不可用时回退 `/dev/urandom`）；
+10. 写入 systemd 服务 `medihub.service`：`EnvironmentFile` + `WorkingDirectory=<dir>/apps/server` +
+    `Restart=always` + **`KillMode=process`**（重启时不杀在线升级执行器，v1.9.1+）；
+11. 启动并轮询 `/api/health`，失败时打印最近日志。
 
 ## 常见问题
 
-| 现象                      | 处理                                                                                              |
-| ------------------------- | ------------------------------------------------------------------------------------------------- |
-| 下载源码包失败            | 服务器访问 GitHub 受限；可先在能上网的机器下载 `tar.gz`，解压后手动 `--dir` 指向目录执行安装      |
-| `pnpm: command not found` | 检查 `node -v` 是否 ≥24；脚本安装在 `/usr/local/bin`，确认 PATH 包含它                            |
-| 端口被占用                | 脚本会优先沿用 `.env` 端口，被占则自动换空闲端口；也可 `ss -lntp \| grep <端口>` 后 `--port` 指定 |
-| 健康检查失败              | `journalctl -u medihub -n 80 --no-pager` 看日志；常见是 `.env` 缺少 `BETTER_AUTH_SECRET`          |
-| 登录后 403 / 域名不对     | `BETTER_AUTH_URL` 必须与浏览器地址完全一致（含 https）；改完重启服务                              |
-| OnlyOffice 编辑报错       | 检查 Document Server 与本站的双向可达性，以及 JWT 密钥是否一致                                    |
+| 现象                        | 处理                                                                                                                                                                                                                           |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 下载源码包失败              | 服务器访问 GitHub 受限；可先在能上网的机器下载 `tar.gz`，解压后手动 `--dir` 指向目录执行安装                                                                                                                                   |
+| `pnpm: command not found`   | 检查 `node -v` 是否 ≥24；脚本安装在 `/usr/local/bin`，确认 PATH 包含它                                                                                                                                                         |
+| 端口被占用                  | **首次安装**会自动换空闲端口；**`--update` 升级**时若原端口被占，脚本会**报错并要求你处理**（不静默换端口，避免反代失效）。先 `ss -lntp \| grep <端口>` 找到占用者，释放它或显式 `--port` 指定新端口（记得同步改 1Panel 反代） |
+| 健康检查失败                | `journalctl -u medihub -n 80 --no-pager` 看日志；常见是 `.env` 缺少 `BETTER_AUTH_SECRET`、端口被占                                                                                                                             |
+| 登录后 403 / Invalid origin | `BETTER_AUTH_URL` 必须与浏览器地址完全一致（含协议与端口）；用 `IP:端口` 访问时把该地址加进 `BETTER_AUTH_TRUSTED_ORIGINS`（逗号分隔）后重启服务                                                                                |
+| 登录提示「尝试过于频繁」    | v1.9.6+ 登录/注册/改密限流 10 次/分钟（按 IP，全局 120 次/分钟）；等一分钟再试                                                                                                                                                 |
+| OnlyOffice 编辑报错         | 检查 Document Server 与本站的双向可达性，以及 JWT 密钥是否一致                                                                                                                                                                 |
+
+## 账号与登录
+
+脚本**不会**在没加 `--seed` 时创建任何账号，站点处于「未初始化」状态：
+
+1. 打开 `https://你的域名/install`（登录页也会显示「前往安装向导」）；
+2. 填超级管理员姓名 / 邮箱 / 密码（可选 OnlyOffice 参数）→「完成安装」→ 自动跳登录页；
+3. 已有账号后 `/install` 接口返回 **409**，不会被用来重置管理员——忘记密码请用下面的命令。
+
+列账号 / 重置密码（在安装目录执行；v1.9.4+ 也可以从任意目录执行）：
+
+```bash
+# 方式一：包里的脚本（cwd 自动是 apps/server）
+pnpm --filter @medihub/server reset-password --list
+pnpm --filter @medihub/server reset-password root@medihub.local '新密码'
+
+# 方式二：直接跑 TS（Node 24 自带类型剥离）
+cd /opt/medihub/apps/server && node --env-file=.env src/reset-password.ts --list
+# 任意 cwd：
+node --env-file=/opt/medihub/apps/server/.env /opt/medihub/apps/server/src/reset-password.ts --list
+```
+
+不带密码时脚本会**随机生成并打印**；数据库还没迁移时会提示先执行 `pnpm run db:migrate`（不再直接抛裸 Drizzle 堆栈）。
 
 ## 卸载
 
 ```bash
+# 推荐：脚本自带清理（停服务、删目录与用户、删 /etc/sudoers.d/medihub-update）
+# 有数据库时必须加 --force；v1.9.9 起无论服务单元是否存在都会清理 sudoers 规则
+sudo bash install-medihub.sh --purge --yes --force
+```
+
+手工卸载：
+
+```bash
 sudo systemctl disable --now medihub
 sudo rm /etc/systemd/system/medihub.service
+sudo rm -f /etc/sudoers.d/medihub-update
 sudo rm -rf /opt/medihub   # 确认数据已备份
 ```

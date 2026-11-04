@@ -7,6 +7,13 @@ import { account, user } from "@medihub/db/schema/auth";
 
 import { db } from "#src/context.ts";
 
+const USAGE = `用法：
+  node --env-file=.env src/reset-password.ts --list
+  node --env-file=.env src/reset-password.ts <邮箱>
+  node --env-file=.env src/reset-password.ts <邮箱> <新密码>
+
+不传新密码时会生成随机密码并打印一次。`;
+
 const listUsers = async () => {
   const rows = await db
     .select({
@@ -32,6 +39,13 @@ const listUsers = async () => {
 };
 
 const resetPassword = async (email: string, password?: string) => {
+  if (password && password.length < 8) {
+    console.error("新密码至少需要 8 位。");
+    process.exitCode = 1;
+
+    return;
+  }
+
   const [target] = await db
     .select({ id: user.id })
     .from(user)
@@ -73,9 +87,19 @@ const resetPassword = async (email: string, password?: string) => {
 const [email, password] = process.argv.slice(2);
 
 try {
-  await (email && email !== "--list"
-    ? resetPassword(email, password)
-    : listUsers());
+  if (!email || email === "--list" || email === "-l") {
+    await listUsers();
+  } else if (email === "--help" || email === "-h") {
+    console.log(USAGE);
+  } else {
+    await resetPassword(email.trim().toLowerCase(), password);
+  }
+} catch (error) {
+  console.error(
+    "操作失败。若是新库，请先在 apps/server 目录执行 pnpm run db:migrate。"
+  );
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exitCode = 1;
 } finally {
   db.$client.close();
 }

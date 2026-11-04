@@ -8,9 +8,14 @@ MediHub 内置了一套「在站点里点一下就升级」的机制：`root` �
 本文只讲运维怎么把它安全地用起来。手工（命令行）升级流程见
 [DEPLOY-1PANEL.md §13](./DEPLOY-1PANEL.md#13-升级与回滚)，两者可以并存，但**不要同时进行**。
 
-> **适用版本：v1.1.0+**（v1.0.0 不包含在线升级，也没有 `/api/health` 之外的相关接口）。
-> 如果你现在跑的是 v1.0.0，请先按 [DEPLOY-1PANEL.md §13.1](./DEPLOY-1PANEL.md#131-升级标准流程)
-> 手工升到 v1.1.0，之后才能用本手册的界面升级。
+> **适用版本：v1.1.0+，当前 v1.9.9**（v1.0.0 不包含在线升级）。
+> 如果你跑的是 v1.0.0，请先按 [DEPLOY-1PANEL.md §13.1](./DEPLOY-1PANEL.md#131-升级标准流程)
+> 手工升到 v1.1.0 以上，之后才能用本手册的界面升级。
+>
+> 本手册已对齐 v1.9.x 的执行器改动：**v1.9.1** 修复「重启把升级执行器一起杀掉」、
+> **v1.9.3** 不再误改端口、**v1.9.9** 状态文件改为原子写（临时文件 + rename）、
+> 并发检查先读旧状态再写、备份清理按 **mtime** 而不是版本号字典序、
+> 升级成功后清理 `staging/` 与下载包。
 
 ## 目录
 
@@ -59,6 +64,7 @@ root 点「升级到 vX」
       ▼
 服务端 spawn(node updater.mjs upgrade X)  ── detached，stdio 忽略，继承服务进程的 env
       │
+      ├─ 0. 互斥   先读旧 state.json，若已有 running 任务直接退出（不会覆盖运行中任务）
       ├─ 1. 备份   apps/server/dist + SQLite + 安装根 package.json
       │           →  .updates/backups/<当前版本>-<时间戳>/
       ├─ 2. 下载   codeload.github.com/<repo>/tar.gz/refs/tags/vX  →  .updates/staging/X/
@@ -69,7 +75,8 @@ root 点「升级到 vX」
       ├─ 6. 重启   执行 UPDATE_RESTART_CMD
       ├─ 7. 健康   轮询 UPDATE_HEALTH_URL（≤60 次 × 2s，单次超时 5s）
       │            /api/health 的 version 必须等于目标版本 X
-      ├─ 8. 收尾   成功 → phase=succeeded，清理旧备份（保留 UPDATE_KEEP_BACKUPS 份）
+      ├─ 8. 收尾   成功 → phase=succeeded，按 mtime 清理旧备份（保留 UPDATE_KEEP_BACKUPS 份），
+      │            并清理 .updates/staging/ 与本次下载包
       │            失败 → 还原备份 + 重启 + 再健康检查 → phase=failed, rolledBack=true/false
       │
       ▼
@@ -94,6 +101,9 @@ root 点「升级到 vX」
    ├─ downloads/<版本>.tar.gz
    └─ staging/<版本>/              # 解压出的源码与临时构建
 ```
+
+`state.json` 采用**原子写**（写临时文件再 `rename`，v1.9.9+），所以前端轮询时不会读到
+「写了一半」的 JSON；并发保护也是「先读旧状态、再写新状态」，不会覆盖正在运行的任务。
 
 `state.json` 的字段（前端直接展示）：
 
@@ -163,9 +173,9 @@ curl -fsS -m 10 -o /dev/null -w '%{http_code}\n' \
   https://api.github.com/repos/Eunsolfs/medihub/releases/latest
 curl -fsS -m 10 -o /dev/null -w '%{http_code}\n' \
   https://api.github.com/repos/Eunsolfs/medihub/tags
-# 源码包下载（升级用，走 codeload，和 api 不是同一个域名；把 v1.1.0 换成目标版本）
+# 源码包下载（升级用，走 codeload，和 api 不是同一个域名；把 v1.9.9 换成目标版本）
 curl -fsS -m 15 -o /dev/null -w '%{http_code}\n' \
-  https://codeload.github.com/Eunsolfs/medihub/tar.gz/refs/tags/v1.1.0
+  https://codeload.github.com/Eunsolfs/medihub/tar.gz/refs/tags/v1.9.9
 ```
 
 判断标准：
@@ -175,9 +185,9 @@ curl -fsS -m 15 -o /dev/null -w '%{http_code}\n' \
   本仓库目前只有 tag、没建 GitHub Release，因此实际走 `/tags` 回退，这是正常的。
 - 内网/国内服务器可能只挡其中一个域名，别只测一个。
 
-### 3.4 版本 tag 形如 `v1.1.0`
+### 3.4 版本 tag 形如 `v1.9.9`
 
-执行器接受 `1.1.0` 与 `v1.1.0` 两种写法（会先去掉前缀 `v`），版本号必须匹配
+执行器接受 `1.9.9` 与 `v1.9.9` 两种写法（会先去掉前缀 `v`），版本号必须匹配
 `^\d+\.\d+\.\d+([-+][0-9A-Za-z.-]+)?$`。
 
 下载源码包时会依次尝试两个地址，任一命中即可：
@@ -187,7 +197,7 @@ https://codeload.github.com/<repo>/tar.gz/refs/tags/v<version>
 https://codeload.github.com/<repo>/tar.gz/refs/tags/<version>
 ```
 
-所以 tag 打成 `v1.1.0` 或 `1.1.0` 都能升级；但**必须真的打了 tag**（`git push origin v1.1.0`），
+所以 tag 打成 `v1.9.9` 或 `1.9.9` 都能升级；但**必须真的打了 tag**（`git push origin v1.9.9`），
 只建 Release 不建 tag 是不行的。检查更新时：有 Release 就取 `releases/latest`
 （草稿 draft 与预发布 pre-release 不算）；没有 Release 则回退到 `/tags`，取最新的版本 tag。
 
@@ -239,7 +249,7 @@ ls -l /opt/medihub/apps/server/dist/scripts/updater.mjs
 自检命令（三条应一致）：
 
 ```bash
-curl -fsS http://127.0.0.1:3000/api/health      # {"status":"ok","version":"1.1.0"}
+curl -fsS http://127.0.0.1:3000/api/health      # {"status":"ok","version":"1.9.9"}（端口按实际）
 grep '"version"' /opt/medihub/package.json
 ```
 
@@ -258,7 +268,7 @@ grep '"version"' /opt/medihub/package.json
 | `UPDATE_WORKDIR`      | **强烈建议显式设置** | `.`                                | 安装根目录的**绝对路径**（含根 `package.json` 与 `apps/`）。默认 `.` 取的是服务进程的 cwd，systemd/pm2 常把 cwd 设在 `apps/server`，会导致路径全错 |
 | `UPDATE_DB_PATH`      | 否                   | `apps/server/local.db`             | SQLite 路径，**相对 `UPDATE_WORKDIR`**。升级前备份、失败时还原                                                                                     |
 | `UPDATE_RESTART_CMD`  | 是                   | 无                                 | 重启服务的 shell 命令。不配则整体视为「未启用」                                                                                                    |
-| `UPDATE_HEALTH_URL`   | 否                   | `http://127.0.0.1:3000/api/health` | 升级后轮询的健康检查地址。必须返回 JSON 且带 `version` 字段                                                                                        |
+| `UPDATE_HEALTH_URL`   | 否                   | `http://127.0.0.1:3000/api/health` | 升级后轮询的健康检查地址。必须返回 JSON 且带 `version` 字段。**端口写实际监听端口**（一键安装脚本是自动挑的 20000–29999，不是 3000）               |
 | `UPDATE_KEEP_BACKUPS` | 否                   | `3`                                | 保留多少份备份（正整数）。成功升级后清理多余的                                                                                                     |
 | `UPDATE_GITHUB_TOKEN` | 否                   | 无                                 | 可选。GitHub personal access token，只用于提高 `api.github.com` 的速率限制（未登录 60 次/小时/IP）；不用于 `codeload` 下载，也**不需要任何 scope** |
 
@@ -287,7 +297,7 @@ UPDATE_RESTART_CMD="sudo -n systemctl restart medihub"
 # Supervisor（1Panel 工具箱）：
 # UPDATE_RESTART_CMD="sudo -n supervisorctl restart medihub"
 
-# 健康检查：本机 3000 即可，走反代反而多一层变量。
+# 健康检查：本机实际端口（一键安装脚本会写成它挑的端口），走反代反而多一层变量。
 UPDATE_HEALTH_URL="http://127.0.0.1:3000/api/health"
 
 # 保留备份份数（每份含 dist + db.sqlite）。
@@ -340,7 +350,8 @@ Restart=on-failure
 RestartSec=3
 KillSignal=SIGTERM
 TimeoutStopSec=20
-KillMode=mixed
+# 关键：只杀主进程，不要连升级执行器一起杀（v1.9.1+ 一键安装脚本就是写这个）
+KillMode=process
 # 大文件上传与 PDF 转换需要更宽松的限制
 LimitNOFILE=65535
 
@@ -354,6 +365,9 @@ WantedBy=multi-user.target
 UPDATE_WORKDIR="/opt/medihub"
 UPDATE_RESTART_CMD="sudo -n systemctl restart medihub"
 ```
+
+> 用 `install-1panel.sh` 装的机器不需要手写下面这些：v1.9.1+ 会自动写
+> `/etc/sudoers.d/medihub-update` 并在 unit 里带 `KillMode=process`；服务用户是 `medihub` 而不是 `www`。
 
 服务用户 `www` 不是 root，必须授权它重启**这一个** unit（`visudo -f /etc/sudoers.d/medihub`）：
 
@@ -418,13 +432,15 @@ sudo supervisorctl status
 > 原因：容器内的文件系统是镜像层，`apps/server/dist` 被替换后容器一重启就还原；
 > 容器里通常也没有 `pnpm` / 源码 / 可写的安装目录。即使把 `UPDATE_RESTART_CMD` 写成
 > `docker compose restart medihub`，升级也会在「构建」或「切换产物」阶段失败。
+> 仓库自带的 Docker 部署（`Dockerfile` / `docker-compose.yml`）同样如此，见
+> [DOCKER.md](./DOCKER.md)。
 
 容器部署的升级方式：
 
 ```bash
 # 1) 改 compose 里的镜像 tag（换成你自己的镜像仓库；本项目不发布官方镜像，
 #    若你是自建镜像，就是你的 registry 路径）
-#    image: registry.example.com/medihub:v1.1.0
+#    image: registry.example.com/medihub:v1.9.9
 # 2) 拉取并重建
 docker compose pull medihub
 docker compose up -d medihub
@@ -489,14 +505,14 @@ tail -f /opt/medihub/.updates/state.json | grep -o '"20[^"]*"' | tail -20
 `.updates/state.json` 的 `log` 数组里，格式是 `<ISO 时间> <内容>`，`$` 开头的是执行的命令：
 
 ```text
-2026-10-24T14:03:11.482Z 备份当前版本 1.0.0 → /opt/medihub/.updates/backups/1.0.0-2026-10-24T14-03-11-482Z
-2026-10-24T14:03:12.010Z 下载发布包：https://codeload.github.com/Eunsolfs/medihub/tar.gz/refs/tags/v1.1.0
+2026-10-24T14:03:11.482Z 备份当前版本 1.9.8 → /opt/medihub/.updates/backups/1.9.8-2026-10-24T14-03-11-482Z
+2026-10-24T14:03:12.010Z 下载发布包：https://codeload.github.com/Eunsolfs/medihub/tar.gz/refs/tags/v1.9.9
 2026-10-24T14:03:41.229Z $ pnpm install --frozen-lockfile
 ...
 2026-10-24T14:05:02.664Z $ pnpm run db:migrate
 2026-10-24T14:05:04.031Z 重启服务：sudo -n systemctl restart medihub
-2026-10-24T14:05:12.887Z 健康检查通过：{"status":"ok","version":"1.1.0"}
-2026-10-24T14:05:12.902Z 升级完成：1.0.0 → 1.1.0
+2026-10-24T14:05:12.887Z 健康检查通过：{"status":"ok","version":"1.9.9"}
+2026-10-24T14:05:12.902Z 升级完成：1.9.8 → 1.9.9
 ```
 
 ### 6.4 健康检查确认版本
@@ -510,7 +526,7 @@ curl -fsS http://127.0.0.1:3000/api/health
 curl -fsS https://medihub.summerecho.cn/api/health
 ```
 
-回到卡片：状态区应显示 **已升级到 v1.1.0**；「当前版本」也变成 `v1.1.0`。
+回到卡片：状态区应显示 **已升级到 v1.9.9**；「当前版本」也变成 `v1.9.9`。
 
 再顺手确认前端产物也跟着换了（`dist` 是整体替换的，`dist/public` 一起更新）：
 
@@ -576,29 +592,36 @@ sudo -u www -H cat /opt/medihub/.updates/state.json
 - 真正重要的是另一层保护：按 [DEPLOY-1PANEL.md §12](./DEPLOY-1PANEL.md#12-备份与恢复) 做的
   每日 `sqlite3 .backup` 备份，那才是兜底。
 
-### 7.2 「最新一份备份」是按目录名排序，不是严格按时间
+### 7.2 「最新一份备份」按修改时间取（v1.9.9+）
 
-备份目录名是 `<版本>-<ISO时间戳>`，取最新一份用的是目录名字典序倒排，因此**版本号优先于时间**：
+v1.9.9 起，执行器判断「最新/最旧备份」用的是目录的 **mtime**，不再按版本号字典序：
 
-- 正常升级链（1.0.0 → 1.1.0 → 1.2.0）取到 `1.1.0-*`，符合直觉；
-- 但如果你做过**降级**（比如 1.2.0 → 1.1.0），最新备份目录是 `1.2.0-*`，这时点「回滚」
-  会回到 1.2.0。降级后再回滚，先 `ls` 看一眼目录名再决定，必要时手工还原指定目录：
+- 手动回滚 → 取 **mtime 最大**的那份（真正最近创建的那次）；
+- 成功升级后的清理 → 按 mtime 从旧到新淘汰，保留 `UPDATE_KEEP_BACKUPS` 份
+  （默认 3，即**最近 3 次**，不是"版本号最大的 3 份"）。
 
-  ```bash
-  sudo -u www -H ls -1 /opt/medihub/.updates/backups/
-  # 手工还原某一份（停服 → 覆盖 dist、db、package.json → 启动，参考 DEPLOY-1PANEL §12.4）
-  sudo systemctl stop medihub
-  B=/opt/medihub/.updates/backups/1.0.0-2026-10-24T14-03-11-482Z
-  sudo -u www -H rm -rf /opt/medihub/apps/server/dist
-  sudo -u www -H cp -r "$B/dist" /opt/medihub/apps/server/dist
-  sudo -u www -H cp "$B/db.sqlite" /opt/medihub/apps/server/local.db
-  # v1.1.0 起的备份里还有 package.json，必须一起还原，否则版本号对不上
-  sudo -u www -H cp "$B/package.json" /opt/medihub/package.json 2>/dev/null || true
-  sudo systemctl start medihub
-  ```
+所以「降级后再回滚会不会回到更高版本」这个坑在 v1.9.9 已经没了。仍然建议动手前先看一眼：
 
-`UPDATE_KEEP_BACKUPS` 也是按同样的字典序淘汰最旧的那些，所以保留 3 份意味着
-「版本号最大的 3 份」，不是「最近的 3 次」。
+```bash
+sudo -u www -H ls -lt /opt/medihub/.updates/backups/    # 按时间，最新在最上
+```
+
+要还原**指定**某一份（不是最新那份）时：
+
+```bash
+# 手工还原某一份（停服 → 覆盖 dist、db、package.json → 启动，参考 DEPLOY-1PANEL §12.4）
+sudo systemctl stop medihub
+B=/opt/medihub/.updates/backups/1.9.8-2026-10-24T14-03-11-482Z
+sudo -u www -H rm -rf /opt/medihub/apps/server/dist
+sudo -u www -H cp -r "$B/dist" /opt/medihub/apps/server/dist
+sudo -u www -H cp "$B/db.sqlite" /opt/medihub/apps/server/local.db
+# 备份里还有 package.json，必须一起还原，否则版本号对不上
+sudo -u www -H cp "$B/package.json" /opt/medihub/package.json 2>/dev/null || true
+sudo systemctl start medihub
+```
+
+> 旧版本（v1.9.8 及更早）是按目录名排序，降级后再点「回滚」可能回到更高版本；
+> 如果你还在旧版本，先 `ls -1` 看清目录名再决定。
 
 ### 7.3 升级只换「产物 + 版本号」，不换源码
 
@@ -663,7 +686,7 @@ cd /opt/medihub && sudo -u www -H /opt/node24/bin/node \
 > 「`dist` / `package.json` 被手工替换过」。
 
 **现象**：日志一路走到「重启服务」，然后 2 分钟后
-`升级后健康检查未在超时内返回 1.1.0`，界面显示「已自动回滚到上个版本」。
+`升级后健康检查未在超时内返回 1.9.9`，界面显示「已自动回滚到上个版本」。
 
 **判定依据**：健康检查要求 `/api/health` 的 `version` **等于目标版本**；而 `version` 来自
 **安装根 `package.json`**（`apps/server/src/version.ts` 的运行期读取）。所以只可能是
@@ -682,13 +705,14 @@ grep UPDATE_WORKDIR /opt/medihub/apps/server/.env
 
 按结果分流：
 
-| 现象                                                                  | 原因                                                                 | 处置                                                               |
-| --------------------------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `UPDATE_WORKDIR` 不是安装根（例如留了默认 `.`，实际是 `apps/server`） | 执行器把发布包 `package.json` 写到了错误位置                         | 改成安装根绝对路径，重启服务，再升一次                             |
-| 三条都还是旧版本                                                      | 升级没走到第 5 步（看日志有没有 `已切换新的服务端构建产物与版本号`） | 按日志定位失败步骤；若被自动回滚，服务是正常的                     |
-| `package.json` 是新版本、`/api/health` 是旧版本                       | 进程还没重启（`UPDATE_RESTART_CMD` 没生效或权限不足）                | 见 [§8.6](#86-一直停在正在升级) 与 [§5](#5-三种部署方式的重启命令) |
-| `/api/health` 新、`package.json` 旧                                   | 有人手工替换过 `dist` 或用旧备份覆盖过                               | 用同一版本的源码重建一次（手工流程），或从备份目录恢复配套的那一份 |
-| 备份里没有 `package.json`                                             | 备份是在 v1.1.0 之前创建的                                           | 那份备份不能用于回滚版本号；升级一次生成新备份即可                 |
+| 现象                                                                  | 原因                                                                 | 处置                                                                        |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `UPDATE_WORKDIR` 不是安装根（例如留了默认 `.`，实际是 `apps/server`） | 执行器把发布包 `package.json` 写到了错误位置                         | 改成安装根绝对路径，重启服务，再升一次                                      |
+| 三条都还是旧版本                                                      | 升级没走到第 5 步（看日志有没有 `已切换新的服务端构建产物与版本号`） | 按日志定位失败步骤；若被自动回滚，服务是正常的                              |
+| `package.json` 是新版本、`/api/health` 是旧版本                       | 进程还没重启（`UPDATE_RESTART_CMD` 没生效或权限不足）                | 见 [§8.6](#86-一直停在正在升级) 与 [§5](#5-三种部署方式的重启命令)          |
+| `/api/health` 新、`package.json` 旧                                   | 有人手工替换过 `dist` 或用旧备份覆盖过                               | 用同一版本的源码重建一次（手工流程），或从备份目录恢复配套的那一份          |
+| 备份里没有 `package.json`                                             | 备份是在 v1.1.0 之前创建的                                           | 那份备份不能用于回滚版本号；升级一次生成新备份即可                          |
+| 升级后磁盘里还有旧的 `staging/` / 下载包                              | v1.9.8 及更早不会自动清理                                            | v1.9.9+ 成功后自动清；旧版本可手工 `rm -rf /opt/medihub/.updates/staging/*` |
 
 排查其它可能：
 
@@ -701,6 +725,43 @@ grep UPDATE_HEALTH_URL /opt/medihub/apps/server/.env
 sudo systemctl status medihub        # 或 pm2 status / supervisorctl status
 sudo journalctl -u medihub -n 100 --no-pager
 ```
+
+### 8.2.1 升级失败的第一步排查
+
+不管界面显示什么，先做这两件事（信息最全）：
+
+```bash
+# 1) 执行器的完整状态与日志（最近 200 行，含每条命令与输出尾部）
+sudo cat /opt/medihub/.updates/state.json
+sudo tail -n 80 /opt/medihub/.updates/state.json     # 只看尾部也行
+
+# 2) 服务自身日志（重启失败、迁移报错、端口占用都会在这里）
+sudo journalctl -u medihub -n 100 --no-pager
+```
+
+判断顺序：
+
+1. `phase` 是 `succeeded` → 已成功，再核对 `curl /api/health` 的 `version`；
+2. `phase` 是 `failed` 且 `rolledBack: true` → 已自动回滚，服务可用，把 `error` 与日志发给维护者；
+3. `phase` 是 `failed` 且 `rolledBack: false` → **自动回滚失败，人工介入**：
+   按 §7.2 手工还原备份，或直接重跑 CLI 安装器（幂等）：
+
+   ```bash
+   sudo bash /opt/medihub/scripts/install-1panel.sh --update --yes
+   # 若脚本不在安装目录，重新下载：
+   curl -fsSL https://raw.githubusercontent.com/Eunsolfs/medihub/main/scripts/install-1panel.sh -o /tmp/install-medihub.sh
+   sudo bash /tmp/install-medihub.sh --update --yes
+   ```
+
+4. `phase` 一直是 `running` 超过 15 分钟 → 见 [§8.6](#86-一直停在正在升级)。
+
+**与版本相关的两个已知点**：
+
+- **v1.9.5 起**「覆盖原素材」改走 `POST /api/files/upload?replaceAssetId=<id>`（服务端内部转发），
+  避免某些反代/WAF 拦截 `/replace`；旧路径仍保留。升级后如果用户报「覆盖原图 403」，
+  先确认前端已随站点更新（退出重进），再查 WAF 规则。
+- **v1.9.3 起** CLI 安装器不会在升级时静默换端口；如果升级后反代 502，先核对
+  `.env` 的 `PORT` 与 1Panel 反代目标是否一致（`grep '^PORT' /opt/medihub/apps/server/.env`）。
 
 ### 8.3 状态查询报「未配置在线升级」/ 卡片提示服务端未启用
 
@@ -841,6 +902,13 @@ sudo -u www -H ls -1 /opt/medihub/.updates/backups/
 
 # 执行器脚本是否就位
 ls -l /opt/medihub/apps/server/dist/scripts/updater.mjs
+
+# 失败时：状态 + 服务日志
+sudo cat /opt/medihub/.updates/state.json
+sudo journalctl -u medihub -n 100 --no-pager
+
+# 实际端口（一键安装脚本自动选的，不一定是 3000）
+grep '^PORT' /opt/medihub/apps/server/.env
 ```
 
 ### 10.2 与手工升级流程的关系

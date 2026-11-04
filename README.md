@@ -1,6 +1,6 @@
 # 医档通 MediHub
 
-> 当前版本：**v1.1.0**（变更记录见 [CHANGELOG.md](CHANGELOG.md)）
+> 当前版本：**v1.9.9**（变更记录见 [CHANGELOG.md](CHANGELOG.md)）
 
 科室内部的多媒体与病历资料管理平台。把患者的伤口/术中/术后照片、病历资料、科室培训与讲课材料集中存起来，按「患者 → 某次入院 → 时间线」组织，并为科研、宣传、病例汇报提供可筛选、可打包导出的数据底座。
 
@@ -19,7 +19,32 @@ OnlyOffice 参数可以稍后在 `.env` 里补。完整参数、常见问题与�
 > **不带 `--seed` 也可以**：装完后打开 `https://你的域名/install`，在网页里填超级管理员
 > （可选 OnlyOffice 参数），完成后自动跳转登录页。登录页在未初始化时也会显示「前往安装向导」。
 
-> 演示数据与账号：执行 `pnpm seed` 后会写入「整形外科」与「烧伤科」两个科室、4 位演示患者
+### 账号与登录（装完第一件事）
+
+| 场景                                                            | 做法                                                                                                                                                                                                                                                                                                                   |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 还没有任何账号                                                  | 浏览器打开 `https://你的域名/install` 创建超级管理员；已有账号时该接口返回 409，不会被用来重置管理员                                                                                                                                                                                                                   |
+| 忘了密码 / 只有 `--seed` 打印的初始密码                         | 在安装目录执行：`cd apps/server && node --env-file=.env src/reset-password.ts --list`（列出账号）；`node --env-file=.env src/reset-password.ts root@medihub.local '新密码'`（不带密码则随机生成并打印）。v1.9.4+ 也可以在**任意目录**执行：`node --env-file=apps/server/.env apps/server/src/reset-password.ts --list` |
+| 用 `http://服务器IP:端口` 打开却登录失败（提示 Invalid origin） | `BETTER_AUTH_URL` 必须与浏览器地址**完全一致**。临时用 IP 访问时，把 `http://IP:端口` 加进 `BETTER_AUTH_TRUSTED_ORIGINS`（逗号分隔），或改用域名访问，然后重启服务                                                                                                                                                     |
+| 登录提示「尝试过于频繁，请稍等片刻再试」                        | v1.9.6+ 登录/注册/改密限流为 **10 次/分钟**（按 IP，全局 120 次/分钟）；等一分钟再试，别反复点                                                                                                                                                                                                                         |
+
+> 反向代理必须传**单值** `X-Forwarded-For $remote_addr;`，否则所有用户会被当成同一个 IP 共用限流桶。
+
+### 本地 Docker（演示 / 验收）
+
+不想动服务器？仓库自带 `Dockerfile` + `docker-compose.yml`：
+
+```bash
+docker compose up -d --build      # 默认 http://localhost:8080，首次启动自动迁移 + 写入演示数据
+```
+
+数据在命名卷 `medihub-data:/data`；换端口用 `MEDIHUB_PORT=18080`。容器内**没有** LibreOffice /
+OnlyOffice，也**不启用在线升级**。完整说明见 [docs/DOCKER.md](docs/DOCKER.md)。
+
+> 1Panel 一键脚本是给**宿主机 + systemd** 用的；Docker 部署请用仓库的 Dockerfile / compose，
+> 不要跑 `install-1panel.sh`。
+
+> 演示数据与账号：执行 `pnpm seed` 后会写入「整形外科」与「烧伤科」两个科室、5 位演示患者（整形外科 4 位、烧伤科 1 位）
 > （含分期照片与 Markdown 病历摘要）、两个资料库目录（含一份 docx 培训文档与一份 pptx 病例讨论）、
 > 一个已发布的公开教学帖（`/p/flap-crisis-early-recognition`，含 B 站视频与配图）和一个草稿帖。
 >
@@ -33,22 +58,23 @@ OnlyOffice 参数可以稍后在 `.env` 里补。完整参数、常见问题与�
 
 ## 功能
 
-| 模块       | 能力                                                                                                                                                                                                                                                                        |
-| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 患者档案   | 患者基本信息（姓名/性别/出生日期/病案号/电话/身份证/诊断摘要/状态/标签），搜索、筛选、分页；**「谁的患者归谁」**：作者本人、**本科室**管理员与 root 可编辑，跨科室一律不存在；「查看完整档案」抽屉                                                                          |
-| 就诊记录   | 每次入院/门诊/手术/随访一条记录（住院号、入院-出院时间、诊断、主诉、治疗、主治、科室、备注），附一份 Markdown **病历摘要**（长文可折叠），可一键打开「就诊全部资料」抽屉完整查看与编辑                                                                                      |
-| 临床时间线 | 按拍摄日期分组的素材时间线，术前/术中/术后/随访/影像/病理分期，拖拽排序（桌面）、批量移动、元数据编辑；移动端为两列磁贴；图片支持**裁剪 / 旋转后另存为新素材，或覆盖原素材**                                                                                                |
-| 资料库     | 按来源分类浏览：**患者记录 / 会议资料 / 资料库目录 / 教学附件 / 全部**，每类支持搜索、类型与分期筛选、网格/列表；科室文件夹可嵌套；成员可浏览下载本科室素材，只有上传者与管理员可以整理                                                                                     |
-| 教学分享   | Markdown 撰写，插入本系统视频 / B 站视频 / 外链；发布后 `/p/<slug>` 网址或二维码分享。**阅读范围**五档：`任何人`（可再设访问密码）/ `全系统登录用户` / `仅科室内部` / `指定对象` / `仅自己`；**编辑权始终只归作者与管理员**                                                 |
-| 学习会议   | 讲课/会议/培训/病例讨论归档，可挂载会议素材；本科室成员可见并下载，编辑权归创建者与管理员，会议本身也支持五档可见范围                                                                                                                                                       |
-| 导出中心   | 按患者 / 就诊 / 会议 / 帖子 / 手动选择素材打包 ZIP（含 `README.md`、`manifest.json`、`data.csv` 与原始文件）                                                                                                                                                                |
-| 权限与用户 | 四级角色 + 科室隔离 + 审计日志；**root 可以是不归属任何科室的全局管理员**，用顶部「科室」切换器查看各科室资料；科室管理员可创建成员账号，也可**认领已注册但未分配科室的用户**                                                                                               |
-| 在线预览   | 图片（近全屏、缩放/旋转/平移）、视频（Range 流式播放）、PDF、docx、xlsx、Markdown/文本；移动端同样可预览，Office 在线编辑仅桌面端（OnlyOffice 手机端属企业版），移动端自动隐藏入口；docx/xlsx/在线编辑器按需懒加载（media 首包 −72%）；系统管理里有 Office 集成就绪状态卡片 |
-| 存储后端   | 服务器本地磁盘 / NAS 挂载目录 / S3 兼容对象存储（MinIO、OSS、Ceph 等），可配置多个目标并指定默认                                                                                                                                                                            |
-| 存储配额   | 科室级与全站级容量上限（可留空不限、填 0 禁止上传）；上传前检查配额与目标磁盘余量（本地/NAS 保留 512MB），超限给出具体原因；后台显示已用/上限进度与磁盘剩余                                                                                                                 |
-| 冷数据归档 | 把指定日期前上传的素材按分片打包成 zip（`manifest.json` + `README.md` + 离线可打开的 `viewer.html` + 原文件）推送到 NAS/S3/本地，可选删除服务器源文件释放空间；素材标记「已归档」，分片支持断点续传下载；操作与容量规划见 [docs/ARCHIVE.md](docs/ARCHIVE.md)                |
-| 手机 App   | 可安装为安卓桌面 App（PWA）：独立图标、全屏运行、拍照/录像直传、离线兜底；装法与限制见 [docs/MOBILE-PWA.md](docs/MOBILE-PWA.md)                                                                                                                                             |
-| 自动化     | 定时归档计划（每天/每周/每月，逐个检查并自动打包旧素材；本地目标仅允许 <200MB，否则要求 NAS/S3）；root 可把 SQLite 快照（可选连同素材）镜像到另一存储                                                                                                                       |
+| 模块       | 能力                                                                                                                                                                                                                                                                                               |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 工作台     | 6 张统计卡（患者 / 就诊 / 素材 / 图片 / 视频 / 存储占用）与「学习会议 N 场」、患者页「总数 / 在诊 / 随访中」均可点击跳转，带对应筛选（v1.9.7）                                                                                                                                                     |
+| 患者档案   | 患者基本信息（姓名/性别/出生日期/病案号/电话/身份证/诊断摘要/状态/标签），搜索、筛选、分页、**批量改状态 / 批量导出 / 批量删除**；**「谁的患者归谁」**：作者本人、**本科室**管理员与 root 可编辑，跨科室一律不存在；「查看完整档案」抽屉                                                           |
+| 就诊记录   | 每次入院/门诊/手术/随访一条记录（住院号、入院-出院时间、诊断、主诉、治疗、主治、科室、备注），附一份 Markdown **病历摘要**（长文可折叠），可一键打开「就诊全部资料」抽屉完整查看与编辑                                                                                                             |
+| 临床时间线 | 按拍摄日期分组的素材时间线，术前/术中/术后/随访/影像/病理分期，拖拽排序（桌面）、批量移动、元数据编辑；移动端为两列磁贴；图片支持**裁剪 / 旋转后另存为新素材，或覆盖原素材**                                                                                                                       |
+| 资料库     | 按来源分类浏览：**患者记录 / 会议资料 / 资料库目录 / 教学附件 / 全部**，每类支持搜索、类型与分期筛选、网格/列表；科室文件夹可嵌套；成员可浏览下载本科室素材，只有上传者与管理员可以整理                                                                                                            |
+| 教学分享   | Markdown 撰写，插入本系统视频 / B 站视频 / 外链；发布后 `/p/<slug>` 网址或二维码分享。**阅读范围**五档：`任何人`（可再设访问密码）/ `全系统登录用户` / `仅科室内部` / `指定对象` / `仅自己`；**编辑权始终只归作者与管理员**                                                                        |
+| 学习会议   | 讲课/会议/培训/病例讨论归档，可挂载会议素材；本科室成员可见并下载，编辑权归创建者与管理员，会议本身也支持五档可见范围                                                                                                                                                                              |
+| 导出中心   | 按患者 / 就诊 / 会议 / 帖子 / 手动选择素材打包 ZIP（含 `README.md`、`manifest.json`、`data.csv` 与原始文件）                                                                                                                                                                                       |
+| 权限与用户 | 四级角色 + 科室隔离 + 审计日志；**root 可以是不归属任何科室的全局管理员**，用顶部「科室」切换器查看各科室资料；科室管理员可创建成员账号，也可**认领已注册但未分配科室的用户**                                                                                                                      |
+| 在线预览   | 图片（近全屏、缩放/旋转/平移）、视频（Range 流式播放）、PDF、docx、xlsx、Markdown/文本；移动端同样可预览，Office 在线编辑仅桌面端（OnlyOffice 手机端属企业版），移动端自动隐藏入口；docx/xlsx/在线编辑器按需懒加载（media 首包 −72%）；系统管理里有 Office 集成就绪状态卡片                        |
+| 存储后端   | 服务器本地磁盘 / NAS 挂载目录 / S3 兼容对象存储（MinIO、OSS、Ceph 等），可配置多个目标并指定默认                                                                                                                                                                                                   |
+| 存储配额   | 科室级与全站级容量上限（可留空不限、填 0 禁止上传）；上传前检查配额与目标磁盘余量（本地/NAS 保留 512MB），超限给出具体原因；后台显示已用/上限进度与磁盘剩余                                                                                                                                        |
+| 冷数据归档 | 把指定日期前上传的素材按分片打包成 zip（`manifest.json` + `README.md` + 离线可打开的 `viewer.html` + 原文件）推送到 NAS/S3/本地，可选删除服务器源文件释放空间；素材标记「已归档」，分片支持断点续传下载；操作与容量规划见 [docs/ARCHIVE.md](docs/ARCHIVE.md)                                       |
+| 手机 App   | 可安装为安卓桌面 App（PWA）：独立图标、全屏运行、拍照/录像直传、离线兜底，装法与限制见 [docs/MOBILE-PWA.md](docs/MOBILE-PWA.md)；也可用 Capacitor 套壳出 APK，见 [docs/ANDROID-APK.md](docs/ANDROID-APK.md)。移动端按 320 / 375 / 667 宽度适配（v1.9.8：系统管理、文章编辑、资料库分类、输入字号） |
+| 自动化     | 定时归档计划（每天/每周/每月，逐个检查并自动打包旧素材；本地目标仅允许 <200MB，否则要求 NAS/S3）；root 可把 SQLite 快照（可选连同素材）镜像到另一存储                                                                                                                                              |
 
 ## 角色
 
@@ -105,6 +131,7 @@ OnlyOffice 参数可以稍后在 `.env` 里补。完整参数、常见问题与�
 
 ```
 apps/web          React SPA：路由页面、组件、E2E 测试
+apps/mobile      Capacitor 安卓壳（加载线上站点；APK 由 GitHub Actions 构建）
 apps/server      Hono 服务：/api/auth（会话）、/rpc（oRPC）、/api/files（上传下载）、/api/office（Office 预览编辑）、/api/exports（导出下载），生产环境同时托管 SPA
 packages/api     oRPC 路由、权限中间件、领域服务
 packages/db      Drizzle schema、迁移、测试数据库
@@ -112,6 +139,8 @@ packages/auth    Better Auth 配置与个人空间钩子
 packages/storage 存储驱动、配置加解密、类型推断
 packages/ui      shadcn 组件与设计令牌
 packages/config  共享 TS 配置
+scripts          install-1panel.sh（一键安装 / 升级）、updater 相关脚本
+docker           Docker 镜像入口脚本（entrypoint.sh）
 .design          设计规范与截图留档
 ```
 
@@ -133,24 +162,27 @@ pnpm dev                                       # web :5173 / api :3000
 
 ## 环境变量（`apps/server/.env`）
 
-| 变量                                       | 说明                                                                     |
-| ------------------------------------------ | ------------------------------------------------------------------------ |
-| `BETTER_AUTH_SECRET`                       | 必填，≥32 字符；同时用于存储配置加密。生产环境必须替换                   |
-| `BETTER_AUTH_URL`                          | 浏览器访问地址，如 `https://medihub.summerecho.cn`                       |
-| `DATABASE_URL`                             | SQLite 文件，相对 `apps/server` 解析                                     |
-| `PORT`                                     | API 端口，默认 3000                                                      |
-| `STORAGE_ROOT`                             | 本地存储根目录，默认 `./storage`                                         |
-| `UPLOAD_MAX_BYTES`                         | 单文件上限，默认 256MB                                                   |
-| `SOFFICE_PATH`                             | 可选，LibreOffice 可执行文件；配置后 docx/xlsx/pptx 可转 PDF 在线预览    |
-| `ONLYOFFICE_URL` / `ONLYOFFICE_JWT_SECRET` | 可选，OnlyOffice Document Server；配置后可在浏览器里真正编辑 Office 文档 |
-| `BETTER_AUTH_TRUSTED_ORIGINS`              | 可选，逗号分隔，额外允许的来源（局域网 IP、反向代理域名）                |
-| `SEED_ROOT_EMAIL` / `SEED_ROOT_PASSWORD`   | 可选，`pnpm seed` 时创建的超级管理员                                     |
-| `UPDATE_ENABLED`                           | 可选，`true` 时开启 root 在线升级（需同时配置重启命令与安装目录）        |
-| `UPDATE_WORKDIR`                           | 安装目录绝对路径（含 `package.json` 与 `apps/`），需服务用户可写         |
-| `UPDATE_RESTART_CMD`                       | 重启命令，如 `systemctl restart medihub`                                 |
-| `UPDATE_HEALTH_URL`                        | 升级后健康检查地址，默认 `http://127.0.0.1:3000/api/health`              |
-| `UPDATE_DB_PATH` / `UPDATE_KEEP_BACKUPS`   | 升级备份的数据库路径与保留份数（默认 `apps/server/local.db` / 3）        |
-| `UPDATE_REPO` / `UPDATE_GITHUB_TOKEN`      | 读取 Release 与下载源码包的仓库（默认 `Eunsolfs/medihub`）与可选 token   |
+| 变量                                       | 说明                                                                                  |
+| ------------------------------------------ | ------------------------------------------------------------------------------------- |
+| `BETTER_AUTH_SECRET`                       | 必填，≥32 字符；同时用于存储配置加密。生产环境必须替换                                |
+| `BETTER_AUTH_URL`                          | 浏览器访问地址，如 `https://medihub.summerecho.cn`                                    |
+| `DATABASE_URL`                             | SQLite 文件，相对 `apps/server` 解析                                                  |
+| `PORT`                                     | API 端口，默认 `3000`；一键安装脚本会自动挑 20000–29999 的空闲端口并写入 `.env`       |
+| `STORAGE_ROOT`                             | 本地存储根目录，默认 `./storage`                                                      |
+| `UPLOAD_MAX_BYTES`                         | 单文件上限，默认 256MB                                                                |
+| `SOFFICE_PATH`                             | 可选，LibreOffice 可执行文件；配置后 docx/xlsx/pptx 可转 PDF 在线预览                 |
+| `ONLYOFFICE_URL` / `ONLYOFFICE_JWT_SECRET` | 可选，OnlyOffice Document Server；配置后可在浏览器里真正编辑 Office 文档              |
+| `BETTER_AUTH_TRUSTED_ORIGINS`              | 可选，逗号分隔，额外允许的来源（局域网 IP、反向代理域名）                             |
+| `SEED_ROOT_EMAIL` / `SEED_ROOT_PASSWORD`   | 可选，`pnpm seed` 时创建的超级管理员                                                  |
+| `UPDATE_ENABLED`                           | 可选，`true` 时开启 root 在线升级（需同时配置重启命令与安装目录）                     |
+| `UPDATE_WORKDIR`                           | 安装目录绝对路径（含 `package.json` 与 `apps/`），需服务用户可写                      |
+| `UPDATE_RESTART_CMD`                       | 重启命令，如 `systemctl restart medihub`                                              |
+| `UPDATE_HEALTH_URL`                        | 升级后健康检查地址，默认 `http://127.0.0.1:3000/api/health`（安装脚本会写成实际端口） |
+| `UPDATE_DB_PATH` / `UPDATE_KEEP_BACKUPS`   | 升级备份的数据库路径与保留份数（默认 `apps/server/local.db` / 3）                     |
+| `UPDATE_REPO` / `UPDATE_GITHUB_TOKEN`      | 读取 Release 与下载源码包的仓库（默认 `Eunsolfs/medihub`）与可选 token                |
+
+> 本地 Docker 部署另有两个 compose 变量：`MEDIHUB_PORT`（宿主端口，默认 8080，容器内仍是 3000）
+> 与 `SEED_ON_START`（首次启动是否写演示数据，默认 true），见 [docs/DOCKER.md](docs/DOCKER.md)。
 
 在线升级与回滚的完整说明见 `docs/UPGRADE.md`。
 
@@ -198,6 +230,8 @@ pnpm run ready           # 完整校验链
 pnpm db:generate         # 修改 schema 后生成迁移
 pnpm db:migrate          # 应用迁移
 pnpm seed                # 演示数据
+pnpm --filter @medihub/server reset-password --list               # 列出账号
+pnpm --filter @medihub/server reset-password root@medihub.local '新密码'  # 重置密码
 ```
 
 ## 工程约束
@@ -213,17 +247,26 @@ pnpm seed                # 演示数据
 
 ## 部署
 
-完整手册见 [docs/DEPLOY-1PANEL.md](docs/DEPLOY-1PANEL.md)（1Panel + Nginx + HTTPS 单机部署），
-Office 在线编辑的选型与许可证见 [docs/ONLYOFFICE.md](docs/ONLYOFFICE.md)。
+三种方式，按场景选：
+
+| 场景                          | 方式                                       | 文档                                             |
+| ----------------------------- | ------------------------------------------ | ------------------------------------------------ |
+| 生产（1Panel + 域名 + HTTPS） | 一条命令装 systemd 服务（节点版本 v1.9.9） | [docs/INSTALL-1PANEL.md](docs/INSTALL-1PANEL.md) |
+| 生产（逐项控制 / 不用脚本）   | 手工部署 + 反向代理 + 证书                 | [docs/DEPLOY-1PANEL.md](docs/DEPLOY-1PANEL.md)   |
+| 本地演示 / 验收               | Docker（`docker compose up -d --build`）   | [docs/DOCKER.md](docs/DOCKER.md)                 |
+
+手工部署的要点：
 
 1. `pnpm install && pnpm build`：`build` 会先构建 web 再构建 server，并把 web 产物复制到
    `apps/server/dist/public`（服务端生产模式据此托管 SPA）。
 2. `pnpm db:migrate && pnpm --filter @medihub/server start`
-3. 服务端监听 `PORT`（默认 3000），浏览器只访问一个端口/域名；访问 `/` 应返回 HTML。
+3. 服务端监听 `PORT`（默认 3000；一键安装脚本会自动选 20000–29999 的空闲端口），
+   浏览器只访问一个端口/域名；访问 `/` 应返回 HTML。反代目标要写**实际端口**。
 4. 反向代理时把 `BETTER_AUTH_URL` 设为对外域名，并在 `BETTER_AUTH_TRUSTED_ORIGINS` 里加上该域名；
    Better Auth 按客户端 IP 限流，Nginx 需传**单值** `X-Forwarded-For $remote_addr;`。
 5. 代理不要丢弃自定义头 `x-org-scope`（root 的科室切换依赖它）。
 6. 定期备份 `DATABASE_URL` 指向的 `.db` 文件（含 `-wal`）与 `STORAGE_ROOT`。
+   Office 在线编辑的选型与许可证见 [docs/ONLYOFFICE.md](docs/ONLYOFFICE.md)。
 
 ## 设计规范
 

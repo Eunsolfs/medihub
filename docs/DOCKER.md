@@ -9,7 +9,7 @@
 docker compose up -d --build
 ```
 
-默认映射到 `http://localhost:8080`。首次启动会自动：
+默认映射到 `http://localhost:8080`（宿主 `MEDIHUB_PORT` → 容器内固定 `3000`）。首次启动会自动：
 
 - 执行数据库迁移；
 - 写入演示数据（2 个科室、3 个账号、示例患者/素材/帖子/学习会议）；
@@ -30,6 +30,13 @@ MEDIHUB_PORT=18080 docker compose up -d
 ```
 
 `BETTER_AUTH_URL` 与可信来源会同步使用该端口。
+
+## 确认版本 / 健康检查
+
+```bash
+curl -fsS http://localhost:8080/api/health        # {"status":"ok","version":"1.9.9"}
+docker compose exec medihub sh -c 'grep "\"version\"" /app/package.json'
+```
 
 ## 数据持久化
 
@@ -58,10 +65,23 @@ docker compose exec medihub sh -c 'tar czf - -C /data .' > medihub-data.tar.gz
 
 其余变量含义见 [DEPLOY-1PANEL.md](./DEPLOY-1PANEL.md) 的环境变量章节。
 
+## 重置密码
+
+```bash
+# 列出账号（Node 24 直接跑 TS，走容器里已有的 DATABASE_URL）
+docker compose exec medihub node apps/server/src/reset-password.ts --list
+# 重置（不传密码会随机生成并打印）
+docker compose exec medihub node apps/server/src/reset-password.ts root@medihub.local '新密码'
+```
+
+> 容器里**没有** pnpm（构建阶段的全局 pnpm 不会带进运行时镜像），所以不要用
+> `pnpm --filter ... reset-password`；上面的 `node ...ts` 才是容器里的正确写法。
+
 ## 能力边界
 
 - 镜像内**没有** LibreOffice 与 OnlyOffice，docx/xlsx/pptx 只能下载后本地打开；
-- Docker 模式不启用在线升级（升级用 `docker compose build --pull && docker compose up -d`）；
+- Docker 模式**不启用**在线升级（镜像层会被重启覆盖）；升级用
+  `docker compose build --pull && docker compose up -d`，详见 [UPGRADE.md §5.3](./UPGRADE.md#53-1panel-与容器容器方案不适用本机制)；
 - 反向代理/HTTPS 由宿主机 Nginx/1Panel 负责；跨域登录需把外部地址加入
   `BETTER_AUTH_TRUSTED_ORIGINS`。
 
@@ -71,6 +91,7 @@ docker compose exec medihub sh -c 'tar czf - -C /data .' > medihub-data.tar.gz
 docker compose logs -f medihub        # 日志
 docker compose exec medihub node apps/server/src/reset-password.ts --list
 docker compose exec medihub node apps/server/src/reset-password.ts root@medihub.local '新密码'
+docker compose exec medihub node apps/server/dist/migrate.mjs   # 手工补迁移
 docker compose down                   # 停止（保留数据）
 docker compose down -v                # 停止并删除数据卷（清空重来）
 ```

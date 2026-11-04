@@ -1,7 +1,7 @@
 /**
  * 在线升级执行器：由 apps/server 的 updater 以 detached 子进程启动。
  *
- * 用法：node updater.mjs upgrade 1.1.0 / node updater.mjs rollback
+ * 用法：node updater.mjs upgrade 1.9.9 / node updater.mjs rollback
  *
  * 设计原则：
  * - 只做「发布包 → 备份 → 构建 → 迁移 → 切换 → 重启 → 健康检查」这条链；
@@ -15,6 +15,7 @@ import {
   mkdir,
   readdir,
   readFile,
+  rename,
   rm,
   stat,
   writeFile,
@@ -56,7 +57,10 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const writeState = async () => {
   await mkdir(updatesDir, { recursive: true });
-  await writeFile(stateFile, `${JSON.stringify(state, null, 2)}\n`);
+  // 先写临时文件再原子替换：前端轮询不会读到写了一半的 JSON。
+  const temporary = `${stateFile}.tmp`;
+  await writeFile(temporary, `${JSON.stringify(state, null, 2)}\n`);
+  await rename(temporary, stateFile);
 };
 
 const logLine = async (line) => {
@@ -205,12 +209,25 @@ const pruneBackups = async () => {
     return;
   }
 
-  const entries = (await readdir(backupsDir)).sort();
+  const entries = await readdir(backupsDir);
+  const ordered = await Promise.all(
+    entries.map(async (entry) => ({
+      entry,
+      mtime: (await stat(path.join(backupsDir, entry))).mtimeMs,
+    }))
+  );
+  ordered.sort((a, b) => a.mtime - b.mtime);
 
-  while (entries.length > keepBackups) {
-    const oldest = entries.shift();
-    await rm(path.join(backupsDir, oldest), { force: true, recursive: true });
-    await logLine(`清理旧备份 ${oldest}`);
+  while (ordered.length > keepBackups) {
+    const oldest = ordered.shift();
+
+    if (oldest) {
+      await rm(path.join(backupsDir, oldest.entry), {
+        force: true,
+        recursive: true,
+      });
+      await logLine(`清理旧备份 ${oldest.entry}`);
+    }
   }
 };
 
@@ -321,10 +338,17 @@ const findLatestBackup = async () => {
     return null;
   }
 
-  const entries = (await readdir(backupsDir)).sort().reverse();
+  const entries = await readdir(backupsDir);
+  const ordered = await Promise.all(
+    entries.map(async (entry) => ({
+      entry,
+      mtime: (await stat(path.join(backupsDir, entry))).mtimeMs,
+    }))
+  );
+  ordered.sort((a, b) => b.mtime - a.mtime);
 
-  for (const entry of entries) {
-    const dir = path.join(backupsDir, entry);
+  for (const item of ordered) {
+    const dir = path.join(backupsDir, item.entry);
 
     if (existsSync(path.join(dir, "manifest.json"))) {
       return dir;
@@ -357,6 +381,9 @@ const upgrade = async () => {
   state.phase = "succeeded";
   await writeState();
   await pruneBackups();
+  // 构建用的 staging（含 node_modules）不再需要；备份目录保留用于回滚。
+  await rm(stagingRoot, { force: true, recursive: true });
+  await rm(path.join(downloadsDir, `${target}.tar.gz`), { force: true });
   await logLine(`升级完成：${backup.fromVersion} → ${target}`);
   return backup;
 };
@@ -388,12 +415,18 @@ const rollback = async () => {
 };
 
 const main = async () => {
-  await writeState();
+  // 先读上一次状态再写本次状态：否则会把正在运行的任务状态覆盖成自己的，
+  // 并发保护形同虚设。
+  const previous = await readFile(stateFile, "utf8").catch(() => "{}");
+  let previousState = {};
+
+  try {
+    previousState = JSON.parse(previous);
+  } catch {
+    previousState = {};
+  }
 
   // 同一时间只允许一个任务；start API 已检查，这里再兜底一次。
-  const previous = await readFile(stateFile, "utf8").catch(() => "{}");
-  const previousState = JSON.parse(previous);
-
   if (
     previousState.phase === "running" &&
     previousState.startedAt &&
@@ -402,6 +435,8 @@ const main = async () => {
   ) {
     return;
   }
+
+  await writeState();
 
   try {
     if (mode === "rollback") {

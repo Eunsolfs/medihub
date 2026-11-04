@@ -428,7 +428,7 @@ sudo supervisorctl restart medihub     # 或 sudo -u www pm2 restart medihub
 | 回调地址              | `editorConfig.callbackUrl = ${BETTER_AUTH_URL}/api/office/:id/callback?...` | 所以 Document Server 必须能访问 `BETTER_AUTH_URL`                                                             |
 | 文档版本键            | `document.key = ${assetId}-${checksum.slice(0,8)}`                          | 内容变了 key 就变，Document Server 缓存自动失效，不会拿旧内容                                                 |
 | JWT                   | 服务端用 HS256 自签 `signJwt(config, ONLYOFFICE_JWT_SECRET)`                | 前端把它作为 `token` 放进 config 体                                                                           |
-| 保存                  | 回调里 `status === 2                                                        |                                                                                                               | status === 6`时拉`url` 写回存储 | 生成**新** `storageKey`（`buildStorageKey`）+ 新 `checksum`，旧文件保留 |
+| 保存                  | 回调里 `status === 2` 或 `status === 6` 时拉 `url` 写回存储                 | 生成**新** `storageKey`（`buildStorageKey`）+ 新 `checksum`，旧文件保留                                       |
 
 ### 5.3 验证流程（5 步）
 

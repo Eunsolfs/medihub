@@ -31,6 +31,11 @@
 
 ## 1. 架构与端口
 
+> **端口从哪来**：本文的手工流程用 `PORT=3000` 举例。若你用
+> [INSTALL-1PANEL.md](./INSTALL-1PANEL.md) 的一键脚本安装，端口是脚本**自动挑选**的
+> （20000–29999 空闲端口）或你 `--port` 指定的值；反向代理目标必须以脚本打印的端口 /
+> `.env` 里的 `PORT` 为准（`grep '^PORT' /opt/medihub/apps/server/.env`）。
+
 ```
 浏览器 ──https──> 1Panel / OpenResty :443 ──http──> 127.0.0.1:3000 (MediHub server)
                         │                                   │
@@ -978,6 +983,11 @@ curl -I https://medihub.summerecho.cn/
 
 本节是**命令行手工流程**，适合改过配置、看过源码、或在线升级不可用时使用。
 
+> 更省事的替代：用一键安装脚本升级（幂等、保留 `.env` / 数据库 / 素材，升级前自动备份数据库）：
+> `sudo bash /opt/medihub/scripts/install-1panel.sh --update --yes`
+> （脚本不在安装目录时重新下载，见 [INSTALL-1PANEL.md](./INSTALL-1PANEL.md)）。
+> 1.9.1+ 的 systemd 单元带 `KillMode=process`，在线升级不会再被重启杀掉。
+
 > 已经在跑稳定版本、只想换版本号？优先用内置的在线升级：
 > **系统管理 → 版本与升级**（仅 root 可见），一键完成备份、构建、迁移、切换、重启与健康检查，
 > 失败会自动回滚。配置与注意事项见 [UPGRADE.md](./UPGRADE.md)。
@@ -1117,7 +1127,7 @@ Drizzle 的迁移是**单向**的：`packages/db/src/migrations` 里只有 `up`�
 | `SOFFICE` 转换报 501 / 转换失败                                            | 未配 `SOFFICE_PATH`，或 `$STORAGE_ROOT/.office-cache` 不可写                                                     | `curl -I .../api/office/<id>/pdf` 返回 501 就是没配                                                         | 装 LibreOffice、`.env` 填 `SOFFICE_PATH=/usr/bin/soffice`、`chown -R www:www` 缓存目录、重启。CentOS 上 SELinux 需 `setsebool -P httpd_can_network_connect 1`                                                                                           |
 | CentOS 上写入 `/opt` 或 `/data` 被拒（`Permission denied` 但权限看着没错） | SELinux 上下文不对                                                                                               | `ls -Z /data/medihub`；`sudo ausearch -m avc -ts recent`                                                    | `sudo semanage fcontext -a -t httpd_sys_rw_content_t '/data/medihub(/.*)?'` + `sudo restorecon -Rv /data/medihub`；或 `sudo chcon -R -t httpd_sys_rw_content_t /data/medihub`。不要用 `setenforce 0` 一关了之                                           |
 | `EADDRINUSE :3000`                                                         | 手工前台起过一次没停，或两套守护同时在跑                                                                         | `ss -lntp \| grep :3000`                                                                                    | 杀掉多余进程，只保留一套守护                                                                                                                                                                                                                            |
-| 反复被限流 `429 Too Many Requests`                                         | Better Auth 生产默认按 IP 限流（10s/100 次）；反代没传可信 XFF 时所有用户共享一个桶                              | 主站日志里会有「Rate limiting could not determine a client IP」告警                                         | 确认 Nginx 用 `proxy_set_header X-Forwarded-For $remote_addr;`（**单值**）；若有多级代理，需在 `packages/auth` 配 `advanced.ipAddress.trustedProxies` + 多值 XFF（见 §16）                                                                              |
+| 登录 / 注册提示「尝试过于频繁，请稍等片刻再试」（429）                     | v1.9.6+ 登录/注册/改密限流 **10 次/分钟**、全局 120 次/分钟（按 IP）；反代没传可信 XFF 时所有用户共享一个桶      | 主站日志里会有「Rate limiting could not determine a client IP」告警                                         | 确认 Nginx 用 `proxy_set_header X-Forwarded-For $remote_addr;`（**单值**）；v1.9.6+ 已在 `packages/auth` 配 `advanced.ipAddress.ipAddressHeaders`，但仍未配 `trustedProxies`，多值 XFF 会被判不可信（见 §16.2）                                         |
 | `git pull` 报 `dubious ownership`                                          | 仓库属主与执行用户不一致                                                                                         | `sudo -u www -H git -C /opt/medihub status`                                                                 | `sudo chown -R www:www /opt/medihub`，别用 `git config --global --add safe.directory` 绕过                                                                                                                                                              |
 
 ---
@@ -1150,14 +1160,29 @@ Drizzle 的迁移是**单向**的：`packages/db/src/migrations` 里只有 `up`�
 
 生产部署只需要 `install` / `db:migrate` / `build`；`check`、`test`、`test:e2e` 在本地或 CI 跑。
 
-### 16.2 `advanced.ipAddress` 没有配置（当前版本行为）
+### 16.2 `advanced.ipAddress` 已配置 headers，但没有 `trustedProxies`
 
-`packages/auth/src/index.ts` 只设置了 `trustedOrigins`，没有 `advanced.ipAddress`。
-`better-auth@1.7` 的 `getIP` 默认读 `x-forwarded-for`，且在未配置 `trustedProxies` 时
-**只接受单值**；多值直接返回 `null`，落到「所有请求共用一个每路径限流桶」。这就是 §9.2
-坚持用 `$remote_addr`（单值）而不是 `$proxy_add_x_forwarded_for` 的原因。
+v1.9.6 起 `packages/auth/src/index.ts` 已经显式配置：
 
-多级代理 / 需要真实 IP 时，正确做法是在 `packages/auth` 里加：
+```ts
+rateLimit: {
+  customRules: {
+    "/change-password": { max: 10, window: 60 },
+    "/sign-in/email": { max: 10, window: 60 },
+    "/sign-up/email": { max: 10, window: 60 },
+  },
+  max: 120,
+  window: 60,
+},
+advanced: { ipAddress: { ipAddressHeaders: ["x-forwarded-for"] } },
+```
+
+也就是**登录/注册/改密 10 次/分钟、全局 120 次/分钟**，并且信任 `X-Forwarded-For`。
+但 `trustedProxies` 仍未配置，而 `better-auth` 的 IP 解析在未配置它时**只接受单值**
+`x-forwarded-for`；多值会返回 `null`，落到「所有请求共用一个每路径限流桶」。
+这就是 §9.2 坚持用 `$remote_addr`（单值）而不是 `$proxy_add_x_forwarded_for` 的原因。
+
+多级代理 / 需要真实 IP 时，正确做法是在 `packages/auth` 里补：
 
 ```ts
 advanced: {

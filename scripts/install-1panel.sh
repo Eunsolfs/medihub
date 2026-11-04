@@ -4,7 +4,7 @@
 #
 # 适用：Debian 12 / Ubuntu 22.04+ / Rocky / Alma / CentOS Stream 等常见发行版，
 #       Node.js 24 + pnpm 12 + systemd。
-# 不适用：Docker 镜像部署（容器内没有可写安装目录）、Windows。
+# Docker 部署请使用仓库的 Dockerfile / docker-compose.yml，不要运行本脚本；本脚本不适用 Windows。
 #
 # 用法（首次安装）：
 #   sudo bash install-1panel.sh --url https://medihub.example.com --seed
@@ -14,9 +14,9 @@
 #
 # 常用参数：
 #   --dir /opt/medihub          安装目录（默认 /opt/medihub）
-#   --tag v1.1.0                指定版本（默认最新 Release）
+#   --tag v1.9.9                指定版本（默认最新 Release）
 #   --url https://...           浏览器访问地址（写入 BETTER_AUTH_URL）
-#   --port 3000                 API 端口（默认自动选择空闲端口）
+#   --port <port>               API 端口（默认自动选择空闲端口）
 #   --user medihub              运行服务的系统用户
 #   --seed                      创建超级管理员，随机密码打印一次
 #   --onlyoffice-url URL        OnlyOffice Document Server 地址（可后填）
@@ -24,7 +24,8 @@
 #   --update                    升级现有安装（保留数据）
 #   --dry-run                   只打印将执行的操作，不改动系统
 #   --yes                       非交互确认
-#   --purge                     清理一次失败/不再需要的安装（删服务、目录与用户）
+#   --version                   打印安装脚本版本
+#   --purge                     清理一次失败/不再需要的安装（删服务、目录、用户与 sudoers）
 #   --force                     与 --purge 连用：即使已有数据库也强制删除
 #
 # 全部逻辑幂等：重复执行会保留 .env、SQLite、storage 与 .updates 备份。
@@ -49,6 +50,7 @@ FORCE="false"
 ONLYOFFICE_URL=""
 ONLYOFFICE_SECRET=""
 SERVICE_NAME="medihub"
+SCRIPT_VERSION="1.9.9"
 TMP_DIR=""
 PHASE="准备"
 INSTALL_STARTED="false"
@@ -70,6 +72,11 @@ run() {
     return 0
   fi
   "$@"
+}
+
+# 带值参数缺少值或值看起来像另一个参数时立即报错，而不是让 set -u 抛 unbound。
+need_arg() {
+  [[ $# -ge 2 && -n "$2" && "$2" != --* ]] || fail "参数 $1 缺少值（--help 查看用法）"
 }
 
 # 端口是否空闲：优先 ss，其次 netstat，最后用 Node 实际绑定测试。
@@ -185,26 +192,30 @@ on_error() {
 }
 
 usage() {
-  sed -n '2,32p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,/^set -euo pipefail$/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'
   exit 0
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --dir) DIR="$2"; shift 2 ;;
-    --tag) TAG="$2"; shift 2 ;;
-    --url) SITE_URL="$2"; shift 2 ;;
-    --port) USER_PORT="$2"; shift 2 ;;
-    --user) RUN_USER="$2"; shift 2 ;;
+    --dir) need_arg "$@"; DIR="$2"; shift 2 ;;
+    --tag) need_arg "$@"; TAG="$2"; shift 2 ;;
+    --url) need_arg "$@"; SITE_URL="$2"; shift 2 ;;
+    --port) need_arg "$@"; USER_PORT="$2"; shift 2 ;;
+    --user) need_arg "$@"; RUN_USER="$2"; shift 2 ;;
     --seed) SEED="true"; shift ;;
     --update) UPDATE_MODE="true"; shift ;;
     --dry-run) DRY_RUN="true"; shift ;;
     --yes|-y) ASSUME_YES="true"; shift ;;
     --purge) PURGE="true"; shift ;;
     --force) FORCE="true"; shift ;;
-    --onlyoffice-url) ONLYOFFICE_URL="$2"; shift 2 ;;
-    --onlyoffice-secret) ONLYOFFICE_SECRET="$2"; shift 2 ;;
+    --onlyoffice-url) need_arg "$@"; ONLYOFFICE_URL="$2"; shift 2 ;;
+    --onlyoffice-secret) need_arg "$@"; ONLYOFFICE_SECRET="$2"; shift 2 ;;
     -h|--help) usage ;;
+    -V|--version)
+      printf '医档通 MediHub 安装脚本 v%s\n' "$SCRIPT_VERSION"
+      exit 0
+      ;;
     *) fail "未知参数：$1（--help 查看用法）" ;;
   esac
 done
@@ -215,6 +226,11 @@ SYSTEMCTL_BIN="$(command -v systemctl 2>/dev/null || echo /usr/bin/systemctl)"
 SERVER_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 [[ -n "$SERVER_IP" ]] || SERVER_IP="127.0.0.1"
 [[ "$DIR" == /* && "$DIR" != "/" ]] || fail "--dir 必须是绝对路径，且不能是 /"
+
+if [[ -n "$USER_PORT" ]]; then
+  [[ "$USER_PORT" =~ ^[0-9]+$ ]] || fail "--port 必须是 1-65535 的数字"
+  (( USER_PORT >= 1 && USER_PORT <= 65535 )) || fail "--port 必须在 1-65535 之间"
+fi
 
 # 参数校验：早失败比装到一半失败好。
 if [[ -n "$SITE_URL" ]]; then
@@ -351,7 +367,7 @@ fetch_release() {
 
   # DRY-RUN 不访问网络、不下载。
   if [[ "$DRY_RUN" == "true" ]]; then
-    printf '  + 下载 https://codeload.github.com/%s/tar.gz/refs/tags/%s\n' "$REPO" "$tag"
+    printf '  + 下载 https://codeload.github.com/%s/tar.gz/refs/tags/%s\n' "$REPO" "$tag" >&2
     echo "$tmp/dry-run"
     return
   fi
@@ -371,7 +387,8 @@ fetch_release() {
 }
 
 stop_service_if_running() {
-  if systemctl list-unit-files | grep -q "^$SERVICE_NAME.service"; then
+  if command -v systemctl >/dev/null 2>&1 &&
+    systemctl list-unit-files | grep -q "^$SERVICE_NAME.service"; then
     log "停止现有 $SERVICE_NAME 服务，准备切换代码"
     run systemctl stop "$SERVICE_NAME" || true
   fi
@@ -577,10 +594,10 @@ purge_install() {
     run systemctl stop "$SERVICE_NAME" || true
     run systemctl disable "$SERVICE_NAME" || true
     run rm -f "/etc/systemd/system/$SERVICE_NAME.service"
-  run rm -f "/etc/sudoers.d/medihub-update"
     run systemctl daemon-reload
   fi
 
+  run rm -f "/etc/sudoers.d/medihub-update"
   run rm -rf "$DIR"
   if id -u "$RUN_USER" >/dev/null 2>&1; then
     run userdel "$RUN_USER" 2>/dev/null || true
@@ -596,7 +613,7 @@ migrate_and_seed() {
 
   if [[ "$SEED" == "true" ]]; then
     local email="${SEED_ROOT_EMAIL:-root@medihub.local}"
-    local password="${SEED_ROOT_PASSWORD:-$(openssl rand -base64 12 2>/dev/null | tr -d '/+=' | head -c 14)}"
+    local password="${SEED_ROOT_PASSWORD:-$(openssl rand -base64 12 2>/dev/null | tr -d '/+=' | head -c 14 || head -c 24 /dev/urandom | base64 | tr -d '/+=' | head -c 14)}"
 
     log "写入演示数据与超级管理员 $email"
     run runuser -u "$RUN_USER" -- bash -lc \
@@ -727,7 +744,7 @@ EOF
 }
 
 main() {
-  log "医档通 MediHub 安装脚本 · 仓库 $REPO"
+  log "医档通 MediHub 安装脚本 v$SCRIPT_VERSION · 仓库 $REPO"
   if [[ "$DRY_RUN" == "true" ]]; then
     log "DRY-RUN：只打印操作，不修改系统"
   fi

@@ -2,6 +2,30 @@
 
 本项目从第一版起的所有对外变更。版本号遵循 `MAJOR.MINOR.PATCH`。
 
+## v1.9.9 — 2026-11-04
+
+### 运维脚本易用性与文档同步
+
+- 安装脚本：
+  - `--help` 动态读取头部注释，新增 `--version` 打印脚本版本；`--port` 校验 1–65535；
+    `--dir/--tag/--url/--port/--user/--onlyoffice-*` 缺值直接报「参数 X 缺少值」；
+  - `--purge` 无论服务单元是否存在都清理 `/etc/sudoers.d/medihub-update`；
+  - `--seed` 在 openssl 不可用时回退 `/dev/urandom`；
+  - `--dry-run` 不再把下载地址混进源目录变量，并跳过无 systemctl 环境的报错；
+  - 头部明确「Docker 部署使用 Dockerfile/compose，不要运行本脚本」。
+- 在线升级执行器：
+  - `state.json` 改为临时文件 + rename 原子写，前端轮询不会读到半截 JSON；
+  - 并发保护改为先读旧状态再写，避免新进程覆盖运行中任务；
+  - 备份清理/手动回滚按目录 mtime 取最新，而不是版本号字典序；
+  - 升级成功后清理 staging 与本次下载包，避免磁盘持续增长。
+- `reset-password` 脚本：新增 `--help`/`-h`、`-l` 别名；邮箱大小写归一；密码至少 8 位；
+  未迁移数据库时给出「先 db:migrate」提示而不是裸 Drizzle 堆栈。
+- 文档全面同步到 v1.9.9：README 增加账号登录与 Docker 章节；INSTALL/UPGRADE/DEPLOY/DOCKER
+  更新安装参数、1.9.x 行为变化、在线升级排障与备份规则；修正 ARCHIVE 归档徽标、
+  ONLYOFFICE 表格与 docs 索引。
+- 验证：安装脚本 `bash -n`/`--help`/`--version`/缺值/端口校验/`--dry-run`；
+  updater 并发与非法版本状态；`docker compose config`；文档链接/表格与 `vp fmt --check`。
+
 ## v1.9.8 — 2026-10-28
 
 ### 移动端布局复查与优化
