@@ -1,7 +1,12 @@
 # 本地 Docker 部署
 
-用于本机验收、演示与回归测试；生产环境仍推荐按 [INSTALL-1PANEL.md](./INSTALL-1PANEL.md) 安装，
-以便使用 systemd、在线升级和 1Panel 反向代理。
+> **这只是「本地试运行 / 手动 compose」的页面。**
+> 生产要容器化部署 → [DOCKER-OPS.md](./DOCKER-OPS.md)：`medihub-ops.sh` 一条命令装好，
+> 并负责升级、回滚、备份、恢复与自检（推荐）。
+> 用 systemd 装到宿主机 → [1PANEL-FIRST-DEPLOY.md](./1PANEL-FIRST-DEPLOY.md)。
+
+用于本机验收、演示与回归测试；本页的 compose 是给「自己动手」场景的参考，
+生产环境建议走上面对应的两条路径之一（systemd 有页面在线升级，Docker 一键运维有 `ops.sh upgrade`）。
 
 ## 快速开始
 
@@ -24,7 +29,7 @@ MEDIHUB_PORT=18080 docker compose up -d
 ## 确认版本 / 健康检查
 
 ```bash
-curl -fsS http://localhost:8080/api/health        # {"status":"ok","version":"1.10.1"}
+curl -fsS http://localhost:8080/api/health        # {"status":"ok","version":"1.10.2"}
 docker compose exec medihub sh -c 'grep "\"version\"" /app/package.json'
 ```
 
@@ -73,7 +78,7 @@ docker compose exec medihub node apps/server/src/reset-password.ts <你的管理
 ```bash
 docker pull ghcr.io/eunsolfs/medihub:latest
 # 或指定版本
-docker pull ghcr.io/eunsolfs/medihub:1.10.1
+docker pull ghcr.io/eunsolfs/medihub:1.10.2
 ```
 
 不想在本机构建时，用仓库里的 GHCR compose：

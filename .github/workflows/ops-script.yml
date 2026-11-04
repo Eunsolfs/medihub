@@ -1,0 +1,98 @@
+name: ops-script
+
+on:
+  push:
+    paths:
+      - "scripts/medihub-ops.sh"
+      - ".github/workflows/ops-script.yml"
+  pull_request:
+    paths:
+      - "scripts/medihub-ops.sh"
+      - ".github/workflows/ops-script.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Shell syntax
+        run: bash -n scripts/medihub-ops.sh
+
+      - name: Help and version
+        run: |
+          bash scripts/medihub-ops.sh help >/dev/null
+          bash scripts/medihub-ops.sh version
+
+      - name: Generate config without Docker
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          MH_DIR="$tmp" MH_DRY_RUN=1 bash scripts/medihub-ops.sh install \
+            --url https://demo.example.com --port 18080 --yes
+          test -f "$tmp/.env"
+          test -f "$tmp/docker-compose.yml"
+          test -f "$tmp/ops.sh"
+          grep -q '^MH_IMAGE=ghcr.io/eunsolfs/medihub:latest$' "$tmp/.env"
+          grep -q '^MH_URL="https://demo.example.com"$' "$tmp/.env"
+          grep -q '^MH_PORT=18080$' "$tmp/.env"
+          grep -q 'BETTER_AUTH_SECRET=' "$tmp/.env"
+          ! grep -Eq 'SEED_|ADMIN_PASSWORD|DEMO_' "$tmp/.env"
+          ! grep -q 'seed' "$tmp/docker-compose.yml"
+
+      - name: Reuse existing config
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          MH_DIR="$tmp" MH_DRY_RUN=1 bash scripts/medihub-ops.sh install \
+            --url https://first.example.com --port 18081 --yes
+          MH_DIR="$tmp" MH_DRY_RUN=1 bash scripts/medihub-ops.sh install \
+            --url https://second.example.com --port 18082 --yes
+          grep -q '^MH_URL="https://first.example.com"$' "$tmp/.env"
+          grep -q '^MH_PORT=18081$' "$tmp/.env"
+
+  docker-smoke:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install from GHCR
+        env:
+          MH_DIR: ${{ runner.temp }}/medihub-ops
+          MH_URL: http://127.0.0.1:18080
+        run: |
+          set -euo pipefail
+          bash scripts/medihub-ops.sh install --port 18080
+          curl -fsS http://127.0.0.1:18080/api/health
+
+      - name: Backup and restore
+        env:
+          MH_DIR: ${{ runner.temp }}/medihub-ops
+          MH_YES: "1"
+        run: |
+          set -euo pipefail
+          docker exec medihub-docker-app-1 sh -c 'mkdir -p /data/storage && echo ci-marker > /data/storage/ci-marker'
+          BACKUP="$(bash scripts/medihub-ops.sh backup ci | grep -E '^/.*\.tar\.gz$' | tail -n 1)"
+          test -f "$BACKUP"
+          tar -tzf "$BACKUP" | grep -q './local.db'
+          tar -tzf "$BACKUP" | grep -q './storage/ci-marker'
+          docker exec medihub-docker-app-1 rm -f /data/storage/ci-marker
+          bash scripts/medihub-ops.sh restore "$BACKUP"
+          docker exec medihub-docker-app-1 test -f /data/storage/ci-marker
+          bash scripts/medihub-ops.sh status
+
+      - name: Uninstall
+        if: always()
+        env:
+          MH_DIR: ${{ runner.temp }}/medihub-ops
+          MH_YES: "1"
+        run: bash scripts/medihub-ops.sh uninstall || true

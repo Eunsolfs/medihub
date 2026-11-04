@@ -2,6 +2,27 @@
 
 本项目从第一版起的所有对外变更。版本号遵循 `MAJOR.MINOR.PATCH`。
 
+## v1.10.2 — 2026-11-04
+
+### 容器化一键安装/运维（HandoverKit 风格）
+
+- 新增 `scripts/medihub-ops.sh`，随 GitHub Release 发布为 `medihub-ops.sh`：
+  - `install` / `upgrade` / `status` / `logs` / `backup` / `restore` / `rollback` /
+    `restart` / `down` / `uninstall` / `doctor` / `menu`；
+  - 生成 `/opt/medihub-docker/.env` 与 `docker-compose.yml`，使用 GHCR 镜像
+    `ghcr.io/eunsolfs/medihub` 和数据卷 `medihub_data`；
+  - 首次安装不创建任何账号，打开 `<MH_URL>/install` 创建超级管理员；
+  - 升级前自动备份，失败自动回滚镜像配置；备份包含 SQLite、素材目录与 `.env`，
+    备份时短暂停服以保证数据一致；
+  - 支持 `--url` / `--port` / `--tag` / `--image` / `--dir` / `--yes`，
+    以及 `MH_SKIP_PULL=1` 离线/测试模式；
+  - 与 systemd 一键安装互斥；Docker 部署不使用系统管理里的在线升级，
+    统一用本脚本 `upgrade`。
+- 新增 `docs/DOCKER-OPS.md`，并更新文档地图、README 部署入口与 DOCKER 文档。
+- 新增 `ops-script` CI：shell 语法、help/version、无 Docker 的 dry-run 生成配置、
+  重复安装复用 `.env`。
+- Docker 镜像同时提供 `1.10.2`、`latest`、`main`、`sha-*` 标签。
+
 ## v1.10.1 — 2026-11-04
 
 ### 文档重整与安装器修复

@@ -88,29 +88,33 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug assembleRelease --no-daemon --stacktrace
 
-      - name: Collect APK files
+      - name: Collect release files
         run: |
           VERSION="$(node -p "require('./package.json').version")"
           mkdir -p dist-apk
           cp apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk "dist-apk/medihub-${VERSION}-debug.apk"
           cp apps/mobile/android/app/build/outputs/apk/release/app-release.apk "dist-apk/medihub-${VERSION}-release.apk"
+          cp scripts/medihub-ops.sh "dist-apk/medihub-ops.sh"
+          chmod 755 dist-apk/medihub-ops.sh
           ls -lh dist-apk
           echo "APK_VERSION=$VERSION" >> "$GITHUB_ENV"
 
-      - name: Upload APK artifacts
+      - name: Upload release artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: medihub-apk
-          path: dist-apk/*.apk
+          name: medihub-release-assets
+          path: dist-apk/*
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish APK to GitHub Release
+      - name: Publish release assets
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
           name: 医档通 MediHub ${{ github.ref_name }}
-          files: dist-apk/*.apk
+          files: |
+            dist-apk/*.apk
+            dist-apk/medihub-ops.sh
           fail_on_unmatched_files: true
           generate_release_notes: true

@@ -1,5 +1,10 @@
 # 在线升级与回滚（系统管理 → 版本与升级）
 
+> **Docker 部署请先看这里**：容器化部署（`medihub-ops.sh` / 手工 compose / GHCR）**没有** systemd，
+> 也没有可写的 `apps/server/dist`，页面里的「版本与升级」不适用。Docker 的升级入口是
+> `sudo bash /opt/medihub-docker/ops.sh upgrade [版本]`（升级前自动备份、失败自动回滚镜像配置），
+> 详见 [DOCKER-OPS.md](./DOCKER-OPS.md)。**本文只适用于 systemd 安装**（`install-1panel.sh`）。
+
 MediHub 内置了一套「在站点里点一下就升级」的机制：`root` 账号在 **系统管理 → 版本与升级**
 卡片里查看当前版本、GitHub 最新版本（Release 或 tag），一键升级或回滚。服务端会以 detached 子进程运行
 升级执行器 `apps/server/scripts/updater.mjs`，自动完成**备份 → 下载发布包 → 构建 → 迁移 →
@@ -8,7 +13,7 @@ MediHub 内置了一套「在站点里点一下就升级」的机制：`root` �
 本文只讲运维怎么把它安全地用起来。手工（命令行）升级流程见
 [DEPLOY-1PANEL.md §13](./DEPLOY-1PANEL.md#13-升级与回滚)，两者可以并存，但**不要同时进行**。
 
-> **适用版本：v1.1.0+，当前 v1.10.1**（v1.0.0 不包含在线升级）。
+> **适用版本：v1.1.0+，当前 v1.10.2**（v1.0.0 不包含在线升级）。
 > **v1.10.0 起是纯净版**：升级/安装都不会写入演示数据或账号；账号只能通过 `/install`
 > 或管理端创建。安装器的 `--seed` 参数自 **v1.10.0 起已移除**，本手册也不使用它。
 >
@@ -180,9 +185,9 @@ curl -fsS -m 10 -o /dev/null -w '%{http_code}\n' \
   https://api.github.com/repos/Eunsolfs/medihub/releases/latest
 curl -fsS -m 10 -o /dev/null -w '%{http_code}\n' \
   https://api.github.com/repos/Eunsolfs/medihub/tags
-# 源码包下载（升级用，走 codeload，和 api 不是同一个域名；把 v1.10.1 换成目标版本）
+# 源码包下载（升级用，走 codeload，和 api 不是同一个域名；把 v1.10.2 换成目标版本）
 curl -fsS -m 15 -o /dev/null -w '%{http_code}\n' \
-  https://codeload.github.com/Eunsolfs/medihub/tar.gz/refs/tags/v1.10.1
+  https://codeload.github.com/Eunsolfs/medihub/tar.gz/refs/tags/v1.10.2
 ```
 
 判断标准：
@@ -192,9 +197,9 @@ curl -fsS -m 15 -o /dev/null -w '%{http_code}\n' \
   本仓库目前只有 tag、没建 GitHub Release，因此实际走 `/tags` 回退，这是正常的。
 - 内网/国内服务器可能只挡其中一个域名，别只测一个。
 
-### 3.4 版本 tag 形如 `v1.10.1`
+### 3.4 版本 tag 形如 `v1.10.2`
 
-执行器接受 `1.10.1` 与 `v1.10.1` 两种写法（会先去掉前缀 `v`），版本号必须匹配
+执行器接受 `1.10.2` 与 `v1.10.2` 两种写法（会先去掉前缀 `v`），版本号必须匹配
 `^\d+\.\d+\.\d+([-+][0-9A-Za-z.-]+)?$`。
 
 下载源码包时会依次尝试两个地址，任一命中即可：
@@ -204,7 +209,7 @@ https://codeload.github.com/<repo>/tar.gz/refs/tags/v<version>
 https://codeload.github.com/<repo>/tar.gz/refs/tags/<version>
 ```
 
-所以 tag 打成 `v1.10.1` 或 `1.10.1` 都能升级；但**必须真的打了 tag**（`git push origin v1.10.1`），
+所以 tag 打成 `v1.10.2` 或 `1.10.2` 都能升级；但**必须真的打了 tag**（`git push origin v1.10.2`），
 只建 Release 不建 tag 是不行的。检查更新时：有 Release 就取 `releases/latest`
 （草稿 draft 与预发布 pre-release 不算）；没有 Release 则回退到 `/tags`，取最新的版本 tag。
 
@@ -256,7 +261,7 @@ ls -l /opt/medihub/apps/server/dist/scripts/updater.mjs
 自检命令（三条应一致）：
 
 ```bash
-curl -fsS http://127.0.0.1:3000/api/health      # {"status":"ok","version":"1.10.1"}（端口按实际）
+curl -fsS http://127.0.0.1:3000/api/health      # {"status":"ok","version":"1.10.2"}（端口按实际）
 grep '"version"' /opt/medihub/package.json
 ```
 
@@ -432,7 +437,7 @@ www ALL=(root) NOPASSWD: /usr/bin/supervisorctl restart medihub, /usr/bin/superv
 sudo supervisorctl status
 ```
 
-**装法二：1Panel 应用商店 / `docker compose` 部署的 MediHub**
+**装法二：容器 / Docker 部署的 MediHub**
 
 > ⚠️ **不适用本机制，不要配置 `UPDATE_ENABLED=true`。**
 >
@@ -442,12 +447,20 @@ sudo supervisorctl status
 > 仓库自带的 Docker 部署（`Dockerfile` / `docker-compose.yml`）同样如此，见
 > [DOCKER.md](./DOCKER.md)。
 
-容器部署的升级方式：
+**容器部署正确的升级方式**（用 `medihub-ops.sh`，升级前自动备份、失败回滚镜像配置）：
+
+```bash
+sudo bash /opt/medihub-docker/ops.sh upgrade          # 升到 latest
+sudo bash /opt/medihub-docker/ops.sh upgrade 1.10.2   # 指定版本
+```
+
+详见 [DOCKER-OPS.md](./DOCKER-OPS.md)。手工 compose 部署则改镜像 tag 后
+`docker compose pull && docker compose up -d`：
 
 ```bash
 # 1) 改 compose 里的镜像 tag（换成你自己的镜像仓库；本项目不发布官方镜像，
 #    若你是自建镜像，就是你的 registry 路径）
-#    image: registry.example.com/medihub:v1.10.1
+#    image: registry.example.com/medihub:v1.10.2
 # 2) 拉取并重建
 docker compose pull medihub
 docker compose up -d medihub
@@ -513,13 +526,13 @@ tail -f /opt/medihub/.updates/state.json | grep -o '"20[^"]*"' | tail -20
 
 ```text
 2026-10-24T14:03:11.482Z 备份当前版本 1.10.0 → /opt/medihub/.updates/backups/1.10.0-2026-10-24T14-03-11-482Z
-2026-10-24T14:03:12.010Z 下载发布包：https://codeload.github.com/Eunsolfs/medihub/tar.gz/refs/tags/v1.10.1
+2026-10-24T14:03:12.010Z 下载发布包：https://codeload.github.com/Eunsolfs/medihub/tar.gz/refs/tags/v1.10.2
 2026-10-24T14:03:41.229Z $ pnpm install --frozen-lockfile
 ...
 2026-10-24T14:05:02.664Z $ pnpm run db:migrate
 2026-10-24T14:05:04.031Z 重启服务：sudo -n systemctl restart medihub
-2026-10-24T14:05:12.887Z 健康检查通过：{"status":"ok","version":"1.10.1"}
-2026-10-24T14:05:12.902Z 升级完成：1.10.0 → 1.10.1
+2026-10-24T14:05:12.887Z 健康检查通过：{"status":"ok","version":"1.10.2"}
+2026-10-24T14:05:12.902Z 升级完成：1.10.0 → 1.10.2
 ```
 
 ### 6.4 健康检查确认版本
@@ -527,13 +540,13 @@ tail -f /opt/medihub/.updates/state.json | grep -o '"20[^"]*"' | tail -20
 ```bash
 # 本机（执行器用的就是这条）
 curl -fsS http://127.0.0.1:3000/api/health
-# {"status":"ok","version":"1.10.1"}
+# {"status":"ok","version":"1.10.2"}
 
 # 经过反代（给同事确认用）
 curl -fsS https://medihub.summerecho.cn/api/health
 ```
 
-回到卡片：状态区应显示 **已升级到 v1.10.1**；「当前版本」也变成 `v1.10.1`。
+回到卡片：状态区应显示 **已升级到 v1.10.2**；「当前版本」也变成 `v1.10.2`。
 
 再顺手确认前端产物也跟着换了（`dist` 是整体替换的，`dist/public` 一起更新）：
 
@@ -693,7 +706,7 @@ cd /opt/medihub && sudo -u www -H /opt/node24/bin/node \
 > 「`dist` / `package.json` 被手工替换过」。
 
 **现象**：日志一路走到「重启服务」，然后 2 分钟后
-`升级后健康检查未在超时内返回 1.10.1`，界面显示「已自动回滚到上个版本」。
+`升级后健康检查未在超时内返回 1.10.2`，界面显示「已自动回滚到上个版本」。
 
 **判定依据**：健康检查要求 `/api/health` 的 `version` **等于目标版本**；而 `version` 来自
 **安装根 `package.json`**（`apps/server/src/version.ts` 的运行期读取）。所以只可能是

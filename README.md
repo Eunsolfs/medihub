@@ -1,6 +1,6 @@
 # 医档通 MediHub
 
-> 当前版本：**v1.10.1**（纯净版，不含演示数据；变更记录见 [CHANGELOG.md](CHANGELOG.md)）
+> 当前版本：**v1.10.2**（纯净版，不含演示数据；变更记录见 [CHANGELOG.md](CHANGELOG.md)）
 
 科室内部的多媒体与病历资料管理平台。把患者的伤口/术中/术后照片、病历资料、科室培训与讲课材料集中存起来，按「患者 → 某次入院 → 时间线」组织，并为科研、宣传、病例汇报提供可筛选、可打包导出的数据底座。
 
@@ -44,7 +44,10 @@ docker compose up -d --build      # 默认 http://localhost:8080，首次启动�
 数据在命名卷 `medihub-data:/data`；换端口用 `MEDIHUB_PORT=18080`。容器内**没有** LibreOffice /
 OnlyOffice，也**不启用在线升级**；首次启动是空库，打开 `http://localhost:8080/install` 创建管理员。
 完整说明见 [docs/DOCKER.md](docs/DOCKER.md)。也支持直接从 GHCR 拉取（public，无需登录）：
-`docker pull ghcr.io/eunsolfs/medihub:1.10.1`（或 `:latest`），见文档内「从 GHCR 拉取镜像」。
+`docker pull ghcr.io/eunsolfs/medihub:1.10.2`（或 `:latest`），见文档内「从 GHCR 拉取镜像」。
+
+> 想用容器长期跑生产？用 **Docker 一键运维**（`medihub-ops.sh`）：安装、升级、回滚、备份、
+> 恢复、自检都由一个脚本负责 → [docs/DOCKER-OPS.md](docs/DOCKER-OPS.md)。
 
 > 1Panel 一键脚本是给**宿主机 + systemd** 用的；Docker 部署请用仓库的 Dockerfile / compose，
 > 不要跑 `install-1panel.sh`。
@@ -237,14 +240,18 @@ pnpm --filter @medihub/server reset-password <你的管理员邮箱> '新密码'
 
 ## 部署
 
-四个入口，按场景选（首次部署只看第一个就够）：
+五个入口，按场景选（首次部署只看第一个就够）：
 
-| 场景                 | 方式                                                               | 文档                                                       |
-| -------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------- |
-| **首次部署（推荐）** | 一条命令装 systemd 服务（脚本 v1.10.1）+ 反代 + HTTPS + `/install` | [docs/1PANEL-FIRST-DEPLOY.md](docs/1PANEL-FIRST-DEPLOY.md) |
-| 安装器参考           | 查参数、1.9.x–1.10.x 行为变化、卸载                                | [docs/INSTALL-1PANEL.md](docs/INSTALL-1PANEL.md)           |
-| 手工 / 进阶          | 自定义目录、Supervisor 或 PM2、手工 Nginx 与证书、逐项排障         | [docs/DEPLOY-1PANEL.md](docs/DEPLOY-1PANEL.md)             |
-| 本地试运行 / 容器    | Docker（`docker compose up -d --build`）或 GHCR 镜像               | [docs/DOCKER.md](docs/DOCKER.md)                           |
+| 场景                              | 方式                                                       | 文档                                                       |
+| --------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------- |
+| **首次部署（推荐）**              | 一条命令装 systemd 服务 + 反代 + HTTPS + `/install`        | [docs/1PANEL-FIRST-DEPLOY.md](docs/1PANEL-FIRST-DEPLOY.md) |
+| 安装器参考                        | 查参数、1.9.x–1.10.x 行为变化、卸载                        | [docs/INSTALL-1PANEL.md](docs/INSTALL-1PANEL.md)           |
+| 手工 / 进阶                       | 自定义目录、Supervisor 或 PM2、手工 Nginx 与证书、逐项排障 | [docs/DEPLOY-1PANEL.md](docs/DEPLOY-1PANEL.md)             |
+| **Docker 一键运维（容器化推荐）** | `medihub-ops.sh`：安装 / 升级 / 回滚 / 备份 / 恢复 / 自检  | [docs/DOCKER-OPS.md](docs/DOCKER-OPS.md)                   |
+| 本地试运行 / 手动 GHCR compose    | `docker compose up -d --build` 或 GHCR 镜像                | [docs/DOCKER.md](docs/DOCKER.md)                           |
+
+> 一台机器**只选一种**：systemd 在 `/opt/medihub`，Docker 一键运维在 `/opt/medihub-docker`，
+> 两者互斥。Docker 下升级用 `ops.sh upgrade`，**不要**用页面里的「版本与升级」。
 
 手工部署的要点：
 
