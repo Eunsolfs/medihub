@@ -1,6 +1,6 @@
 services:
   medihub:
-    # 由 .github/workflows/docker-ghcr.yml 构建；首次拉取前确认包为 public，
+    # 由 .github/workflows/docker-ghcr.yml 构建；官方仓库的包为 public，
     # 私有包需要先 docker login ghcr.io。
     image: ghcr.io/eunsolfs/medihub:latest
     container_name: medihub
@@ -33,3 +33,4 @@ services:
 
 volumes:
   medihub-data:
+
