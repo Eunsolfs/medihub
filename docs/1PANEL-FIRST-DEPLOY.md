@@ -237,9 +237,11 @@ https://medihub.example.com/install
 至少每天备份：
 
 ```bash
-# 数据库 + 配置
+# 数据库 + 配置（短暂停服，避免 SQLite WAL 不一致）
+sudo systemctl stop medihub
 sudo tar czf /root/medihub-backup-$(date +%F).tar.gz \
   -C /opt/medihub/apps/server local.db .env
+sudo systemctl start medihub
 
 # 素材目录（按实际大小安排；大文件建议 NAS/对象存储）
 sudo tar czf /root/medihub-storage-$(date +%F).tar.gz \
