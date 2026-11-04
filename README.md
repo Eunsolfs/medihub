@@ -12,7 +12,7 @@ sudo bash install-medihub.sh --url https://你的域名
 ```
 
 脚本会自动装 Node.js 24 / pnpm / systemd 服务、生成 `.env`（含随机密钥）、构建并启动，
-OnlyOffice 参数可以稍后在 `.env` 里补。首次部署图文步骤见
+OnlyOffice 参数可以稍后在 `.env` 里补。首次部署步骤见
 [docs/1PANEL-FIRST-DEPLOY.md](docs/1PANEL-FIRST-DEPLOY.md)；完整参数、常见问题与卸载见
 [docs/INSTALL-1PANEL.md](docs/INSTALL-1PANEL.md)；想逐项控制部署过程见
 [docs/DEPLOY-1PANEL.md](docs/DEPLOY-1PANEL.md)。
