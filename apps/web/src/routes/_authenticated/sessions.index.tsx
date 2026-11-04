@@ -320,15 +320,23 @@ const SessionsPage = () => {
                 <TagList tags={item.tags ?? []} />
                 <div className="flex shrink-0 items-center gap-2">
                   {item.courses.length > 0 ? (
-                    <span className="text-muted-foreground flex items-center gap-1 text-xs">
+                    <Link
+                      className="text-muted-foreground hover:text-foreground flex items-center gap-1 rounded-sm text-xs hover:underline focus-visible:ring-3 focus-visible:outline-none"
+                      params={{ sessionId: item.id }}
+                      to="/sessions/$sessionId"
+                    >
                       <BookOpenIcon aria-hidden="true" className="size-3.5" />
                       {item.courses.length} 门课程
-                    </span>
+                    </Link>
                   ) : null}
-                  <span className="text-muted-foreground flex items-center gap-1 text-xs">
+                  <Link
+                    className="text-muted-foreground hover:text-foreground flex items-center gap-1 rounded-sm text-xs hover:underline focus-visible:ring-3 focus-visible:outline-none"
+                    search={{ source: "sessions" }}
+                    to="/library"
+                  >
                     <PaperclipIcon aria-hidden="true" className="size-3.5" />
                     {item.assetCount} 份资料
-                  </span>
+                  </Link>
                 </div>
               </div>
 

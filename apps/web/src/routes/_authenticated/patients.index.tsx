@@ -486,7 +486,11 @@ const PatientTable = ({
   );
 };
 
-const PatientStats = () => {
+interface PatientStatsProps {
+  onSelectStatus: (status: PatientStatus | "all") => void;
+}
+
+const PatientStats = ({ onSelectStatus }: PatientStatsProps) => {
   const [total, active, followUp] = useQueries({
     queries: [
       api.patients.list.queryOptions({
@@ -501,21 +505,31 @@ const PatientStats = () => {
     ],
   });
 
-  const stats = [
-    { label: "患者总数", value: total?.data?.total },
-    { label: "在诊", value: active?.data?.total },
-    { label: "随访中", value: followUp?.data?.total },
+  const stats: {
+    label: string;
+    status: PatientStatus | "all";
+    value: number | undefined;
+  }[] = [
+    { label: "患者总数", status: "all", value: total?.data?.total },
+    { label: "在诊", status: "active", value: active?.data?.total },
+    { label: "随访中", status: "follow_up", value: followUp?.data?.total },
   ];
 
   return (
     <div className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
       {stats.map((stat) => (
-        <span className="inline-flex items-baseline gap-1" key={stat.label}>
+        <button
+          aria-label={`${stat.label}：${stat.value ?? "—"}，点击筛选`}
+          className="hover:text-foreground focus-visible:ring-ring/50 inline-flex cursor-pointer items-baseline gap-1 rounded-sm px-0.5 transition-colors hover:underline focus-visible:ring-3 focus-visible:outline-none"
+          key={stat.label}
+          onClick={() => onSelectStatus(stat.status)}
+          type="button"
+        >
           {stat.label}
           <span className="text-foreground text-sm font-semibold tabular-nums">
             {stat.value ?? "—"}
           </span>
-        </span>
+        </button>
       ))}
     </div>
   );
@@ -546,7 +560,13 @@ const PatientsPageContent = () => {
           </Button>
         }
         description="科室内所有患者的档案、历次入院记录与影像素材，按日期浏览、补写分期与部位。"
-        meta={<PatientStats />}
+        meta={
+          <PatientStats
+            onSelectStatus={(status) => {
+              updateSearch({ page: 1, status });
+            }}
+          />
+        }
         title="患者档案"
       />
 

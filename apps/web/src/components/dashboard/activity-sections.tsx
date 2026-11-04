@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import {
   ArrowRightIcon,
   FileTextIcon,
@@ -218,24 +219,36 @@ export const StorageBreakdown = ({ counts }: StorageBreakdownProps) => {
       </div>
       <Progress value={ratio} />
       <dl className="text-muted-foreground grid grid-cols-3 gap-2 text-xs">
-        <div className="grid gap-0.5">
+        <Link
+          className="hover:text-foreground grid gap-0.5 rounded-md outline-none hover:underline focus-visible:ring-3"
+          search={{ kind: "image", source: "all" }}
+          to="/library"
+        >
           <dt>图片</dt>
           <dd className="text-foreground font-medium tabular-nums">
             {counts.images}
           </dd>
-        </div>
-        <div className="grid gap-0.5">
+        </Link>
+        <Link
+          className="hover:text-foreground grid gap-0.5 rounded-md outline-none hover:underline focus-visible:ring-3"
+          search={{ kind: "video", source: "all" }}
+          to="/library"
+        >
           <dt>视频</dt>
           <dd className="text-foreground font-medium tabular-nums">
             {counts.videos}
           </dd>
-        </div>
-        <div className="grid gap-0.5">
+        </Link>
+        <Link
+          className="hover:text-foreground grid gap-0.5 rounded-md outline-none hover:underline focus-visible:ring-3"
+          search={{ kind: "document", source: "all" }}
+          to="/library"
+        >
           <dt>文档等</dt>
           <dd className="text-foreground font-medium tabular-nums">
             {documents}
           </dd>
-        </div>
+        </Link>
       </dl>
     </div>
   );

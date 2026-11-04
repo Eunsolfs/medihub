@@ -6,6 +6,7 @@ import { Button } from "@medihub/ui/components/button";
 
 import {
   getSessionRole,
+  isAdminRole,
   isOrglessRole,
 } from "#src/components/app-shell/roles.ts";
 import { PageHeader } from "#src/components/app-shell/ui/page-header.tsx";
@@ -32,6 +33,7 @@ const DashboardPage = () => {
   const { session } = useRouteContext({ from: "__root__" });
   const role = getSessionRole(session);
   const orgless = isOrglessRole(role);
+  const canOpenAdmin = isAdminRole(role);
   const overviewQuery = useQuery(api.stats.overview.queryOptions());
   const overview = overviewQuery.data;
   const name = session?.user.name ?? "";
@@ -76,7 +78,9 @@ const DashboardPage = () => {
               {todayLabel}
             </span>
             {overview ? (
-              <span>学习会议 {overview.counts.sessions} 场</span>
+              <Link className="hover:underline" to="/sessions">
+                学习会议 {overview.counts.sessions} 场
+              </Link>
             ) : null}
           </>
         }
@@ -108,7 +112,11 @@ const DashboardPage = () => {
 
       {overview ? (
         <>
-          <StatOverview counts={overview.counts} orgless={orgless} />
+          <StatOverview
+            counts={overview.counts}
+            orgless={orgless}
+            storageHref={canOpenAdmin ? "/admin" : undefined}
+          />
 
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]">
             <div className="order-1 grid h-fit gap-5 xl:order-none xl:col-start-2 xl:row-start-1">

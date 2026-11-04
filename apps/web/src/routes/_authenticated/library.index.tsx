@@ -4,24 +4,41 @@ import { OrglessNotice } from "#src/components/app-shell/ui/orgless-notice.tsx";
 import { PageHeader } from "#src/components/app-shell/ui/page-header.tsx";
 import {
   DEFAULT_LIBRARY_SOURCE,
+  isLibraryKind,
   isLibrarySource,
 } from "#src/components/library/library-source.ts";
-import type { LibrarySource } from "#src/components/library/library-source.ts";
+import type {
+  LibraryKindFilter,
+  LibrarySource,
+} from "#src/components/library/library-source.ts";
 import { LibraryView } from "#src/components/library/library-view.tsx";
 import { useCanPublish } from "#src/lib/permissions.ts";
 
 interface LibrarySearch {
+  kind?: LibraryKindFilter;
   source?: LibrarySource;
 }
 
-const validateSearch = (search: { source?: unknown }): LibrarySearch =>
-  typeof search.source === "string" && isLibrarySource(search.source)
-    ? { source: search.source }
-    : {};
+const validateSearch = (search: {
+  kind?: unknown;
+  source?: unknown;
+}): LibrarySearch => {
+  const next: LibrarySearch = {};
+
+  if (typeof search.source === "string" && isLibrarySource(search.source)) {
+    next.source = search.source;
+  }
+
+  if (typeof search.kind === "string" && isLibraryKind(search.kind)) {
+    next.kind = search.kind;
+  }
+
+  return next;
+};
 
 const LibraryPage = () => {
   const navigate = useNavigate();
-  const { source } = Route.useSearch();
+  const { kind, source } = Route.useSearch();
   const canPublish = useCanPublish();
   const activeSource = source ?? DEFAULT_LIBRARY_SOURCE;
 
@@ -34,6 +51,7 @@ const LibraryPage = () => {
       {canPublish ? null : <OrglessNotice />}
 
       <LibraryView
+        initialKind={kind}
         onSourceChange={(next) => {
           void navigate({
             search: next === DEFAULT_LIBRARY_SOURCE ? {} : { source: next },

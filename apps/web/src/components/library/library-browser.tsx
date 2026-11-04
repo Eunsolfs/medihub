@@ -35,6 +35,8 @@ interface LibraryBrowserProps {
   collectionId?: string;
   collections: readonly CollectionNode[];
   current?: CollectionNode;
+  /** 从工作台等入口带过来的类型筛选，仅作为初始值。 */
+  initialKind?: LibraryKindFilter;
   onUploaded: () => void;
   source: LibrarySource;
 }
@@ -78,6 +80,7 @@ export const LibraryBrowser = ({
   collectionId,
   collections,
   current,
+  initialKind,
   onUploaded,
   source,
 }: LibraryBrowserProps) => {
@@ -87,7 +90,7 @@ export const LibraryBrowser = ({
   const viewerRole = getSessionRole(session);
   const [q, setQ] = useState("");
   const [keyword, setKeyword] = useState("");
-  const [kind, setKind] = useState<LibraryKindFilter>("all");
+  const [kind, setKind] = useState<LibraryKindFilter>(initialKind ?? "all");
   const [stage, setStage] = useState<LibraryStageFilter>("all");
   const [sort, setSort] = useState<LibrarySort>("recent");
   const [view, setView] = useState<LibraryViewMode>("grid");

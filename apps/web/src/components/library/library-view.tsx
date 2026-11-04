@@ -22,7 +22,10 @@ import {
 } from "#src/components/library/collection-tree.tsx";
 import type { CollectionNode } from "#src/components/library/collection-tree.tsx";
 import { LibraryBrowser } from "#src/components/library/library-browser.tsx";
-import type { LibrarySource } from "#src/components/library/library-source.ts";
+import type {
+  LibraryKindFilter,
+  LibrarySource,
+} from "#src/components/library/library-source.ts";
 import { SourceTabs } from "#src/components/library/source-tabs.tsx";
 import { api } from "#src/lib/api.ts";
 
@@ -34,6 +37,8 @@ type FolderDialogState =
 interface LibraryViewProps {
   /** 传了就是某个目录的浏览页 */
   collectionId?: string;
+  /** 从工作台等入口带过来的类型筛选，仅作为初始值。 */
+  initialKind?: LibraryKindFilter;
   onSourceChange: (source: LibrarySource) => void;
   source: LibrarySource;
 }
@@ -44,6 +49,7 @@ interface LibraryViewProps {
  */
 export const LibraryView = ({
   collectionId,
+  initialKind,
   onSourceChange,
   source,
 }: LibraryViewProps) => {
@@ -206,8 +212,9 @@ export const LibraryView = ({
               <LibraryBrowser
                 collectionId={collectionId}
                 collections={collections}
+                initialKind={initialKind}
                 current={current}
-                key={`${source}:${collectionId ?? ""}`}
+                key={`${source}:${collectionId ?? ""}:${initialKind ?? "all"}`}
                 onUploaded={() => {
                   void refreshCollections();
                 }}
@@ -219,7 +226,8 @@ export const LibraryView = ({
       ) : (
         <LibraryBrowser
           collections={collections}
-          key={source}
+          initialKind={initialKind}
+          key={`${source}:${initialKind ?? "all"}`}
           onUploaded={() => {
             void refreshCollections();
           }}

@@ -5,8 +5,21 @@ import {
 } from "@tanstack/react-router";
 
 import { PageHeader } from "#src/components/app-shell/ui/page-header.tsx";
-import { DEFAULT_LIBRARY_SOURCE } from "#src/components/library/library-source.ts";
+import {
+  DEFAULT_LIBRARY_SOURCE,
+  isLibraryKind,
+} from "#src/components/library/library-source.ts";
+import type { LibraryKindFilter } from "#src/components/library/library-source.ts";
 import { LibraryView } from "#src/components/library/library-view.tsx";
+
+interface LibraryCollectionSearch {
+  kind?: LibraryKindFilter;
+}
+
+const validateSearch = (search: { kind?: unknown }): LibraryCollectionSearch =>
+  typeof search.kind === "string" && isLibraryKind(search.kind)
+    ? { kind: search.kind }
+    : {};
 
 const LibraryCollectionPage = () => {
   const { collectionId } = useParams({
@@ -14,6 +27,7 @@ const LibraryCollectionPage = () => {
   });
 
   const navigate = useNavigate();
+  const { kind } = Route.useSearch();
 
   return (
     <div className="grid gap-5">
@@ -23,7 +37,8 @@ const LibraryCollectionPage = () => {
       />
       <LibraryView
         collectionId={collectionId}
-        key={collectionId}
+        initialKind={kind}
+        key={`${collectionId}:${kind ?? "all"}`}
         onSourceChange={(next) => {
           void navigate({
             search: next === DEFAULT_LIBRARY_SOURCE ? {} : { source: next },
@@ -38,4 +53,5 @@ const LibraryCollectionPage = () => {
 
 export const Route = createFileRoute("/_authenticated/library/$collectionId")({
   component: LibraryCollectionPage,
+  validateSearch,
 });

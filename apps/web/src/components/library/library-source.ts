@@ -26,6 +26,9 @@ export const LIBRARY_KIND_FILTERS = [
 
 export type LibraryKindFilter = (typeof LIBRARY_KIND_FILTERS)[number]["value"];
 
+export const isLibraryKind = (value: string): value is LibraryKindFilter =>
+  LIBRARY_KIND_FILTERS.some((filter) => filter.value === value);
+
 export const LIBRARY_SORT_OPTIONS = [
   { label: "最近上传", value: "recent" },
   { label: "拍摄时间", value: "timeline" },
