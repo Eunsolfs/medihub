@@ -84,8 +84,9 @@ docker compose -f docker-compose.ghcr.yml up -d
 ```
 
 - 镜像只包含 amd64；
-- GHCR 包默认可能是 private：需要在 GitHub 的 Package settings 里改成 public，
-  或先登录再拉：`echo $GHCR_TOKEN | docker login ghcr.io -u 你的GitHub用户名 --password-stdin`；
+- 本仓库的包当前是 **public**，可直接匿名拉取；如果你 fork 后自己构建，包默认可能是 private，
+  需要在 GitHub Package settings 改为 public，或先登录：
+  `echo $GHCR_TOKEN | docker login ghcr.io -u 你的GitHub用户名 --password-stdin`；
 - 镜像同样是**纯净版空库**：首次打开 `/install` 创建管理员，再建第一个科室；
 - 升级镜像：`docker compose -f docker-compose.ghcr.yml pull && docker compose -f docker-compose.ghcr.yml up -d`；
 - 数据仍在命名卷 `medihub-data:/data`，换镜像不会丢数据。
