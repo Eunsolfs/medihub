@@ -53,13 +53,40 @@ jobs:
             org.opencontainers.image.description=科室多媒体与病历资料管理平台
             org.opencontainers.image.version=${{ env.APP_VERSION }}
 
-      - uses: docker/build-push-action@v6
+      - id: build
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           platforms: linux/amd64
           push: true
+          load: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Smoke test image
+        run: |
+          set -euo pipefail
+          trap 'docker rm -f medihub-smoke >/dev/null 2>&1 || true' EXIT
+          docker run -d --name medihub-smoke -p 18080:3000 \
+            -e BETTER_AUTH_SECRET="ghcr-smoke-test-secret-at-least-32-characters" \
+            -e BETTER_AUTH_URL="http://127.0.0.1:18080" \
+            -e BETTER_AUTH_TRUSTED_ORIGINS="http://127.0.0.1:18080" \
+            -e DATABASE_URL="/tmp/smoke.db" \
+            -e STORAGE_ROOT="/tmp/smoke-storage" \
+            "${{ steps.build.outputs.imageid }}"
+
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 3 http://127.0.0.1:18080/api/health; then
+              echo
+              echo "image starts and health check passed"
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "health check failed; container logs:"
+          docker logs medihub-smoke || true
+          exit 1
