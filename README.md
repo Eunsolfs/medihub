@@ -1,6 +1,6 @@
 # 医档通 MediHub
 
-> 当前版本：**v1.9.9**（变更记录见 [CHANGELOG.md](CHANGELOG.md)）
+> 当前版本：**v1.10.0**（纯净版，不含演示数据；变更记录见 [CHANGELOG.md](CHANGELOG.md)）
 
 科室内部的多媒体与病历资料管理平台。把患者的伤口/术中/术后照片、病历资料、科室培训与讲课材料集中存起来，按「患者 → 某次入院 → 时间线」组织，并为科研、宣传、病例汇报提供可筛选、可打包导出的数据底座。
 
@@ -8,7 +8,7 @@
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Eunsolfs/medihub/main/scripts/install-1panel.sh -o install-medihub.sh
-sudo bash install-medihub.sh --url https://你的域名 --seed
+sudo bash install-medihub.sh --url https://你的域名
 ```
 
 脚本会自动装 Node.js 24 / pnpm / systemd 服务、生成 `.env`（含随机密钥）、构建并启动，
@@ -16,45 +16,36 @@ OnlyOffice 参数可以稍后在 `.env` 里补。完整参数、常见问题与�
 [docs/INSTALL-1PANEL.md](docs/INSTALL-1PANEL.md)；想逐项控制部署过程见
 [docs/DEPLOY-1PANEL.md](docs/DEPLOY-1PANEL.md)。
 
-> **不带 `--seed` 也可以**：装完后打开 `https://你的域名/install`，在网页里填超级管理员
-> （可选 OnlyOffice 参数），完成后自动跳转登录页。登录页在未初始化时也会显示「前往安装向导」。
+> **纯净版：装完是一台空库**。脚本只装程序并迁移表结构，不写入任何演示数据或账号；装完必须打开
+> `https://你的域名/install` 创建第一个超级管理员（可选 OnlyOffice 参数），完成后自动跳转登录页。
+> 登录页在未初始化时也会显示「前往安装向导」。创建管理员并登录后，先到「系统管理 → 科室」新建第一个科室，再创建患者、资料库与教学会议。
 
 ### 账号与登录（装完第一件事）
 
-| 场景                                                            | 做法                                                                                                                                                                                                                                                                                                                   |
-| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 还没有任何账号                                                  | 浏览器打开 `https://你的域名/install` 创建超级管理员；已有账号时该接口返回 409，不会被用来重置管理员                                                                                                                                                                                                                   |
-| 忘了密码 / 只有 `--seed` 打印的初始密码                         | 在安装目录执行：`cd apps/server && node --env-file=.env src/reset-password.ts --list`（列出账号）；`node --env-file=.env src/reset-password.ts root@medihub.local '新密码'`（不带密码则随机生成并打印）。v1.9.4+ 也可以在**任意目录**执行：`node --env-file=apps/server/.env apps/server/src/reset-password.ts --list` |
-| 用 `http://服务器IP:端口` 打开却登录失败（提示 Invalid origin） | `BETTER_AUTH_URL` 必须与浏览器地址**完全一致**。临时用 IP 访问时，把 `http://IP:端口` 加进 `BETTER_AUTH_TRUSTED_ORIGINS`（逗号分隔），或改用域名访问，然后重启服务                                                                                                                                                     |
-| 登录提示「尝试过于频繁，请稍等片刻再试」                        | v1.9.6+ 登录/注册/改密限流为 **10 次/分钟**（按 IP，全局 120 次/分钟）；等一分钟再试，别反复点                                                                                                                                                                                                                         |
+| 场景                                                            | 做法                                                                                                                                                                                                                                                                                                                 |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 还没有任何账号                                                  | 浏览器打开 `https://你的域名/install` 创建超级管理员；已有账号时该接口返回 409，不会被用来重置管理员                                                                                                                                                                                                                 |
+| 登录后没有科室（工作台提示「先创建第一个科室」）                | 空库只有 root 账号、还没有任何科室。先到 **系统管理 → 科室** 新建第一个科室，之后才能创建患者 / 资料库 / 教学会议（工作台提示里的「去系统管理创建科室」按钮直达）                                                                                                                                                    |
+| 忘了密码                                                        | 在安装目录执行：`cd apps/server && node --env-file=.env src/reset-password.ts --list`（列出账号）；`node --env-file=.env src/reset-password.ts <你的管理员邮箱> '新密码'`（不带密码则随机生成并打印）。v1.9.4+ 也可以在**任意目录**执行：`node --env-file=apps/server/.env apps/server/src/reset-password.ts --list` |
+| 用 `http://服务器IP:端口` 打开却登录失败（提示 Invalid origin） | `BETTER_AUTH_URL` 必须与浏览器地址**完全一致**。临时用 IP 访问时，把 `http://IP:端口` 加进 `BETTER_AUTH_TRUSTED_ORIGINS`（逗号分隔），或改用域名访问，然后重启服务                                                                                                                                                   |
+| 登录提示「尝试过于频繁，请稍等片刻再试」                        | v1.9.6+ 登录/注册/改密限流为 **10 次/分钟**（按 IP，全局 120 次/分钟）；等一分钟再试，别反复点                                                                                                                                                                                                                       |
 
 > 反向代理必须传**单值** `X-Forwarded-For $remote_addr;`，否则所有用户会被当成同一个 IP 共用限流桶。
 
-### 本地 Docker（演示 / 验收）
+### 本地 Docker（试运行 / 验收）
 
 不想动服务器？仓库自带 `Dockerfile` + `docker-compose.yml`：
 
 ```bash
-docker compose up -d --build      # 默认 http://localhost:8080，首次启动自动迁移 + 写入演示数据
+docker compose up -d --build      # 默认 http://localhost:8080，首次启动自动迁移空库
 ```
 
 数据在命名卷 `medihub-data:/data`；换端口用 `MEDIHUB_PORT=18080`。容器内**没有** LibreOffice /
-OnlyOffice，也**不启用在线升级**。完整说明见 [docs/DOCKER.md](docs/DOCKER.md)。
+OnlyOffice，也**不启用在线升级**；首次启动是空库，打开 `http://localhost:8080/install` 创建管理员。
+完整说明见 [docs/DOCKER.md](docs/DOCKER.md)。
 
 > 1Panel 一键脚本是给**宿主机 + systemd** 用的；Docker 部署请用仓库的 Dockerfile / compose，
 > 不要跑 `install-1panel.sh`。
-
-> 演示数据与账号：执行 `pnpm seed` 后会写入「整形外科」与「烧伤科」两个科室、5 位演示患者（整形外科 4 位、烧伤科 1 位）
-> （含分期照片与 Markdown 病历摘要）、两个资料库目录（含一份 docx 培训文档与一份 pptx 病例讨论）、
-> 一个已发布的公开教学帖（`/p/flap-crisis-early-recognition`，含 B 站视频与配图）和一个草稿帖。
->
-> | 账号                   | 密码           | 角色                                           |
-> | ---------------------- | -------------- | ---------------------------------------------- |
-> | `root@medihub.local`   | `Medihub@2026` | 超级管理员（不归属科室，用顶部切换器看各科室） |
-> | `admin@medihub.local`  | `Medihub@2026` | 整形外科管理员                                 |
-> | `doctor@medihub.local` | `Medihub@2026` | 整形外科成员                                   |
->
-> 演示素材是程序生成的占位图，不是真实临床影像。
 
 ## 功能
 
@@ -152,11 +143,10 @@ docker           Docker 镜像入口脚本（entrypoint.sh）
 pnpm install
 cp apps/server/.env.example apps/server/.env   # 至少改 BETTER_AUTH_SECRET
 pnpm db:migrate
-pnpm seed                                      # 可选：演示科室与数据
 pnpm dev                                       # web :5173 / api :3000
 ```
 
-打开 <http://localhost:5173>，用 `root@medihub.local / Medihub@2026` 登录。
+打开 <http://localhost:5173>，首次会跳到 `/install`：创建第一个超级管理员，然后用它登录。
 
 开发时 Vite 把 `/api`、`/rpc` 代理到 3000，浏览器只看到一个源，会话 Cookie 是第一方 Cookie。
 
@@ -173,7 +163,6 @@ pnpm dev                                       # web :5173 / api :3000
 | `SOFFICE_PATH`                             | 可选，LibreOffice 可执行文件；配置后 docx/xlsx/pptx 可转 PDF 在线预览                 |
 | `ONLYOFFICE_URL` / `ONLYOFFICE_JWT_SECRET` | 可选，OnlyOffice Document Server；配置后可在浏览器里真正编辑 Office 文档              |
 | `BETTER_AUTH_TRUSTED_ORIGINS`              | 可选，逗号分隔，额外允许的来源（局域网 IP、反向代理域名）                             |
-| `SEED_ROOT_EMAIL` / `SEED_ROOT_PASSWORD`   | 可选，`pnpm seed` 时创建的超级管理员                                                  |
 | `UPDATE_ENABLED`                           | 可选，`true` 时开启 root 在线升级（需同时配置重启命令与安装目录）                     |
 | `UPDATE_WORKDIR`                           | 安装目录绝对路径（含 `package.json` 与 `apps/`），需服务用户可写                      |
 | `UPDATE_RESTART_CMD`                       | 重启命令，如 `systemctl restart medihub`                                              |
@@ -181,8 +170,8 @@ pnpm dev                                       # web :5173 / api :3000
 | `UPDATE_DB_PATH` / `UPDATE_KEEP_BACKUPS`   | 升级备份的数据库路径与保留份数（默认 `apps/server/local.db` / 3）                     |
 | `UPDATE_REPO` / `UPDATE_GITHUB_TOKEN`      | 读取 Release 与下载源码包的仓库（默认 `Eunsolfs/medihub`）与可选 token                |
 
-> 本地 Docker 部署另有两个 compose 变量：`MEDIHUB_PORT`（宿主端口，默认 8080，容器内仍是 3000）
-> 与 `SEED_ON_START`（首次启动是否写演示数据，默认 true），见 [docs/DOCKER.md](docs/DOCKER.md)。
+> 本地 Docker 部署另有 compose 变量 `MEDIHUB_PORT`（宿主端口，默认 8080，容器内仍是 3000）；
+> 首次启动是空库，打开 `/install` 创建管理员，见 [docs/DOCKER.md](docs/DOCKER.md)。
 
 在线升级与回滚的完整说明见 `docs/UPGRADE.md`。
 
@@ -229,9 +218,8 @@ pnpm test:e2e            # Playwright 端到端
 pnpm run ready           # 完整校验链
 pnpm db:generate         # 修改 schema 后生成迁移
 pnpm db:migrate          # 应用迁移
-pnpm seed                # 演示数据
 pnpm --filter @medihub/server reset-password --list               # 列出账号
-pnpm --filter @medihub/server reset-password root@medihub.local '新密码'  # 重置密码
+pnpm --filter @medihub/server reset-password <你的管理员邮箱> '新密码'  # 重置密码
 ```
 
 ## 工程约束
@@ -249,11 +237,11 @@ pnpm --filter @medihub/server reset-password root@medihub.local '新密码'  # �
 
 三种方式，按场景选：
 
-| 场景                          | 方式                                       | 文档                                             |
-| ----------------------------- | ------------------------------------------ | ------------------------------------------------ |
-| 生产（1Panel + 域名 + HTTPS） | 一条命令装 systemd 服务（节点版本 v1.9.9） | [docs/INSTALL-1PANEL.md](docs/INSTALL-1PANEL.md) |
-| 生产（逐项控制 / 不用脚本）   | 手工部署 + 反向代理 + 证书                 | [docs/DEPLOY-1PANEL.md](docs/DEPLOY-1PANEL.md)   |
-| 本地演示 / 验收               | Docker（`docker compose up -d --build`）   | [docs/DOCKER.md](docs/DOCKER.md)                 |
+| 场景                          | 方式                                     | 文档                                             |
+| ----------------------------- | ---------------------------------------- | ------------------------------------------------ |
+| 生产（1Panel + 域名 + HTTPS） | 一条命令装 systemd 服务（脚本 v1.10.0）  | [docs/INSTALL-1PANEL.md](docs/INSTALL-1PANEL.md) |
+| 生产（逐项控制 / 不用脚本）   | 手工部署 + 反向代理 + 证书               | [docs/DEPLOY-1PANEL.md](docs/DEPLOY-1PANEL.md)   |
+| 本地试运行 / 验收             | Docker（`docker compose up -d --build`） | [docs/DOCKER.md](docs/DOCKER.md)                 |
 
 手工部署的要点：
 

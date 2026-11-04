@@ -9,19 +9,9 @@
 docker compose up -d --build
 ```
 
-默认映射到 `http://localhost:8080`（宿主 `MEDIHUB_PORT` → 容器内固定 `3000`）。首次启动会自动：
-
-- 执行数据库迁移；
-- 写入演示数据（2 个科室、3 个账号、示例患者/素材/帖子/学习会议）；
-- 之后重启不会重复 seed。
-
-初始账号（密码均为 `Medihub@2026`）：
-
-| 账号                   | 角色       |
-| ---------------------- | ---------- |
-| `root@medihub.local`   | 超级管理员 |
-| `admin@medihub.local`  | 科室管理员 |
-| `doctor@medihub.local` | 科室成员   |
+默认映射到 `http://localhost:8080`（宿主 `MEDIHUB_PORT` → 容器内固定 `3000`）。
+首次启动**只做数据库迁移，是一台空库**：不写入任何演示账号或演示数据。打开
+`http://localhost:8080/install` 创建第一个超级管理员，即可登录使用。
 
 ## 换端口
 
@@ -34,7 +24,7 @@ MEDIHUB_PORT=18080 docker compose up -d
 ## 确认版本 / 健康检查
 
 ```bash
-curl -fsS http://localhost:8080/api/health        # {"status":"ok","version":"1.9.9"}
+curl -fsS http://localhost:8080/api/health        # {"status":"ok","version":"1.10.0"}
 docker compose exec medihub sh -c 'grep "\"version\"" /app/package.json'
 ```
 
@@ -59,9 +49,8 @@ docker compose exec medihub sh -c 'tar czf - -C /data .' > medihub-data.tar.gz
 
 在 `docker-compose.yml` 的 `environment` 中修改；生产必须替换：
 
-- `BETTER_AUTH_SECRET`：至少 32 字符随机值（`openssl rand -hex 32`）；
-- `SEED_ROOT_PASSWORD`：演示密码，正式使用前改掉或在管理端重置；
-- `SEED_ON_START`：首次初始化后建议改为 `false`（已有账号本来也会跳过）。
+- `BETTER_AUTH_SECRET`：至少 32 字符随机值（`openssl rand -hex 32`）——默认值仅供本地测试，
+  对外提供服务前必须替换；
 
 其余变量含义见 [DEPLOY-1PANEL.md](./DEPLOY-1PANEL.md) 的环境变量章节。
 
@@ -71,7 +60,7 @@ docker compose exec medihub sh -c 'tar czf - -C /data .' > medihub-data.tar.gz
 # 列出账号（Node 24 直接跑 TS，走容器里已有的 DATABASE_URL）
 docker compose exec medihub node apps/server/src/reset-password.ts --list
 # 重置（不传密码会随机生成并打印）
-docker compose exec medihub node apps/server/src/reset-password.ts root@medihub.local '新密码'
+docker compose exec medihub node apps/server/src/reset-password.ts <你的管理员邮箱> '新密码'
 ```
 
 > 容器里**没有** pnpm（构建阶段的全局 pnpm 不会带进运行时镜像），所以不要用
@@ -90,7 +79,7 @@ docker compose exec medihub node apps/server/src/reset-password.ts root@medihub.
 ```bash
 docker compose logs -f medihub        # 日志
 docker compose exec medihub node apps/server/src/reset-password.ts --list
-docker compose exec medihub node apps/server/src/reset-password.ts root@medihub.local '新密码'
+docker compose exec medihub node apps/server/src/reset-password.ts <你的管理员邮箱> '新密码'
 docker compose exec medihub node apps/server/dist/migrate.mjs   # 手工补迁移
 docker compose down                   # 停止（保留数据）
 docker compose down -v                # 停止并删除数据卷（清空重来）

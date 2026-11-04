@@ -1,6 +1,6 @@
 {
   "name": "medihub",
-  "version": "1.9.9",
+  "version": "1.10.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,7 +8,6 @@
     "build": "vp run --filter @medihub/web build && vp run --filter @medihub/server build",
     "check": "vp check",
     "test": "vp test",
-    "seed": "vp run --filter @medihub/server seed",
     "ready": "vp check && vp run knip && vp test && vp run test:e2e && vp run build",
     "prepare": "vp config",
     "db:generate": "vp run --filter @medihub/db db:generate",

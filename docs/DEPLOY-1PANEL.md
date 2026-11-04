@@ -273,20 +273,18 @@ openssl rand -hex 32
 文件位置：`/opt/medihub/apps/server/.env`（`DATABASE_URL`、`STORAGE_ROOT` 等相对路径都以
 `apps/server` 为基准解析）。
 
-| 变量                          | 必填 | 生产示例                                         | 说明                                                                        |
-| ----------------------------- | ---- | ------------------------------------------------ | --------------------------------------------------------------------------- |
-| `BETTER_AUTH_SECRET`          | 是   | `openssl rand -hex 32` 的输出                    | ≥32 字符；同时是存储配置加密密钥，务必长期不变并纳入备份                    |
-| `BETTER_AUTH_URL`             | 是   | `https://medihub.summerecho.cn`                  | **浏览器看到的外部地址**。Better Auth 用它做 Origin 校验，写错就是 403      |
-| `DATABASE_URL`                | 是   | `/data/medihub/local.db`                         | SQLite 文件；相对路径相对 `apps/server`                                     |
-| `PORT`                        | 否   | `3000`                                           | 监听端口                                                                    |
-| `STORAGE_ROOT`                | 否   | `/data/medihub/storage`                          | 本地/NAS 驱动的根目录；`/api/office` 的转换缓存写在它下面的 `.office-cache` |
-| `UPLOAD_MAX_BYTES`            | 否   | `268435456`                                      | 单文件上限，默认 256 MB。**Nginx 的 `client_max_body_size` 必须比它大**     |
-| `SOFFICE_PATH`                | 否   | `/usr/bin/soffice`                               | 配置后 docx/xlsx/pptx 可转 PDF 预览；不配则该接口返回 501                   |
-| `ONLYOFFICE_URL`              | 否   | `https://office.example.com`                     | OnlyOffice Document Server 地址；**必须和主站同协议**                       |
-| `ONLYOFFICE_JWT_SECRET`       | 否   | 与容器 `JWT_SECRET` 同值                         | 两个都填才启用在线编辑                                                      |
-| `BETTER_AUTH_TRUSTED_ORIGINS` | 否   | `https://medihub.summerecho.cn,https://10.0.0.8` | 逗号分隔的额外可信来源（局域网 IP、备用域名）                               |
-| `SEED_ROOT_EMAIL`             | 否   | `root@example.com`                               | 仅执行 seed 脚本时创建的超管邮箱                                            |
-| `SEED_ROOT_PASSWORD`          | 否   | 强密码（≥8 位）                                  | 仅执行 seed 脚本时使用                                                      |
+| 变量                          | 必填 | 生产示例                                         | 说明                                                                         |
+| ----------------------------- | ---- | ------------------------------------------------ | ---------------------------------------------------------------------------- |
+| `BETTER_AUTH_SECRET`          | 是   | `openssl rand -hex 32` 的输出                    | ≥32 字符；同时是存储配置加密密钥，务必长期不变并纳入备份                     |
+| `BETTER_AUTH_URL`             | 是   | `https://medihub.summerecho.cn`                  | **浏览器看到的外部地址**。Better Auth 用它做 Origin 校验，写错就是 403       |
+| `DATABASE_URL`                | 是   | `/data/medihub/local.db`                         | SQLite 文件；相对路径相对 `apps/server`                                      |
+| `PORT`                        | 否   | `3000`                                           | 监听端口；手工部署默认 3000，**一键安装脚本会自动选 20000–29999 的空闲端口** |
+| `STORAGE_ROOT`                | 否   | `/data/medihub/storage`                          | 本地/NAS 驱动的根目录；`/api/office` 的转换缓存写在它下面的 `.office-cache`  |
+| `UPLOAD_MAX_BYTES`            | 否   | `268435456`                                      | 单文件上限，默认 256 MB。**Nginx 的 `client_max_body_size` 必须比它大**      |
+| `SOFFICE_PATH`                | 否   | `/usr/bin/soffice`                               | 配置后 docx/xlsx/pptx 可转 PDF 预览；不配则该接口返回 501                    |
+| `ONLYOFFICE_URL`              | 否   | `https://office.example.com`                     | OnlyOffice Document Server 地址；**必须和主站同协议**                        |
+| `ONLYOFFICE_JWT_SECRET`       | 否   | 与容器 `JWT_SECRET` 同值                         | 两个都填才启用在线编辑                                                       |
+| `BETTER_AUTH_TRUSTED_ORIGINS` | 否   | `https://medihub.summerecho.cn,https://10.0.0.8` | 逗号分隔的额外可信来源（局域网 IP、备用域名）                                |
 
 > `BETTER_AUTH_TRUSTED_ORIGINS` 已在 `apps/server/src/env.ts` 里声明（`z.string().optional()`），
 > 但它是**可选的普通字符串，值本身不做格式校验**：写成中文逗号、留空格、带多余引号都不会
@@ -321,10 +319,6 @@ ONLYOFFICE_JWT_SECRET="与 onlyoffice 容器的 JWT_SECRET 完全一致"
 
 # 额外可信来源（可选）。主域名由 BETTER_AUTH_URL 自动覆盖，无需重复。
 BETTER_AUTH_TRUSTED_ORIGINS="https://medihub.summerecho.cn,https://10.0.0.8"
-
-# 首次执行 seed 脚本时创建的超管（可选，seed 之后可以删掉这两行）。
-SEED_ROOT_EMAIL="root@example.com"
-SEED_ROOT_PASSWORD="换成你自己的强密码"
 
 # 让进程与 LibreOffice 的子进程都按北京时间解释时间。
 TZ="Asia/Shanghai"
@@ -427,24 +421,24 @@ curl -s -o /dev/null -w 'spa=%{http_code}\n' http://127.0.0.1:3000/patients
 > - 换用别的打包方式（自定义 Dockerfile、CI 里只跑 `vp pack`）时，记得仍然产出
 >   `apps/server/dist/public`，否则 `:3000` 上只有 API，访问 `/` 会 404。
 
-### 7.2 初始化管理员与演示数据（可选）
+### 7.2 创建第一个管理员（必须）
+
+纯净版安装后是**空库，没有任何账号**，所以必须走一次安装向导：
+
+1. 浏览器打开 `https://<你的域名>/install`（或 `http://127.0.0.1:<PORT>/install`，登录页也会显示「前往安装向导」）；
+2. 填超级管理员姓名 / 邮箱 / 密码（可选 OnlyOffice 参数）→「完成安装」→ 自动跳登录页；
+3. 用刚创建的账号登录。
+4. **登录后先建第一个科室**：空库还没有科室，工作台会提示「先创建第一个科室」并给出
+   「去系统管理创建科室」按钮。到 **系统管理 → 科室** 新建一个科室，之后才能创建患者 /
+   资料库 / 教学会议。
+
+向导只在「系统还没有任何账号」时可用；建好账号后该接口返回 **409**，不会被用来重置管理员。
+之后忘记密码，用 `reset-password`（见 [INSTALL-1PANEL.md](./INSTALL-1PANEL.md) 的「账号与登录」）：
 
 ```bash
-# 只写演示科室/患者/素材，不改已有数据；已存在患者时会跳过并打印账号。
-# 根脚本：pnpm seed = vp run --filter @medihub/server seed
-sudo -u www -H pnpm seed
+cd /opt/medihub/apps/server && node --env-file=.env src/reset-password.ts --list
+cd /opt/medihub/apps/server && node --env-file=.env src/reset-password.ts <你的管理员邮箱> '新密码'
 ```
-
-产物与账号：
-
-| 账号                                           | 密码                                        | 角色         |
-| ---------------------------------------------- | ------------------------------------------- | ------------ |
-| `SEED_ROOT_EMAIL`（默认 `root@medihub.local`） | `SEED_ROOT_PASSWORD`（默认 `Medihub@2026`） | `root`       |
-| `admin@medihub.local`                          | `Medihub@2026`                              | `dept_admin` |
-| `doctor@medihub.local`                         | `Medihub@2026`                              | `member`     |
-
-> 生产环境建议：`SEED_ROOT_PASSWORD` 一定要改；seed 完把 `SEED_ROOT_EMAIL` /
-> `SEED_ROOT_PASSWORD` 从 `.env` 删掉（seed 本身会先跑迁移，不会重复插数据）。
 
 ### 7.3 启动前自检
 
@@ -1086,7 +1080,7 @@ Drizzle 的迁移是**单向**的：`packages/db/src/migrations` 里只有 `up`�
 - [ ] `curl -I https://medihub.summerecho.cn/` 返回 `200`、`content-type: text/html`
 - [ ] 浏览器打开域名能到登录页；地址栏是小锁（证书有效）
 - [ ] `http://` 访问自动 301 到 `https://`
-- [ ] 用 `SEED_ROOT_EMAIL` 账号登录成功，刷新页面不掉登录态
+- [ ] 通过 `/install` 创建的管理员能登录成功，刷新页面不掉登录态
 - [ ] `ls -l apps/server/dist/public/index.html` 存在，且 `curl -I http://127.0.0.1:3000/` 是 `text/html`
 - [ ] 从另一个域名/IP 访问时**登录**返回 403（说明 Origin 校验生效，不是失效）
 - [ ] 用 `root` 账号在顶部「科室」下拉切换一次，列表数据随科室变化（验证 `x-org-scope` 被透传，见 §17）
@@ -1138,7 +1132,8 @@ Drizzle 的迁移是**单向**的：`packages/db/src/migrations` 里只有 `up`�
 不再需要人工兜底：
 
 - 构建已自动把 `apps/web/dist` 复制到 `apps/server/dist/public`（见 §7.1），不需要手工 `rsync`；
-- 根 `package.json` 已提供 `check` / `test` / `seed` 脚本（见下方命令表），`pnpm test`、`pnpm seed` 可正常执行。
+- 根 `package.json` 已提供 `check` / `test` 脚本（见下方命令表），`pnpm test` 可正常执行；
+  v1.10.0 起移除了 `seed` 脚本与演示数据。
 
 > 构建链与脚本随时可能再变。升级到新版本后，花 30 秒核对 §14 里
 > 「`ls -l apps/server/dist/public/index.html` 存在」那一条，比事后排查 404 便宜得多。
@@ -1152,7 +1147,6 @@ Drizzle 的迁移是**单向**的：`packages/db/src/migrations` 里只有 `up`�
 | `pnpm check`       | `vp check`                                                                    |
 | `pnpm test`        | `vp test`（unit + integration 两个 project）                                  |
 | `pnpm test:e2e`    | `vp run --filter @medihub/web test:e2e`                                       |
-| `pnpm seed`        | `vp run --filter @medihub/server seed`                                        |
 | `pnpm run ready`   | `vp check && vp run knip && vp test && vp run test:e2e && vp run build`       |
 | `pnpm db:generate` | `vp run --filter @medihub/db db:generate`                                     |
 | `pnpm db:migrate`  | `vp run --filter @medihub/server db:migrate`                                  |

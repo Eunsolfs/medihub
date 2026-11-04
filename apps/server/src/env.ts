@@ -20,9 +20,6 @@ export const env = createEnv({
     ONLYOFFICE_JWT_SECRET: z.string().optional(),
     /** 额外允许的登录来源，逗号分隔（局域网 IP、反代域名）。 */
     BETTER_AUTH_TRUSTED_ORIGINS: z.string().optional(),
-    /** 首次启动时创建超级管理员的邮箱与密码。 */
-    SEED_ROOT_EMAIL: z.email().optional(),
-    SEED_ROOT_PASSWORD: z.string().min(8).optional(),
     /**
      * 在线升级：默认关闭。开启后 root 可在「系统管理 → 版本与升级」里
      * 直接从 GitHub Release 拉取新版本、构建、迁移、重启，失败自动回滚。

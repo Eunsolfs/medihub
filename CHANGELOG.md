@@ -2,6 +2,21 @@
 
 本项目从第一版起的所有对外变更。版本号遵循 `MAJOR.MINOR.PATCH`。
 
+## v1.10.0 — 2026-11-04
+
+### 纯净发布版：移除所有演示数据与演示账号
+
+- 删除 `apps/server/src/seed.ts`、`apps/server/seed-assets/` 与 `pnpm seed` 脚本；
+  发布包不再包含演示患者、素材、帖子、学习会议与演示账号。
+- 安装脚本移除 `--seed`：首次安装只做数据库迁移，安装完成打开 `<地址>/install`
+  创建超级管理员；旧命令 `--seed` 会明确报错说明已移除。
+- Docker 移除 `SEED_ON_START` / `SEED_ROOT_*` 与自动 seed：首次启动是空库，
+  打开 `/install` 创建管理员；已有数据卷不受影响。
+- 环境变量移除 `SEED_ROOT_EMAIL` / `SEED_ROOT_PASSWORD`；文档同步清理演示账号与 seed 说明。
+- 升级已有安装不受影响：升级只替换产物与版本号，不会删除现有数据。
+- 验证：空卷 Docker 首次启动 `/api/install/status` 为未初始化；`/install` 可创建管理员；
+  `pnpm run ready` 全绿。
+
 ## v1.9.9 — 2026-11-04
 
 ### 运维脚本易用性与文档同步
@@ -413,3 +428,4 @@
 - 生产部署见 `docs/DEPLOY-1PANEL.md`，Office 选型与配置见 `docs/ONLYOFFICE.md`。
 - `/api/health` 返回 `{ status, version }`，可在部署后核对版本。
 - docx / xlsx / OnlyOffice 预览器按需加载，media 首包由约 590 KB 降至约 162 KB。
+

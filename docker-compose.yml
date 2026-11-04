@@ -17,9 +17,7 @@ services:
       STORAGE_ROOT: "/data/storage"
       PORT: "3000"
       UPLOAD_MAX_BYTES: "268435456"
-      SEED_ON_START: "true"
-      SEED_ROOT_EMAIL: "root@medihub.local"
-      SEED_ROOT_PASSWORD: "Medihub@2026"
+      # 纯净版：不写入任何演示数据；首次打开 /install 创建超级管理员。
     volumes:
       - medihub-data:/data
     healthcheck:

@@ -3,7 +3,7 @@
 适用：已安装 1Panel 的 Linux 服务器（Debian / Ubuntu / Rocky / Alma / CentOS Stream）。
 脚本会装好 Node.js 24、pnpm、systemd 服务，并把网站跑起来；OnlyOffice 参数可以稍后填。
 
-> 本文对应脚本 **v1.9.9**（含 `--tag` 示例、参数校验、`--purge`、`--seed` 回退等修复）。
+> 本文对应脚本 **v1.10.0**（纯净版：**不再写入任何演示数据**；`--seed` 已移除）。
 >
 > **不适用 Docker**：容器部署请用仓库的 `Dockerfile` / `docker-compose.yml`
 > （见 [DOCKER.md](./DOCKER.md)），**不要**运行本脚本——容器里没有可写的 systemd/安装目录。
@@ -14,7 +14,7 @@
 ## 一条命令（真正的一行）
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Eunsolfs/medihub/main/scripts/install-1panel.sh | sudo bash -s -- --url https://medihub.summerecho.cn --seed
+curl -fsSL https://raw.githubusercontent.com/Eunsolfs/medihub/main/scripts/install-1panel.sh | sudo bash -s -- --url https://medihub.summerecho.cn
 ```
 
 不想用管道，也可以先下载再执行（脚本内容可先看一眼）：
@@ -22,12 +22,12 @@ curl -fsSL https://raw.githubusercontent.com/Eunsolfs/medihub/main/scripts/insta
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Eunsolfs/medihub/main/scripts/install-1panel.sh -o install-medihub.sh
 less install-medihub.sh   # 看完再跑
-sudo bash install-medihub.sh --url https://medihub.summerecho.cn --seed
+sudo bash install-medihub.sh --url https://medihub.summerecho.cn
 ```
 
 - `--url` 换成你准备绑定的域名（还没配 HTTPS 也可以先写 `http://服务器IP:实际端口`，端口在安装结束时打印）。
-- `--seed` 会写入演示数据并创建超级管理员 `root@medihub.local`，**随机密码在安装结束时打印一次**。
-  不想写演示数据就去掉 `--seed`，之后手动建账号。
+- **纯净版**：脚本不创建任何账号、不写演示数据；装完打开 `https://你的域名/install`
+  创建第一个超级管理员（这一步必须在浏览器里做）。
 
 安装完成后：
 
@@ -43,16 +43,21 @@ sudo bash install-medihub.sh --url https://medihub.summerecho.cn --seed
    Better Auth 按客户端 IP 限流，`X-Forwarded-For` 只接受单值；详细原因见
    [DEPLOY-1PANEL.md §9](./DEPLOY-1PANEL.md)。1Panel 的「网站 → 配置」里可直接加这几行。
 
-3. 打开你的域名，用 root 登录（没加 `--seed` 则打开 `/install` 完成初始化）；
-4. 到「我的 → 修改密码」改掉初始密码。
+3. 打开 `https://你的域名/install`，创建第一个超级管理员（姓名 / 邮箱 / 密码）；
+4. 创建完自动跳登录页，用它登录；**先到「系统管理 → 科室」新建第一个科室**，再创建患者/资料库/教学会议；之后可在「我的 → 修改密码」修改。
+5. **登录后先建第一个科室**：空库还没有科室，工作台会提示「先创建第一个科室」并给出
+   「去系统管理创建科室」按钮。到 **系统管理 → 科室** 新建一个科室，之后才能创建患者 /
+   资料库 / 教学会议（root 可用顶部「科室」下拉切换查看）。
 
 ## 方式二：网页安装向导（不写命令行参数）
 
-如果安装时**没有**加 `--seed`，脚本不会创建账号，站点会处于「未初始化」状态：
+安装脚本**不会创建任何账号**（纯净版），站点处于「未初始化」状态：
 
 1. 部署完成后直接打开 `https://你的域名/install`（登录页也会出现「前往安装向导」按钮）；
 2. 填写超级管理员姓名 / 邮箱 / 密码，可选填写 OnlyOffice 地址与 JWT 密钥；
-3. 点「完成安装」→ 看到「配置完成」后自动跳到登录页，用刚创建的账号登录即可。
+3. 点「完成安装」→ 看到「配置完成」后自动跳到登录页，用刚创建的账号登录即可；
+4. 登录后先到 **系统管理 → 科室** 新建第一个科室——空库没有科室，工作台会提示
+   「先创建第一个科室」，没有科室之前无法创建患者 / 资料库 / 教学会议。
 
 向导只在「系统还没有任何账号」时可用；安装完成后该接口返回 409，不会被用来重置管理员。
 OnlyOffice 参数写入 `.env` 后需要重启服务才生效（页面会提示）。
@@ -64,9 +69,8 @@ OnlyOffice 参数写入 `.env` 后需要重启服务才生效（页面会提示�
 | `--dir /opt/medihub`                       | 安装目录（默认 `/opt/medihub`）                                                              |
 | `--url https://...`                        | 写入 `BETTER_AUTH_URL`，必须是浏览器访问地址                                                 |
 | `--port 3000`                              | API 端口，必须是 1–65535 的数字；默认自动选 20000–29999 的空闲端口；指定端口被占用会直接报错 |
-| `--tag v1.9.9`                             | 指定版本（默认取最新 Release）；也可以写 `vX.Y.Z`                                            |
+| `--tag v1.10.0`                            | 指定版本（默认取最新 Release）；也可以写 `vX.Y.Z`                                            |
 | `--user medihub`                           | 运行服务的系统用户（默认 `medihub`）                                                         |
-| `--seed`                                   | 写入演示数据 + 超级管理员（随机密码只打印一次）                                              |
 | `--update`                                 | 升级现有安装，保留 `.env`、SQLite、素材与升级备份                                            |
 | `--onlyoffice-url` / `--onlyoffice-secret` | OnlyOffice 地址与 JWT 密钥，可后填                                                           |
 | `--dry-run`                                | 只打印要执行的操作，不改系统                                                                 |
@@ -80,13 +84,13 @@ OnlyOffice 参数写入 `.env` 后需要重启服务才生效（页面会提示�
 
 ### v1.9.x 行为变化（老教程里容易踩的坑）
 
-| 版本   | 变化                                                                                                                                                | 对运维的影响                                                             |
-| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| v1.9.1 | 自动写 `/etc/sudoers.d/medihub-update`（`medihub` 免密 `systemctl restart medihub`）；systemd 单元加 `KillMode=process`                             | 在线升级**不再被重启杀掉**；失败时能快速报「重启服务失败」而不是静默卡住 |
-| v1.9.2 | 自动生成 `BETTER_AUTH_TRUSTED_ORIGINS`（`http://127.0.0.1:<端口>`、`http://<服务器IP>:<端口>`；HTTP 站点额外加域名）                                | 装完可以直接用 `IP:端口` 打开；用域名 + HTTPS 后仍要按 §反向代理 补域名  |
-| v1.9.3 | **先停旧服务再选端口**；`--update` 不再误改端口；端口真被别的程序占用会**报错**而不是静默换端口                                                     | 升级不会悄悄换端口导致反代 502；端口冲突时按提示释放端口或显式 `--port`  |
-| v1.9.4 | `DATABASE_URL` / `STORAGE_ROOT` 相对路径以 `apps/server` 为基准                                                                                     | 命令行脚本可以从**任意 cwd** 运行，不再打开错误数据库                    |
-| v1.9.9 | 参数缺值报「参数 X 缺少值」；`--purge` 无论服务单元是否存在都清理 sudoers；`--seed` 在 openssl 不可用时回退 `/dev/urandom`；用户/端口等参数校验更严 | 失败/清理后不会留下「半套」权限规则；最小化系统上 seed 也能生成密码      |
+| 版本   | 变化                                                                                                                    | 对运维的影响                                                             |
+| ------ | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| v1.9.1 | 自动写 `/etc/sudoers.d/medihub-update`（`medihub` 免密 `systemctl restart medihub`）；systemd 单元加 `KillMode=process` | 在线升级**不再被重启杀掉**；失败时能快速报「重启服务失败」而不是静默卡住 |
+| v1.9.2 | 自动生成 `BETTER_AUTH_TRUSTED_ORIGINS`（`http://127.0.0.1:<端口>`、`http://<服务器IP>:<端口>`；HTTP 站点额外加域名）    | 装完可以直接用 `IP:端口` 打开；用域名 + HTTPS 后仍要按 §反向代理 补域名  |
+| v1.9.3 | **先停旧服务再选端口**；`--update` 不再误改端口；端口真被别的程序占用会**报错**而不是静默换端口                         | 升级不会悄悄换端口导致反代 502；端口冲突时按提示释放端口或显式 `--port`  |
+| v1.9.4 | `DATABASE_URL` / `STORAGE_ROOT` 相对路径以 `apps/server` 为基准                                                         | 命令行脚本可以从**任意 cwd** 运行，不再打开错误数据库                    |
+| v1.9.9 | 参数缺值报「参数 X 缺少值」；`--purge` 无论服务单元是否存在都清理 sudoers；用户/端口等参数校验更严                      | 失败/清理后不会留下「半套」权限规则                                      |
 
 ### 安装失败 / 残留处理
 
@@ -117,7 +121,7 @@ sudo bash install-medihub.sh --update --yes
 ```
 
 > 旧版脚本有一个已修复的缺陷：同步代码时用小写 `storage` 当排除规则，会连
-> `packages/storage` 一起排除，导致构建/seed 报 `Cannot find package '@medihub/storage'`。
+> `packages/storage` 一起排除，导致构建报 `Cannot find package '@medihub/storage'`。
 > 升级到包含该修复的版本（v1.7.1+）后重跑即可。
 
 ## OnlyOffice（已装好，稍后填参数）
@@ -197,8 +201,7 @@ sudo bash install-medihub.sh --update --yes
 
 升级与回滚细节见 [UPGRADE.md](UPGRADE.md)。
 
-> `--dry-run` 不会修改系统、不会下载源码包（但仍会执行一次 GitHub 版本查询）；
-> `--update` 与 `--seed` 不能同时使用（避免重复写入演示数据）。
+> `--dry-run` 不会修改系统、不会下载源码包（但仍会执行一次 GitHub 版本查询）。
 > 先预览一遍再真跑：`sudo bash install-medihub.sh --url https://你的域名 --dry-run`。
 
 ## 脚本做了什么
@@ -213,7 +216,7 @@ sudo bash install-medihub.sh --update --yes
 7. 生成/补齐 `.env`（随机 `BETTER_AUTH_SECRET`、`BETTER_AUTH_TRUSTED_ORIGINS`、
    在线升级配置、OnlyOffice 占位）；相对路径以 `apps/server` 为基准（v1.9.4+）；
 8. `pnpm install --frozen-lockfile` + `pnpm run build`；
-9. 执行数据库迁移，可选写入演示数据（`--seed` 生成随机密码，openssl 不可用时回退 `/dev/urandom`）；
+9. 执行数据库迁移（只建表，**不写任何数据**；账号只能通过 `/install` 创建）；
 10. 写入 systemd 服务 `medihub.service`：`EnvironmentFile` + `WorkingDirectory=<dir>/apps/server` +
     `Restart=always` + **`KillMode=process`**（重启时不杀在线升级执行器，v1.9.1+）；
 11. 启动并轮询 `/api/health`，失败时打印最近日志。
@@ -232,7 +235,7 @@ sudo bash install-medihub.sh --update --yes
 
 ## 账号与登录
 
-脚本**不会**在没加 `--seed` 时创建任何账号，站点处于「未初始化」状态：
+脚本**不会**创建任何账号（纯净版），站点处于「未初始化」状态：
 
 1. 打开 `https://你的域名/install`（登录页也会显示「前往安装向导」）；
 2. 填超级管理员姓名 / 邮箱 / 密码（可选 OnlyOffice 参数）→「完成安装」→ 自动跳登录页；
@@ -243,7 +246,7 @@ sudo bash install-medihub.sh --update --yes
 ```bash
 # 方式一：包里的脚本（cwd 自动是 apps/server）
 pnpm --filter @medihub/server reset-password --list
-pnpm --filter @medihub/server reset-password root@medihub.local '新密码'
+pnpm --filter @medihub/server reset-password <你的管理员邮箱> '新密码'
 
 # 方式二：直接跑 TS（Node 24 自带类型剥离）
 cd /opt/medihub/apps/server && node --env-file=.env src/reset-password.ts --list

@@ -35,6 +35,12 @@ const DashboardPage = () => {
   const orgless = isOrglessRole(role);
   const canOpenAdmin = isAdminRole(role);
   const overviewQuery = useQuery(api.stats.overview.queryOptions());
+
+  const overviewError =
+    overviewQuery.error instanceof Error ? overviewQuery.error.message : "";
+
+  // 纯净版首次安装是空库：还没有科室时给一个明确的下一步，而不是只显示“服务异常”。
+  const needsDepartment = overviewError.includes("还没有科室");
   const overview = overviewQuery.data;
   const name = session?.user.name ?? "";
 
@@ -91,18 +97,36 @@ const DashboardPage = () => {
 
       {overviewQuery.isError ? (
         <SectionCard
-          description="网络或权限异常，概览数据暂时取不到；其余页面通常不受影响。"
-          title="概览暂时不可用"
+          description={
+            needsDepartment
+              ? "纯净版安装后数据库是空的。先到「系统管理 → 科室」创建一个科室，之后才能创建患者、资料库和教学会议。"
+              : "网络或权限异常，概览数据暂时取不到；其余页面通常不受影响。"
+          }
+          title={needsDepartment ? "先创建第一个科室" : "概览暂时不可用"}
         >
           <div className="flex flex-wrap items-center gap-3">
-            <Button
-              onClick={() => {
-                void overviewQuery.refetch();
-              }}
-              variant="outline"
-            >
-              重试
-            </Button>
+            {needsDepartment ? (
+              <Button
+                nativeButton={false}
+                render={
+                  <Link
+                    aria-label={canOpenAdmin ? "去创建科室" : "查看我的账号"}
+                    to={canOpenAdmin ? "/admin" : "/me"}
+                  />
+                }
+              >
+                {canOpenAdmin ? "去系统管理创建科室" : "查看我的账号"}
+              </Button>
+            ) : (
+              <Button
+                onClick={() => {
+                  void overviewQuery.refetch();
+                }}
+                variant="outline"
+              >
+                重试
+              </Button>
+            )}
             <Link className="text-sm hover:underline" to="/library">
               直接去资料库
             </Link>

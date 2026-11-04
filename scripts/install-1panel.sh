@@ -7,18 +7,18 @@
 # Docker 部署请使用仓库的 Dockerfile / docker-compose.yml，不要运行本脚本；本脚本不适用 Windows。
 #
 # 用法（首次安装）：
-#   sudo bash install-1panel.sh --url https://medihub.example.com --seed
+#   sudo bash install-1panel.sh --url https://medihub.example.com
+#   安装后打开 <地址>/install 创建超级管理员；本脚本不写入任何演示数据。
 #
 # 升级到最新 Release（保留 .env / 数据库 / 素材 / 升级备份）：
 #   sudo bash install-1panel.sh --update
 #
 # 常用参数：
 #   --dir /opt/medihub          安装目录（默认 /opt/medihub）
-#   --tag v1.9.9                指定版本（默认最新 Release）
+#   --tag v1.10.0               指定版本（默认最新 Release）
 #   --url https://...           浏览器访问地址（写入 BETTER_AUTH_URL）
 #   --port <port>               API 端口（默认自动选择空闲端口）
 #   --user medihub              运行服务的系统用户
-#   --seed                      创建超级管理员，随机密码打印一次
 #   --onlyoffice-url URL        OnlyOffice Document Server 地址（可后填）
 #   --onlyoffice-secret SECRET  OnlyOffice JWT 密钥（可后填）
 #   --update                    升级现有安装（保留数据）
@@ -41,7 +41,6 @@ USER_PORT=""
 RUN_USER="medihub"
 NODE_VERSION="${NODE_VERSION:-24.22.1}"
 PNPM_VERSION="${PNPM_VERSION:-12.15.0}"
-SEED="false"
 UPDATE_MODE="false"
 DRY_RUN="false"
 ASSUME_YES="false"
@@ -50,7 +49,7 @@ FORCE="false"
 ONLYOFFICE_URL=""
 ONLYOFFICE_SECRET=""
 SERVICE_NAME="medihub"
-SCRIPT_VERSION="1.9.9"
+SCRIPT_VERSION="1.10.0"
 TMP_DIR=""
 PHASE="准备"
 INSTALL_STARTED="false"
@@ -203,7 +202,9 @@ while [[ $# -gt 0 ]]; do
     --url) need_arg "$@"; SITE_URL="$2"; shift 2 ;;
     --port) need_arg "$@"; USER_PORT="$2"; shift 2 ;;
     --user) need_arg "$@"; RUN_USER="$2"; shift 2 ;;
-    --seed) SEED="true"; shift ;;
+    --seed)
+      fail "纯净版不再写入演示数据；安装完成后打开 <地址>/install 创建超级管理员"
+      ;;
     --update) UPDATE_MODE="true"; shift ;;
     --dry-run) DRY_RUN="true"; shift ;;
     --yes|-y) ASSUME_YES="true"; shift ;;
@@ -241,10 +242,6 @@ fi
 if [[ -n "$USER_PORT" ]]; then
   [[ "$USER_PORT" =~ ^[0-9]+$ ]] || fail "--port 必须是数字"
   [[ "$USER_PORT" -ge 1 && "$USER_PORT" -le 65535 ]] || fail "--port 超出范围（1-65535）"
-fi
-
-if [[ "$UPDATE_MODE" == "true" && "$SEED" == "true" ]]; then
-  fail "--update 用于升级现有安装，不要再叠加 --seed（会重复写入演示数据）"
 fi
 
 if [[ -n "$ONLYOFFICE_URL" && ! "$ONLYOFFICE_URL" =~ ^https?:// ]]; then
@@ -418,7 +415,7 @@ apply_release() {
   run mkdir -p "$DIR"
   if command -v rsync >/dev/null; then
     # 排除项必须锚定到具体路径：`--exclude storage` 会把 packages/storage 一起排除，
-    # 导致 @medihub/storage 链接缺失、构建与 seed 直接失败。
+    # 导致 @medihub/storage 链接缺失、构建直接失败。
     run rsync -a --delete \
       --exclude '/apps/server/.env' \
       --exclude '/apps/server/local.db' \
@@ -500,10 +497,6 @@ ONLYOFFICE_JWT_SECRET="$ONLYOFFICE_SECRET"
 
 # 可选：LibreOffice 转 PDF（docx/xlsx/pptx 预览）
 # SOFFICE_PATH="/usr/bin/soffice"
-
-# 可选：pnpm seed 时创建的超级管理员
-# SEED_ROOT_EMAIL="root@medihub.local"
-# SEED_ROOT_PASSWORD="Medihub@2026"
 EOF
   fi
 
@@ -578,7 +571,7 @@ verify_workspace_links() {
   [[ -z "$missing" ]] ||
     fail "工作区包未正确链接：$missing。请检查 $DIR/packages 是否完整，然后重跑安装脚本"
 
-  # 真实解析一次，防止「文件在但 exports/链接是坏的」拖到 seed 才暴露。
+  # 真实解析一次，防止「文件在但 exports/链接是坏的」拖到启动时才暴露。
   run runuser -u "$RUN_USER" -- bash -lc \
     "export PATH=/usr/local/bin:\$PATH; cd '$DIR/apps/server' && node --input-type=module -e \"await import('@medihub/storage')\""
 }
@@ -606,20 +599,10 @@ purge_install() {
   log "已清理 $DIR、服务与用户（如存在）。"
 }
 
-migrate_and_seed() {
-  log "初始化数据库"
+migrate_database() {
+  log "初始化数据库（不写入演示数据）"
   run runuser -u "$RUN_USER" -- bash -lc \
     "export PATH=/usr/local/bin:\$PATH; cd '$DIR' && pnpm run db:migrate"
-
-  if [[ "$SEED" == "true" ]]; then
-    local email="${SEED_ROOT_EMAIL:-root@medihub.local}"
-    local password="${SEED_ROOT_PASSWORD:-$(openssl rand -base64 12 2>/dev/null | tr -d '/+=' | head -c 14 || head -c 24 /dev/urandom | base64 | tr -d '/+=' | head -c 14)}"
-
-    log "写入演示数据与超级管理员 $email"
-    run runuser -u "$RUN_USER" -- bash -lc \
-      "export PATH=/usr/local/bin:\$PATH; cd '$DIR' && SEED_ROOT_EMAIL='$email' SEED_ROOT_PASSWORD='$password' pnpm run seed"
-    printf '\n  超级管理员：%s\n  初始密码：%s\n  （请登录后到「我的 → 修改密码」立即修改）\n\n' "$email" "$password"
-  fi
 }
 
 write_sudoers() {
@@ -730,7 +713,7 @@ print_summary() {
  下一步：
  1. 在 1Panel「网站」里新建反向代理，目标 http://127.0.0.1:$APP_PORT，并申请 HTTPS。
  2. 浏览器打开：$url
- 3. 首次初始化：打开 $url/install 创建超级管理员（若安装时用了 --seed 可跳过，直接登录）。
+ 3. 首次初始化：打开 $url/install 创建超级管理员（本版本不写入任何演示数据）。
  4. OnlyOffice：编辑 $DIR/apps/server/.env 填入
     ONLYOFFICE_URL / ONLYOFFICE_JWT_SECRET，然后
     systemctl restart $SERVICE_NAME（或用系统管理页的「重新检测」确认）
@@ -817,7 +800,7 @@ main() {
   run chown -R "$RUN_USER:$RUN_USER" "$DIR"
   install_deps_and_build
   PHASE="初始化数据库"
-  migrate_and_seed
+  migrate_database
   PHASE="写入并启动 systemd 服务"
   write_service
   start_and_check
@@ -837,6 +820,8 @@ main() {
 }
 
 main "$@"
+
+
 
 
 
